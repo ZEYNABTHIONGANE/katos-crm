@@ -1,0 +1,159 @@
+.users-mgmt {
+    animation: fadeIn 0.4s ease-out;
+}
+
+.users-table-container {
+    padding: 0;
+    overflow: hidden;
+}
+
+.table-toolbar {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.search-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg-app);
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--radius-md);
+    max-width: 400px;
+}
+
+.search-box input {
+    border: none;
+    background: none;
+    outline: none;
+    width: 100%;
+}
+
+.users-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.users-table th {
+    text-align: left;
+    padding: 1rem 1.5rem;
+    background: #f8fafc;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 700;
+}
+
+.users-table td {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.user-cell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.user-img {
+    width: 40px;
+    height: 40px;
+    background: var(--grad-blue);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+}
+
+.user-meta {
+    display: flex;
+    flex-direction: column;
+}
+
+.user-meta .name {
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.user-meta .email {
+    font-size: 0.813rem;
+    color: var(--text-muted);
+}
+
+.role-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.role-badge.super_admin {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.role-badge.dg {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.role-badge.dc {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.role-badge.rc {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.role-badge.commercial {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.status-indicator.active {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #10b981;
+    font-size: 0.813rem;
+    font-weight: 600;
+}
+
+.status-indicator.active::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    background: #10b981;
+    border-radius: 50%;
+}
+
+.action-btns {
+    display: flex;
+    gap: 8px;
+}
+
+.icon-btn-sm {
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: white;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.2s;
+}
+
+.icon-btn-sm:hover {
+    background: #f1f5f9;
+    color: var(--text-main);
+}
+
+.text-danger {
+    color: #ef4444 !important;
+}

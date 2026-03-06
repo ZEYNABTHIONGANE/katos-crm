@@ -1,0 +1,339 @@
+/* Visites.css */
+
+.visites-page {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    animation: fadeIn 0.4s ease-out;
+}
+
+/* ---- Stats ---- */
+.visites-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+}
+
+@media (max-width: 900px) {
+    .visites-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.vstat-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.vstat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.vstat-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.vstat-today .vstat-icon {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.vstat-upcoming .vstat-icon {
+    background: rgba(233, 108, 46, 0.1);
+    color: var(--secondary);
+}
+
+.vstat-done .vstat-icon {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+}
+
+.vstat-all .vstat-icon {
+    background: var(--primary-light);
+    color: var(--primary);
+}
+
+.vstat-number {
+    font-size: 1.875rem;
+    font-weight: 700;
+    color: var(--text-main);
+    line-height: 1;
+}
+
+.vstat-label {
+    font-size: 0.813rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-top: 0.25rem;
+}
+
+/* ---- Filtres ---- */
+.visites-filters {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.filter-btn {
+    padding: 0.4rem 1rem;
+    border-radius: var(--radius-full);
+    font-size: 0.875rem;
+    font-weight: 500;
+    background: var(--bg-card);
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.filter-btn:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+}
+
+.filter-btn.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+/* ---- Liste Visites ---- */
+.visites-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.visite-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+    padding: 1.25rem 1.5rem;
+    position: relative;
+    transition: box-shadow 0.2s;
+}
+
+.visite-card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.visite-highlight {
+    border-left: 4px solid var(--secondary);
+    background: linear-gradient(to right, rgba(233, 108, 46, 0.03), var(--bg-card));
+}
+
+.visite-type-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--radius-full);
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.visite-body {
+    display: flex;
+    gap: 2rem;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+@media (max-width: 900px) {
+    .visite-body {
+        flex-direction: column;
+    }
+}
+
+.visite-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.visite-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin: 0;
+}
+
+.visite-meta-row {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.visite-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+.visite-notes {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    border-left: 3px solid var(--border-color);
+    padding-left: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+/* ---- Côté droit ---- */
+.visite-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1rem;
+    min-width: 200px;
+}
+
+/* -- Badges statut -- */
+.statut-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.3rem 0.8rem;
+    border-radius: var(--radius-full);
+}
+
+.statut-upcoming {
+    background: rgba(233, 108, 46, 0.1);
+    color: var(--secondary);
+    border: 1px solid rgba(233, 108, 46, 0.3);
+}
+
+.statut-today {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+}
+
+.statut-done {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+/* -- Participants -- */
+.visite-people {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.person-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.person-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.person-contact {
+    background: var(--primary-light);
+    color: var(--primary);
+}
+
+.person-agent {
+    background: rgba(233, 108, 46, 0.1);
+    color: var(--secondary);
+}
+
+.person-role {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.person-name {
+    font-size: 0.813rem;
+    font-weight: 500;
+    color: var(--text-main);
+}
+
+.btn-mark-done {
+    background: transparent;
+    color: #10b981;
+    border: 1px solid #10b981;
+    padding: 0.4rem 0.75rem;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-mark-done:hover {
+    background: #10b981;
+    color: white;
+}
+
+/* -- Empty state -- */
+.empty-section {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-muted);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+}
+
+.empty-section p {
+    font-style: italic;
+}

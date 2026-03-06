@@ -1,0 +1,194 @@
+.rapports-page {
+    animation: fadeIn 0.4s ease-out;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.rapports-toolbar {
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.form-select-sm {
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    font-size: 0.875rem;
+    outline: none;
+    color: var(--text-main);
+}
+
+.rapports-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+}
+
+.rpt-card {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.5rem;
+}
+
+.rpt-icon {
+    margin-bottom: 0.5rem;
+}
+
+.rpt-val {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--text-main);
+    line-height: 1;
+}
+
+.rpt-lbl {
+    font-size: 0.813rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.rpt-trend {
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-top: 0.25rem;
+}
+
+.rpt-trend.pos {
+    color: #10B981;
+}
+
+.rpt-trend.neg {
+    color: #ef4444;
+}
+
+.rapports-layout {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1.5rem;
+}
+
+@media (max-width: 1000px) {
+    .rapports-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+.rpt-section {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.section-header h3 {
+    font-size: 1.125rem;
+    font-weight: 1.125rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin: 0;
+}
+
+.rpt-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.rpt-table th {
+    text-align: left;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 0.75rem 1rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.rpt-table td {
+    padding: 1rem;
+    font-size: 0.875rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-main);
+}
+
+.badge-light {
+    background: var(--bg-app);
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+}
+
+.font-bold {
+    font-weight: 700;
+}
+
+.origins-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.origin-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.origin-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.813rem;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.origin-bar-bg {
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.origin-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+}
+
+/* Printing styles */
+@media print {
+
+    .sidebar,
+    .header,
+    .header-actions,
+    .rapports-toolbar {
+        display: none !important;
+    }
+
+    .main-content {
+        padding: 0 !important;
+    }
+
+    .rapports-page {
+        gap: 2rem;
+    }
+
+    .card-premium {
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+    }
+
+    body {
+        background: white !important;
+    }
+}

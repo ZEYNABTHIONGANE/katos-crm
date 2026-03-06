@@ -1,0 +1,22 @@
+.layout-container {
+    display: flex;
+    height: 100vh;
+    width: 100%;
+    overflow: hidden;
+    background: transparent;
+}
+
+.layout-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.layout-content {
+    flex: 1;
+    padding: 2rem;
+    overflow-y: auto;
+    background: transparent;
+}
