@@ -1,0 +1,21 @@
+@use 'abstracts/variables' as *;
+@use 'abstracts/mixins' as *;
+@use 'abstracts/functions' as *;
+
+@use 'base/reset';
+@use 'base/typography';
+@use 'base/base';
+
+@use 'layout/sidebar';
+@use 'layout/header';
+@use 'layout/dashboard';
+
+@use 'components/button';
+@use 'components/card';
+@use 'components/modal';
+@use 'components/notif-panel';
+
+@use 'pages/auth';
+@use 'pages/crm';
+@use 'pages/projects';
+@use 'pages/payments';
