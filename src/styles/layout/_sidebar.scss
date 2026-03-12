@@ -30,6 +30,25 @@
     overflow-y: auto;
 }
 
+.nav-section {
+    margin-bottom: 1.5rem;
+
+    &:last-child {
+        margin-bottom: 0.5rem;
+    }
+}
+
+.nav-section-title {
+    padding: 0 1rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    opacity: 0.6;
+}
+
 .nav-item {
     display: flex;
     align-items: center;

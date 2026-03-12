@@ -1,6 +1,6 @@
 const Vibrant = require('node-vibrant');
 
-Vibrant.from('src/assets/LOGO-KATOS(2).png').getPalette()
+Vibrant.from('src/assets/LOGO-KATOS (2).png').getPalette()
   .then((palette) => {
     console.log("Vibrant:", palette.Vibrant?.hex);
     console.log("DarkVibrant:", palette.DarkVibrant?.hex);

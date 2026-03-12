@@ -2,36 +2,45 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Filter, Plus, Phone, Mail, MapPin, Eye, Edit2, Trash2 } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
+import ServiceSelector from './ServiceSelector';
+import PropertyPicker, { type SelectedProperty } from './PropertyPicker';
+import { useContactStore, type CrmContact } from '@/stores/contactStore';
+import { useToast } from '@/app/providers/ToastProvider';
 
-type Contact = {
-    id: number; name: string; company: string; email: string;
-    phone: string; status: string; location: string; lastAction: string;
+const SOURCE_OPTIONS = ['Site web', 'Facebook', 'LinkedIn', 'Instagram', 'TikTok', 'Recommandation', 'Autre'];
+const AGENTS = ['Abdou Sarr', 'Omar Diallo', 'Katos Admin'];
+
+const SERVICE_LABELS: Record<string, string> = {
+    foncier: 'Foncier',
+    construction: 'Construction',
+    gestion_immobiliere: 'Gestion Immo',
 };
 
-const defaultContacts: Contact[] = [
-    { id: 1, name: 'Moussa Diop', company: 'SCAC Sénégal', email: 'm.diop@scac.sn', phone: '+221 77 123 45 67', status: 'Client', location: 'Dakar Plateau', lastAction: 'Livraison phase 1' },
-    { id: 2, name: 'Awa Ndiaye', company: 'Particulier', email: 'awa.nd@gmail.com', phone: '+221 76 987 65 43', status: 'Prospect', location: 'Almadies', lastAction: 'Appel de qualification' },
-    { id: 3, name: 'Cheikh Fall', company: 'BTP Construction', email: 'c.fall@btp.sn', phone: '+221 77 555 11 22', status: 'En Qualification', location: 'Diamniadio', lastAction: 'Envoi devis' },
-    { id: 4, name: 'Fatou Sow', company: 'Particulier', email: 'fsow.pro@yahoo.fr', phone: '+221 78 444 99 88', status: 'Prospect', location: 'Mermoz', lastAction: 'Visite terrain planifiée' },
-    { id: 5, name: 'Entreprise ABC', company: 'Groupe ABC', email: 'contact@abc-sn.com', phone: '+221 33 800 00 00', status: 'Client', location: 'Dakar', lastAction: 'Signature contrat' },
-    { id: 6, name: 'Ibou Thiam', company: 'Particulier', email: 'ibou.thiam@hotmail.com', phone: '+221 70 111 22 33', status: 'Projet Livré', location: 'Saly', lastAction: 'Remise des clés' }
-];
+type FormData = Omit<CrmContact, 'id'>;
 
-const emptyForm = { name: '', company: '', email: '', phone: '', status: 'Prospect', location: '', lastAction: '' };
+const emptyForm: FormData = {
+    name: '', company: '', email: '', phone: '',
+    status: 'Prospect', address: '', country: 'Sénégal',
+    source: '', service: undefined, propertyId: undefined, propertyTitle: undefined,
+    lastAction: '', budget: '', assignedAgent: '',
+};
 
 const ContactsList = () => {
-    const [contacts, setContacts] = useState<Contact[]>(defaultContacts);
+    const { contacts, addContact, updateContact, deleteContact } = useContactStore();
+    const { showToast } = useToast();
     const [searchTerm, setSearchTerm] = useState('');
     const [filter, setFilter] = useState('Tous');
     const [openMenu, setOpenMenu] = useState<number | null>(null);
     const [showModal, setShowModal] = useState(false);
-    const [editContact, setEditContact] = useState<Contact | null>(null);
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState<Contact | null>(null);
-    const [form, setForm] = useState(emptyForm);
+    const [editContact, setEditContact] = useState<CrmContact | null>(null);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState<CrmContact | null>(null);
+    const [form, setForm] = useState<FormData>(emptyForm);
     const navigate = useNavigate();
 
     const filtered = contacts.filter(c => {
-        const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.company.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch =
+            c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            c.company.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesFilter = filter === 'Tous' ? true : c.status === filter;
         return matchesSearch && matchesFilter;
     });
@@ -47,20 +56,29 @@ const ContactsList = () => {
     };
 
     const openAdd = () => { setEditContact(null); setForm(emptyForm); setShowModal(true); };
-    const openEdit = (c: Contact) => { setEditContact(c); setForm({ ...c }); setShowModal(true); setOpenMenu(null); };
+    const openEdit = (c: CrmContact) => { setEditContact(c); setForm({ ...c }); setShowModal(true); setOpenMenu(null); };
 
     const handleSave = () => {
         if (!form.name.trim()) return;
         if (editContact) {
-            setContacts(prev => prev.map(c => c.id === editContact.id ? { ...c, ...form } : c));
+            updateContact(editContact.id, form);
+            showToast('Contact mis à jour avec succès');
         } else {
-            const newId = Math.max(...contacts.map(c => c.id)) + 1;
-            setContacts(prev => [...prev, { id: newId, ...form }]);
+            addContact(form);
+            showToast('Nouveau contact ajouté');
         }
         setShowModal(false);
     };
 
-    const handleDelete = (c: Contact) => { setContacts(prev => prev.filter(x => x.id !== c.id)); setShowDeleteConfirm(null); };
+    const handleDelete = (c: CrmContact) => {
+        deleteContact(c.id);
+        showToast('Contact supprimé');
+        setShowDeleteConfirm(null);
+    };
+
+    const handlePropertySelect = (prop: SelectedProperty) => {
+        setForm(f => ({ ...f, propertyId: prop.id, propertyTitle: prop.title }));
+    };
 
     return (
         <div className="contacts-page">
@@ -99,9 +117,10 @@ const ContactsList = () => {
                         <tr>
                             <th>Contact / Entreprise</th>
                             <th>Coordonnées</th>
-                            <th>Localisation</th>
+                            <th>Adresse / Pays</th>
+                            <th>Service</th>
+                            <th>Commercial</th>
                             <th>Statut</th>
-                            <th>Dernière action</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -124,10 +143,27 @@ const ContactsList = () => {
                                     </div>
                                 </td>
                                 <td>
-                                    <div className="icon-text text-sm"><MapPin size={14} className="text-muted" />{contact.location}</div>
+                                    <div className="icon-text text-sm">
+                                        <MapPin size={14} className="text-muted" />
+                                        <span>{contact.address}{contact.country ? `, ${contact.country}` : ''}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    {contact.service ? (
+                                        <div>
+                                            <div className="text-sm font-medium">{SERVICE_LABELS[contact.service]}</div>
+                                            {contact.propertyTitle && (
+                                                <div className="text-sm text-muted" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.propertyTitle}</div>
+                                            )}
+                                        </div>
+                                    ) : <span className="text-sm text-muted">—</span>}
+                                </td>
+                                <td>
+                                    {contact.assignedAgent ? (
+                                        <div className="text-sm font-medium" style={{ color: 'var(--primary)' }}>{contact.assignedAgent}</div>
+                                    ) : <span className="text-sm text-muted">—</span>}
                                 </td>
                                 <td>{getStatusBadge(contact.status)}</td>
-                                <td className="text-sm text-muted">{contact.lastAction}</td>
                                 <td className="actions-cell" onClick={(e) => e.stopPropagation()}>
                                     <div className="action-menu-wrap">
                                         <button className="btn-icon" onClick={() => setOpenMenu(openMenu === contact.id ? null : contact.id)}>⋮</button>
@@ -142,7 +178,7 @@ const ContactsList = () => {
                                 </td>
                             </tr>
                         )) : (
-                            <tr><td colSpan={6} className="empty-state">Aucun contact trouvé.</td></tr>
+                            <tr><td colSpan={7} className="empty-state">Aucun contact trouvé.</td></tr>
                         )}
                     </tbody>
                 </table>
@@ -156,8 +192,8 @@ const ContactsList = () => {
                         <input className="form-input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ex: Moussa Diop" />
                     </div>
                     <div className="form-group">
-                        <label className="form-label">Entreprise / Statut</label>
-                        <input className="form-input" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} placeholder="Ex: Particulier, SCAC..." />
+                        <label className="form-label">Entreprise / Profil</label>
+                        <input className="form-input" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} placeholder="Particulier, SCAC..." />
                     </div>
                     <div className="form-group">
                         <label className="form-label">Email</label>
@@ -166,6 +202,14 @@ const ContactsList = () => {
                     <div className="form-group">
                         <label className="form-label">Téléphone</label>
                         <input className="form-input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="+221 77 000 00 00" />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Adresse</label>
+                        <input className="form-input" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Ex: 12 Avenue Senghor, Almadies" />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Pays</label>
+                        <input className="form-input" value={form.country} onChange={e => setForm({ ...form, country: e.target.value })} placeholder="Ex: Sénégal, France..." />
                     </div>
                     <div className="form-group">
                         <label className="form-label">Statut CRM</label>
@@ -177,13 +221,43 @@ const ContactsList = () => {
                         </select>
                     </div>
                     <div className="form-group">
-                        <label className="form-label">Localisation</label>
-                        <input className="form-input" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} placeholder="Ex: Almadies, Dakar" />
+                        <label className="form-label">Comment nous avez-vous connu ?</label>
+                        <select className="form-select" value={form.source} onChange={e => setForm({ ...form, source: e.target.value })}>
+                            <option value="">— Sélectionner —</option>
+                            {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Commercial affecté</label>
+                        <select className="form-select" value={form.assignedAgent || ''} onChange={e => setForm({ ...form, assignedAgent: e.target.value })}>
+                            <option value="">— Non assigné —</option>
+                            {AGENTS.map(a => <option key={a} value={a}>{a}</option>)}
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Budget estimé</label>
+                        <input className="form-input" value={form.budget || ''} onChange={e => setForm({ ...form, budget: e.target.value })} placeholder="Ex: 25M FCFA" />
                     </div>
                     <div className="form-group col-2">
-                        <label className="form-label">Dernière action / Note</label>
-                        <input className="form-input" value={form.lastAction} onChange={e => setForm({ ...form, lastAction: e.target.value })} placeholder="Ex: Appel de qualification" />
+                        <label className="form-label">Service demandé</label>
+                        <ServiceSelector
+                            value={form.service}
+                            onChange={service => setForm({ ...form, service, propertyId: undefined, propertyTitle: undefined })}
+                        />
                     </div>
+                    {form.service && (
+                        <div className="form-group col-2">
+                            <label className="form-label">
+                                {form.service === 'foncier' ? 'Terrain associé' : form.service === 'construction' ? 'Modèle de villa' : 'Bien immobilier'}
+                                {form.propertyTitle && (
+                                    <span style={{ marginLeft: '0.5rem', fontWeight: 400, color: 'var(--primary)', fontSize: '0.78rem' }}>
+                                        ✓ {form.propertyTitle}
+                                    </span>
+                                )}
+                            </label>
+                            <PropertyPicker service={form.service} selectedId={form.propertyId} onSelect={handlePropertySelect} />
+                        </div>
+                    )}
                 </div>
                 <div className="form-actions">
                     <button className="btn-secondary" onClick={() => setShowModal(false)}>Annuler</button>

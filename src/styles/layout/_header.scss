@@ -48,7 +48,7 @@
 }
 
 .search-bar:focus-within {
-    background-color: white;
+    background-color: var(--bg-card);
     border-color: var(--secondary);
     box-shadow: 0 0 0 3px rgba(233, 108, 46, 0.2);
     /* Ombre orange */

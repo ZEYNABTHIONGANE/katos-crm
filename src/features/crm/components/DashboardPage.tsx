@@ -2,7 +2,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
     PieChart, Pie, Cell, Legend, AreaChart, Area, RadialBarChart, RadialBar
 } from 'recharts';
-import { Users, HardHat, Banknote, ArrowUpRight, ArrowDownRight, Star } from 'lucide-react';
+import { Users, Banknote, ArrowUpRight, ArrowDownRight, Star, LayoutDashboard } from 'lucide-react';
 
 const salesData = [
     { name: 'Jan', ventes: 24, prospects: 18 },
@@ -51,9 +51,10 @@ const Dashboard = () => {
     const stats = [
         { label: 'Prospects du mois', value: '24', change: '+12%', positive: true, icon: <Users size={22} />, gradient: 'grad-orange' },
         { label: 'Clients Actifs', value: '158', change: '+5%', positive: true, icon: <Star size={22} />, gradient: 'grad-blue' },
-        { label: 'Ventes de Terrains', value: '7', change: '+8%', positive: true, icon: <HardHat size={22} />, gradient: 'grad-purple' },
+        { label: 'Ventes de Terrains', value: '7', change: '+8%', positive: true, icon: <LayoutDashboard size={22} />, gradient: 'grad-purple', path: '/foncier' },
         { label: "Chiffre d'Affaires", value: '45M FCFA', change: '+18%', positive: true, icon: <Banknote size={22} />, gradient: 'grad-green' },
     ];
+
 
     return (
         <div className="dashboard">
@@ -99,7 +100,7 @@ const Dashboard = () => {
                     <div className="combo-section-header">
                         <div>
                             <h3>Évolution des Ventes & Prospects</h3>
-                            <p className="chart-subtitle">7 derniers mois — Katos Immobilier</p>
+                            <p className="chart-subtitle">7 derniers mois — Katos CRM</p>
                         </div>
                         <div className="chart-legend-inline">
                             <span className="legend-dot" style={{ background: '#2B2E83' }}></span> Ventes (M)

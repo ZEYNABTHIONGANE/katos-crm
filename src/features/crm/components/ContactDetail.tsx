@@ -1,41 +1,107 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Phone, Mail, MapPin, Calendar, Clock, Edit2, CheckCircle2, FileText, Plus } from 'lucide-react';
+import {
+    ArrowLeft, Phone, Mail, MapPin, Calendar, Clock, Edit2, CheckCircle2, Plus,
+    Megaphone, Target, User, Folder, MessageSquare, ClipboardList, HardHat, ClipboardCheck
+} from 'lucide-react';
 import Modal from '@/components/ui/Modal';
+import DocumentManager from './DocumentManager';
+import { useContactStore, type InteractionType } from '@/stores/contactStore';
+import { useToast } from '@/app/providers/ToastProvider';
 
-const mockContactDetails: Record<number, any> = {
-    1: { id: 1, name: 'Moussa Diop', company: 'SCAC Sénégal', email: 'm.diop@scac.sn', phone: '+221 77 123 45 67', status: 'Client', location: 'Dakar Plateau', address: '12 Avenue Léopold Sédar Senghor', city: 'Dakar', country: 'Sénégal', notes: 'Client très intéressé par le projet Résidence Horizon.', dateAdded: '12/01/2026' },
-    2: { id: 2, name: 'Awa Ndiaye', company: 'Particulier', email: 'awa.nd@gmail.com', phone: '+221 76 987 65 43', status: 'Prospect', location: 'Almadies', address: 'Quartier des Almadies', city: 'Dakar', country: 'Sénégal', notes: 'Cherche un terrain pour construire une villa R+1.', dateAdded: '03/03/2026' },
-    3: { id: 3, name: 'Cheikh Fall', company: 'BTP Construction', email: 'c.fall@btp.sn', phone: '+221 77 555 11 22', status: 'En Qualification', location: 'Diamniadio', address: 'Zone Franche, Diamniadio', city: 'Thiès', country: 'Sénégal', notes: 'Intéressé par des terrains à Diamniadio pour un projet commercial.', dateAdded: '27/02/2026' },
-    4: { id: 4, name: 'Fatou Sow', company: 'Particulier', email: 'fsow.pro@yahoo.fr', phone: '+221 78 444 99 88', status: 'Prospect', location: 'Mermoz', address: 'Quartier Mermoz', city: 'Dakar', country: 'Sénégal', notes: 'Cherche un terrain pour villa familiale.', dateAdded: '20/02/2026' },
-    5: { id: 5, name: 'Entreprise ABC', company: 'Groupe ABC', email: 'contact@abc-sn.com', phone: '+221 33 800 00 00', status: 'Client', location: 'Dakar', address: 'Immeuble ABC, Rue de Thiong', city: 'Dakar', country: 'Sénégal', notes: 'Projet résidentiel de 20 logements en cours.', dateAdded: '05/02/2026' },
-    6: { id: 6, name: 'Ibou Thiam', company: 'Particulier', email: 'ibou.thiam@hotmail.com', phone: '+221 70 111 22 33', status: 'Projet Livré', location: 'Saly', address: 'Résidence Saly 2', city: 'Mbour', country: 'Sénégal', notes: 'Projet livré en Janvier 2026. Client satisfait.', dateAdded: '10/01/2026' },
+const SOURCE_OPTIONS = ['Site web', 'Facebook', 'LinkedIn', 'Instagram', 'TikTok', 'Recommandation', 'Autre'];
+const AGENTS = ['Abdou Sarr', 'Omar Diallo', 'Katos Admin'];
+
+const SERVICE_INFO: Record<string, { label: string; color: string }> = {
+    foncier: { label: 'Foncier', color: '#E96C2E' },
+    construction: { label: 'Construction', color: '#2B2E83' },
+    gestion_immobiliere: { label: 'Gestion Immobilière', color: '#10B981' },
 };
 
-const initHistory = [
-    { id: 1, type: 'call', title: 'Appel de qualification', date: '05 Mar 2026', time: '14:30', description: 'Discussion sur le budget et les préférences de zone.' },
-    { id: 2, type: 'email', title: 'Envoi catalogue', date: '04 Mar 2026', time: '09:15', description: 'Brochure PDF des terrains disponibles envoyée par email.' },
-];
-
-const initAppointments = [
-    { id: 1, title: 'Visite Terrain Almadies', date: '10 Mar 2026', time: '10:00', location: 'Lotissement Almadies Phase 2', status: 'upcoming' },
-    { id: 2, title: 'Rendez-vous Bureau', date: '28 Fév 2026', time: '15:00', location: 'Siège Katos', status: 'completed' },
-];
+const INTERACTION_CONFIG: Record<InteractionType, { icon: any; label: string; color: string }> = {
+    call: { icon: Phone, label: 'Appel', color: '#3b82f6' },
+    email: { icon: Mail, label: 'Email', color: '#10b981' },
+    rdv: { icon: Calendar, label: 'Rendez-vous', color: '#8b5cf6' },
+    visite_terrain: { icon: MapPin, label: 'Visite Terrain', color: '#f59e0b' },
+    visite_chantier: { icon: HardHat, label: 'Visite Chantier', color: '#ef4444' },
+    note: { icon: MessageSquare, label: 'Note interne', color: '#6b7280' },
+};
 
 const ContactDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const rawContact = mockContactDetails[Number(id)] || mockContactDetails[1];
+    const { 
+        contacts, updateContact,
+        visits, addVisit, moveVisitStatut,
+        interactions, addInteraction,
+        addFollowUp 
+    } = useContactStore();
+    const { showToast } = useToast();
 
-    const [contact, setContact] = useState(rawContact);
-    const [history, setHistory] = useState(initHistory);
-    const [appointments, setAppointments] = useState(initAppointments);
+    // Find contact in store or fallback to the first one (for demo safety)
+    const contact = useMemo(() => {
+        return contacts.find(c => c.id === Number(id)) || contacts[0];
+    }, [contacts, id]);
+
     const [showEditModal, setShowEditModal] = useState(false);
-    const [showNoteModal, setShowNoteModal] = useState(false);
-    const [showRdvModal, setShowRdvModal] = useState(false);
+    const [showInteractionModal, setShowInteractionModal] = useState(false);
+    const [showRelanceModal, setShowRelanceModal] = useState(false);
+    const [activeTab, setActiveTab] = useState<'history' | 'documents'>('history');
+
     const [editForm, setEditForm] = useState(contact);
-    const [noteForm, setNoteForm] = useState({ type: 'call', title: '', description: '' });
-    const [rdvForm, setRdvForm] = useState({ title: '', date: '', time: '', location: '' });
+    const [interactionForm, setInteractionForm] = useState({
+        type: 'call' as InteractionType,
+        title: '',
+        description: '',
+        date: new Date().toISOString().split('T')[0],
+        heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+        lieu: '',
+        executionStatus: 'fait' as 'fait' | 'a_faire',
+        technician: ''
+    });
+
+    const [relanceForm, setRelanceForm] = useState({
+        dateRelance: '',
+        note: '',
+        priorite: 'normale' as 'haute' | 'normale' | 'basse'
+    });
+
+    // Filter interactions from store for this contact
+    const contactInteractions = useMemo(() => {
+        return interactions.filter(i => i.contactId === contact?.id);
+    }, [interactions, contact]);
+
+    // Filter appointments (visits) from store for this contact
+    const contactVisits = useMemo(() => {
+        return visits.filter(v => v.contactId === contact?.id);
+    }, [visits, contact]);
+
+    // Combine interactions and visits into a single, sorted history
+    const unifiedHistory = useMemo(() => {
+        const historyItems = [
+            ...contactInteractions.map(i => ({ ...i, category: 'interaction', statut: 'done' as const })),
+            ...contactVisits.map(v => ({ 
+                id: v.id.toString(), 
+                contactId: v.contactId,
+                type: (v.type === 'chantier' ? 'visite_chantier' : v.type === 'terrain' ? 'visite_terrain' : 'rdv') as InteractionType,
+                title: v.title,
+                description: v.notes,
+                date: v.date,
+                heure: v.heure,
+                agent: v.agent,
+                lieu: v.lieu,
+                statut: v.statut,
+                category: 'visit',
+                technician: v.technician
+            }))
+        ];
+        return historyItems.sort((a, b) => new Date(b.date + 'T' + b.heure).getTime() - new Date(a.date + 'T' + a.heure).getTime());
+    }, [contactInteractions, contactVisits]);
+
+    // Update edit form when contact changes (e.g. initial load)
+    useMemo(() => {
+        if (contact) setEditForm(contact);
+    }, [contact]);
 
     const getStatusBadge = (status: string) => {
         switch (status) {
@@ -47,26 +113,89 @@ const ContactDetail = () => {
         }
     };
 
-    const saveEdit = () => { setContact(editForm); setShowEditModal(false); };
-
-    const saveNote = () => {
-        if (!noteForm.title.trim()) return;
-        const now = new Date();
-        const dateStr = now.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
-        const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-        setHistory(prev => [{ id: Date.now(), ...noteForm, date: dateStr, time: timeStr }, ...prev]);
-        setNoteForm({ type: 'call', title: '', description: '' });
-        setShowNoteModal(false);
+    const saveEdit = () => {
+        updateContact(contact.id, editForm);
+        showToast('Informations du contact mises à jour');
+        setShowEditModal(false);
     };
 
-    const saveRdv = () => {
-        if (!rdvForm.title.trim()) return;
-        setAppointments(prev => [{ id: Date.now(), ...rdvForm, status: 'upcoming' }, ...prev]);
-        setRdvForm({ title: '', date: '', time: '', location: '' });
-        setShowRdvModal(false);
+    const saveInteraction = () => {
+        if (!interactionForm.title.trim()) {
+            showToast('Le titre est obligatoire', 'error');
+            return;
+        }
+
+        const interactionData = {
+            contactId: contact.id,
+            type: interactionForm.type,
+            title: interactionForm.title,
+            description: interactionForm.description,
+            date: interactionForm.date,
+            heure: interactionForm.heure,
+            agent: contact.assignedAgent || 'Katos Admin',
+            lieu: interactionForm.lieu,
+            executionStatus: interactionForm.executionStatus,
+            technician: interactionForm.technician
+        };
+
+        addInteraction(interactionData);
+
+        // If it's a visit or RDV, also add to visits for tracking
+        if (['rdv', 'visite_terrain', 'visite_chantier'].includes(interactionForm.type)) {
+            addVisit({
+                title: interactionForm.title,
+                contactId: contact.id,
+                date: interactionForm.date,
+                heure: interactionForm.heure,
+                lieu: interactionForm.lieu,
+                type: interactionForm.type === 'visite_chantier' ? 'chantier' : interactionForm.type === 'visite_terrain' ? 'terrain' : 'bureau',
+                statut: 'upcoming',
+                agent: contact.assignedAgent || 'Katos Admin',
+                technician: interactionForm.technician,
+                notes: interactionForm.description
+            });
+        }
+
+        showToast('Interaction enregistrée');
+        setShowInteractionModal(false);
+        setInteractionForm({
+            type: 'call',
+            title: '',
+            description: '',
+            date: new Date().toISOString().split('T')[0],
+            heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+            lieu: '',
+            executionStatus: 'fait',
+            technician: ''
+        });
     };
 
-    const markRdvDone = (apId: number) => setAppointments(prev => prev.map(a => a.id === apId ? { ...a, status: 'completed' } : a));
+    const saveRelance = () => {
+        if (!relanceForm.dateRelance) {
+            showToast('La date de relance est obligatoire', 'error');
+            return;
+        }
+
+        addFollowUp({
+            contactId: contact.id,
+            agent: contact.assignedAgent || 'Katos Admin',
+            dateRelance: relanceForm.dateRelance,
+            note: relanceForm.note || 'Relance planifiée',
+            statut: 'upcoming',
+            priorite: relanceForm.priorite
+        });
+
+        showToast('Tâche programmée avec succès');
+        setShowRelanceModal(false);
+        setRelanceForm({ dateRelance: '', note: '', priorite: 'normale' });
+    };
+
+    const markVisitDone = (vid: number) => {
+        moveVisitStatut(vid, 'completed');
+        showToast('Visite marquée comme effectuée');
+    };
+
+    if (!contact) return <div className="p-20">Contact introuvable.</div>;
 
     return (
         <div className="contact-detail-page">
@@ -82,16 +211,16 @@ const ContactDetail = () => {
                             <h1>{contact.name}</h1>
                             {getStatusBadge(contact.status)}
                         </div>
-                        <p className="subtitle">{contact.company} • Ajouté le {contact.dateAdded}</p>
+                        <p className="subtitle">{contact.company} · Réf #{contact.id}</p>
                     </div>
                 </div>
                 <div className="header-actions">
                     <button className="btn-outline" onClick={() => { setEditForm(contact); setShowEditModal(true); }}>
                         <Edit2 size={16} /> Modifier
                     </button>
-                    <a href={`tel:${contact.phone}`} className="btn-primary" style={{ cursor: 'pointer' }} onClick={e => { e.preventDefault(); setNoteForm({ type: 'call', title: 'Appel téléphonique', description: '' }); setShowNoteModal(true); }}>
-                        <Phone size={16} /> Enregistrer un appel
-                    </a>
+                    <button className="btn-primary" onClick={() => setShowInteractionModal(true)}>
+                        <Plus size={16} /> Ajouter une interaction
+                    </button>
                 </div>
             </div>
 
@@ -110,8 +239,31 @@ const ContactDetail = () => {
                             </div>
                             <div className="info-item">
                                 <MapPin className="icon-muted" size={18} />
-                                <div><span className="info-label">Adresse</span><span className="info-value">{contact.address}, {contact.city}</span></div>
+                                <div><span className="info-label">Adresse / Pays</span><span className="info-value">{contact.address}{contact.country ? `, ${contact.country}` : ''}</span></div>
                             </div>
+                            {contact.source && (
+                                <div className="info-item">
+                                    <Megaphone className="icon-muted" size={18} />
+                                    <div><span className="info-label">Source</span><span className="info-value">{contact.source}</span></div>
+                                </div>
+                            )}
+                            <div className="info-item">
+                                <User className="icon-muted" size={18} />
+                                <div>
+                                    <span className="info-label">Commercial affecté</span>
+                                    <span className="info-value" style={{ color: 'var(--primary)', fontWeight: 600 }}>{contact.assignedAgent || 'Non assigné'}</span>
+                                </div>
+                            </div>
+                            {contact.service && (
+                                <div className="info-item">
+                                    <Target className="icon-muted" size={18} />
+                                    <div>
+                                        <span className="info-label">Service</span>
+                                        <span className="info-value" style={{ color: SERVICE_INFO[contact.service]?.color, fontWeight: 600 }}>{SERVICE_INFO[contact.service]?.label}</span>
+                                        {contact.propertyTitle && <span className="info-value" style={{ marginLeft: 6, fontSize: '0.8rem', color: 'var(--text-muted)' }}>→ {contact.propertyTitle}</span>}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -133,60 +285,92 @@ const ContactDetail = () => {
                 <div className="grid-right">
                     <div className="tabs-container card-premium">
                         <div className="tabs-header">
-                            <button className="tab active">Historique & Actions</button>
+                            <button 
+                                className={`tab ${activeTab === 'history' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('history')}
+                            >
+                                <ClipboardList size={16} className="mr-2" style={{ verticalAlign: 'middle', marginTop: -2 }} />
+                                Historique des interactions
+                            </button>
+                            <button 
+                                className={`tab ${activeTab === 'documents' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('documents')}
+                            >
+                                <Folder size={16} className="mr-2" style={{ verticalAlign: 'middle', marginTop: -2 }} />
+                                Documents & Contrats
+                            </button>
                         </div>
                         <div className="tab-content">
-                            <div className="timeline">
-                                <div className="d-flex-between mb-sm">
-                                    <h4 className="section-title">Rendez-vous / Visites</h4>
-                                    <button className="btn-outline" style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem' }} onClick={() => setShowRdvModal(true)}>
-                                        <Plus size={13} /> Ajouter RDV
-                                    </button>
-                                </div>
-                                {appointments.map(apt => (
-                                    <div key={apt.id} className={`timeline-item ${apt.status}`}>
-                                        <div className="timeline-icon"><Calendar size={16} /></div>
-                                        <div className="timeline-content">
-                                            <div className="timeline-header">
-                                                <strong>{apt.title}</strong>
-                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                                    {apt.status === 'completed' && <CheckCircle2 size={16} className="text-success" />}
-                                                    {apt.status !== 'completed' && (
-                                                        <button style={{ fontSize: '0.75rem', color: '#10b981', cursor: 'pointer', background: 'none', border: '1px solid #10b981', borderRadius: '4px', padding: '2px 8px' }} onClick={() => markRdvDone(apt.id)}>✓ Réalisé</button>
-                                                    )}
+                            {activeTab === 'history' ? (
+                                <div className="timeline">
+                                    <div className="d-flex-between mb-sm">
+                                        <h4 className="section-title">Timeline des échanges</h4>
+                                        <button className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem' }} onClick={() => setShowInteractionModal(true)}>
+                                            <Plus size={13} /> Ajouter
+                                        </button>
+                                    </div>
+                                    
+                                    {unifiedHistory.length === 0 ? (
+                                        <div className="empty-state p-20 text-center">
+                                            <p className="text-muted">Aucune interaction enregistrée pour le moment.</p>
+                                        </div>
+                                    ) : (
+                                        unifiedHistory.map((item) => {
+                                            const config = INTERACTION_CONFIG[item.type];
+                                            const Icon = config.icon;
+                                            return (
+                                                <div key={item.id} className={`timeline-item ${item.category === 'visit' ? item.statut : ''}`}>
+                                                    <div className="timeline-marker">
+                                                        <div className="timeline-icon" style={{ backgroundColor: config.color + '20', color: config.color }}>
+                                                            <Icon size={16} />
+                                                        </div>
+                                                    </div>
+                                                    <div className="timeline-content">
+                                                        <div className="timeline-header">
+                                                            <strong>{item.title}</strong>
+                                                            {item.category === 'visit' && item.statut !== 'completed' && (
+                                                                <button 
+                                                                    style={{ fontSize: '0.7rem', color: '#10b981', cursor: 'pointer', background: 'none', border: '1px solid #10b981', borderRadius: '4px', padding: '1px 6px' }} 
+                                                                    onClick={() => markVisitDone(Number(item.id))}
+                                                                >
+                                                                    ✓ Réalisé
+                                                                </button>
+                                                            )}
+                                                            {item.category === 'visit' && item.statut === 'completed' && (
+                                                                <CheckCircle2 size={14} className="text-success" />
+                                                            )}
+                                                        </div>
+                                                        <div className="timeline-meta">
+                                                            <span><Clock size={12} /> {item.date} à {item.heure}</span>
+                                                            {item.lieu && <span><MapPin size={12} /> {item.lieu}</span>}
+                                                            <span><User size={12} /> Commercial : {item.agent}</span>
+                                                            {item.technician && <span><HardHat size={12} /> Expert Tech : {item.technician}</span>}
+                                                        </div>
+                                                        {item.description && <p className="timeline-desc">{item.description}</p>}
+                                                        <div className="timeline-actions mt-10">
+                                                                <button 
+                                                                    className="btn-relance-timeline" 
+                                                                    onClick={() => {
+                                                                        setRelanceForm({
+                                                                            ...relanceForm,
+                                                                            note: `Tâche de suivi suite à : ${item.title}`
+                                                                        });
+                                                                        setShowRelanceModal(true);
+                                                                    }}
+                                                                >
+                                                                    <ClipboardCheck size={12} />
+                                                                    Programmer une tâche
+                                                                </button>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            <div className="timeline-meta">
-                                                <span><Clock size={12} /> {apt.date} à {apt.time}</span>
-                                                <span><MapPin size={12} /> {apt.location}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-
-                                <div className="d-flex-between mb-sm mt-15">
-                                    <h4 className="section-title">Historique des interactions</h4>
-                                    <button className="btn-outline" style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem' }} onClick={() => setShowNoteModal(true)}>
-                                        <Plus size={13} /> Ajouter
-                                    </button>
+                                            );
+                                        })
+                                    )}
                                 </div>
-                                {history.map(item => (
-                                    <div key={item.id} className="timeline-item">
-                                        <div className="timeline-icon bg-light">
-                                            {item.type === 'email' ? <Mail size={16} /> : <Phone size={16} />}
-                                        </div>
-                                        <div className="timeline-content">
-                                            <div className="timeline-header"><strong>{item.title}</strong></div>
-                                            <div className="timeline-meta"><span><Clock size={12} /> {item.date} à {item.time}</span></div>
-                                            <p className="timeline-desc">{item.description}</p>
-                                        </div>
-                                    </div>
-                                ))}
-
-                                <button className="btn-outline w-full mt-10" onClick={() => setShowNoteModal(true)}>
-                                    <FileText size={16} /> Ajouter une note ou action
-                                </button>
-                            </div>
+                            ) : (
+                                <DocumentManager contactId={contact.id} />
+                            )}
                         </div>
                     </div>
                 </div>
@@ -205,8 +389,23 @@ const ContactDetail = () => {
                             <option value="Prospect">Prospect</option><option value="En Qualification">En Qualification</option><option value="Client">Client</option><option value="Projet Livré">Projet Livré</option>
                         </select>
                     </div>
-                    <div className="form-group"><label className="form-label">Localisation</label><input className="form-input" value={editForm.location} onChange={e => setEditForm({ ...editForm, location: e.target.value })} /></div>
-                    <div className="form-group col-2"><label className="form-label">Notes</label><textarea className="form-textarea" value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} /></div>
+                    <div className="form-group">
+                        <label className="form-label">Comment nous avez-vous connu ?</label>
+                        <select className="form-select" value={editForm.source || ''} onChange={e => setEditForm({ ...editForm, source: e.target.value })}>
+                            <option value="">— Sélectionner —</option>
+                            {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Commercial affecté</label>
+                        <select className="form-select" value={editForm.assignedAgent || ''} onChange={e => setEditForm({ ...editForm, assignedAgent: e.target.value })}>
+                            <option value="">— Non assigné —</option>
+                            {AGENTS.map(a => <option key={a} value={a}>{a}</option>)}
+                        </select>
+                    </div>
+                    <div className="form-group"><label className="form-label">Adresse</label><input className="form-input" value={editForm.address || ''} onChange={e => setEditForm({ ...editForm, address: e.target.value })} placeholder="Ex: 12 avenue Senghor" /></div>
+                    <div className="form-group"><label className="form-label">Pays</label><input className="form-input" value={editForm.country || ''} onChange={e => setEditForm({ ...editForm, country: e.target.value })} placeholder="Ex: Sénégal" /></div>
+                    <div className="form-group col-2"><label className="form-label">Notes Internes</label><textarea className="form-textarea" value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} /></div>
                 </div>
                 <div className="form-actions">
                     <button className="btn-secondary" onClick={() => setShowEditModal(false)}>Annuler</button>
@@ -214,35 +413,119 @@ const ContactDetail = () => {
                 </div>
             </Modal>
 
-            {/* ---- Modale Ajouter Note ---- */}
-            <Modal isOpen={showNoteModal} onClose={() => setShowNoteModal(false)} title="Ajouter une interaction" size="md">
+            {/* ---- Modale UNIFIÉE Interaction ---- */}
+            <Modal isOpen={showInteractionModal} onClose={() => setShowInteractionModal(false)} title="Nouvelle Interaction" size="lg">
                 <div className="form-grid">
-                    <div className="form-group">
-                        <label className="form-label">Type</label>
-                        <select className="form-select" value={noteForm.type} onChange={e => setNoteForm({ ...noteForm, type: e.target.value })}>
-                            <option value="call">Appel</option><option value="email">Email</option><option value="note">Note interne</option>
-                        </select>
+                    <div className="form-group col-2">
+                        <label className="form-label">Type d'interaction</label>
+                        <div className="interaction-type-selector">
+                                                            {(Object.keys(INTERACTION_CONFIG) as InteractionType[]).map(type => {
+                                                                const cfg = INTERACTION_CONFIG[type];
+                                                                const Icon = cfg.icon;
+                                                                return (
+                                                                    <button 
+                                                                        key={type}
+                                                                        className={`btn-type ${interactionForm.type === type ? 'active' : ''}`}
+                                                                        onClick={() => setInteractionForm({ ...interactionForm, type })}
+                                                                        style={{ 
+                                                                            borderColor: interactionForm.type === type ? cfg.color : 'transparent',
+                                                                            backgroundColor: interactionForm.type === type ? cfg.color + '15' : 'var(--bg-app)',
+                                                                        }}
+                                                                    >
+                                                                        <div className="type-icon-wrapper" style={{ color: cfg.color, backgroundColor: cfg.color + '10' }}>
+                                                                            <Icon size={18} />
+                                                                        </div>
+                                                                        <span className="type-label">{cfg.label}</span>
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
                     </div>
-                    <div className="form-group"><label className="form-label">Titre *</label><input className="form-input" value={noteForm.title} onChange={e => setNoteForm({ ...noteForm, title: e.target.value })} placeholder="Ex: Appel de relance" /></div>
-                    <div className="form-group col-2"><label className="form-label">Description</label><textarea className="form-textarea" value={noteForm.description} onChange={e => setNoteForm({ ...noteForm, description: e.target.value })} placeholder="Résumé de l'échange..." /></div>
+                    
+                    <div className="form-group col-2">
+                        <label className="form-label">Titre de l'interaction *</label>
+                        <input 
+                            className="form-input" 
+                            value={interactionForm.title} 
+                            onChange={e => setInteractionForm({ ...interactionForm, title: e.target.value })} 
+                            placeholder="Ex: Appel de relance devis" 
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label className="form-label">Date</label>
+                        <input className="form-input" type="date" value={interactionForm.date} onChange={e => setInteractionForm({ ...interactionForm, date: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Heure</label>
+                        <input className="form-input" type="time" value={interactionForm.heure} onChange={e => setInteractionForm({ ...interactionForm, heure: e.target.value })} />
+                    </div>
+
+                    {['rdv', 'visite_terrain', 'visite_chantier'].includes(interactionForm.type) && (
+                        <>
+                            <div className="form-group col-2">
+                                <label className="form-label">Lieu</label>
+                                <input className="form-input" value={interactionForm.lieu} onChange={e => setInteractionForm({ ...interactionForm, lieu: e.target.value })} placeholder="Adresse ou lieu précis" />
+                            </div>
+                            <div className="form-group col-2">
+                                <label className="form-label">Technicien / Expert accompagnateur (Optionnel)</label>
+                                <input className="form-input" value={interactionForm.technician} onChange={e => setInteractionForm({ ...interactionForm, technician: e.target.value })} placeholder="Ex: Samba Tall (Technicien)" />
+                            </div>
+                        </>
+                    )}
+
+                    <div className="form-group col-2">
+                        <label className="form-label">Description / Compte-rendu</label>
+                        <textarea className="form-textarea" value={interactionForm.description} onChange={e => setInteractionForm({ ...interactionForm, description: e.target.value })} placeholder="Résumé de l'échange..." />
+                    </div>
+
+                    <div className="form-group col-2 mt-10">
+                        <label className="form-label">État de l'action</label>
+                        <div className="status-selector-pills">
+                            <button 
+                                className={`pill-btn ${interactionForm.executionStatus === 'fait' ? 'active done' : ''}`}
+                                onClick={() => setInteractionForm({ ...interactionForm, executionStatus: 'fait' })}
+                            >
+                                <CheckCircle2 size={16} /> Action déjà faite
+                            </button>
+                            <button 
+                                className={`pill-btn ${interactionForm.executionStatus === 'a_faire' ? 'active todo' : ''}`}
+                                onClick={() => setInteractionForm({ ...interactionForm, executionStatus: 'a_faire' })}
+                            >
+                                <Clock size={16} /> Action à faire
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <div className="form-actions">
-                    <button className="btn-secondary" onClick={() => setShowNoteModal(false)}>Annuler</button>
-                    <button className="btn-primary" onClick={saveNote}>Ajouter</button>
+                <div className="form-actions mt-20">
+                    <button className="btn-secondary" onClick={() => setShowInteractionModal(false)}>Annuler</button>
+                    <button className="btn-primary" onClick={saveInteraction}>Enregistrer l'interaction</button>
                 </div>
             </Modal>
 
-            {/* ---- Modale Ajouter RDV ---- */}
-            <Modal isOpen={showRdvModal} onClose={() => setShowRdvModal(false)} title="Nouveau Rendez-vous" size="md">
+            {/* ---- Modale DÉDIÉE Tâche ---- */}
+            <Modal isOpen={showRelanceModal} onClose={() => setShowRelanceModal(false)} title="Programmer une tâche de suivi" size="md">
                 <div className="form-grid">
-                    <div className="form-group col-2"><label className="form-label">Titre *</label><input className="form-input" value={rdvForm.title} onChange={e => setRdvForm({ ...rdvForm, title: e.target.value })} placeholder="Ex: Visite terrain Almadies" /></div>
-                    <div className="form-group"><label className="form-label">Date</label><input className="form-input" type="date" value={rdvForm.date} onChange={e => setRdvForm({ ...rdvForm, date: e.target.value })} /></div>
-                    <div className="form-group"><label className="form-label">Heure</label><input className="form-input" type="time" value={rdvForm.time} onChange={e => setRdvForm({ ...rdvForm, time: e.target.value })} /></div>
-                    <div className="form-group col-2"><label className="form-label">Lieu</label><input className="form-input" value={rdvForm.location} onChange={e => setRdvForm({ ...rdvForm, location: e.target.value })} placeholder="Adresse ou lieu du RDV" /></div>
+                    <div className="form-group col-2">
+                        <label className="form-label">Date d'échéance *</label>
+                        <input className="form-input" type="date" value={relanceForm.dateRelance} onChange={e => setRelanceForm({ ...relanceForm, dateRelance: e.target.value })} />
+                    </div>
+                    <div className="form-group col-2">
+                        <label className="form-label">Priorité</label>
+                        <select className="form-select" value={relanceForm.priorite} onChange={e => setRelanceForm({ ...relanceForm, priorite: e.target.value as any })}>
+                            <option value="basse">Basse</option>
+                            <option value="normale">Normale</option>
+                            <option value="haute">Haute</option>
+                        </select>
+                    </div>
+                    <div className="form-group col-2">
+                        <label className="form-label">Note / Description de la tâche</label>
+                        <textarea className="form-textarea" value={relanceForm.note} onChange={e => setRelanceForm({ ...relanceForm, note: e.target.value })} placeholder="Ex: Rappeler pour validation devis final..." />
+                    </div>
                 </div>
-                <div className="form-actions">
-                    <button className="btn-secondary" onClick={() => setShowRdvModal(false)}>Annuler</button>
-                    <button className="btn-primary" onClick={saveRdv}>Créer le RDV</button>
+                <div className="form-actions mt-20">
+                    <button className="btn-secondary" onClick={() => setShowRelanceModal(false)}>Annuler</button>
+                    <button className="btn-primary" onClick={saveRelance}>Planifier la tâche</button>
                 </div>
             </Modal>
         </div>

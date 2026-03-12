@@ -1,20 +1,8 @@
-import { useState } from 'react';
-import { Plus, MapPin, Clock, CheckCircle2, Calendar, AlertCircle } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, MapPin, Clock, CheckCircle2, Calendar, AlertCircle, Search, User } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
-
-type Visite = {
-    id: number; title: string; contact: string; phone: string;
-    date: string; heure: string; lieu: string; type: string;
-    statut: string; agent: string; notes: string;
-};
-
-const initialVisites: Visite[] = [
-    { id: 1, title: 'Visite parcelle Almadies Phase 2', contact: 'Awa Ndiaye', phone: '+221 76 987 65 43', date: '10 Mar 2026', heure: '10:00', lieu: 'Lot 22 - Almadies Phase 2, Dakar', type: 'terrain', statut: 'upcoming', agent: 'Abdou Sarr', notes: 'Cliente cherche un terrain de 300m² minimum. Budget environ 15M FCFA.' },
-    { id: 2, title: 'Visite chantier Résidence Horizon', contact: 'Moussa Diop', phone: '+221 77 123 45 67', date: '08 Mar 2026', heure: '09:00', lieu: 'Chantier Résidence Horizon, Plateau', type: 'chantier', statut: 'today', agent: 'Omar Diallo', notes: 'Vérification avancement Phase 1. Présenter les plans R+2 au client.' },
-    { id: 3, title: 'RDV bureau - Signature contrat', contact: 'Groupe ABC', phone: '+221 33 800 00 00', date: '07 Mar 2026', heure: '14:30', lieu: 'Siège Katos, Dakar', type: 'bureau', statut: 'completed', agent: 'Katos Admin', notes: 'Signature du compromis de vente et versement acompte 30%.' },
-    { id: 4, title: 'Visite terrain Diamniadio', contact: 'Cheikh Fall', phone: '+221 77 555 11 22', date: '05 Mar 2026', heure: '11:00', lieu: 'Zone Franche Diamniadio, Lot B-14', type: 'terrain', statut: 'completed', agent: 'Abdou Sarr', notes: 'Client très intéressé. Surface : 450m². Relancer pour confirmation.' },
-    { id: 5, title: 'Visite parcelle Saly Nouvelles', contact: 'Ibou Thiam', phone: '+221 70 111 22 33', date: '15 Mar 2026', heure: '10:30', lieu: 'Résidence Saly 2, Mbour', type: 'terrain', statut: 'upcoming', agent: 'Omar Diallo', notes: 'Suite à livraison. Présenter nouvelles parcelles disponibles.' },
-];
+import { useContactStore } from '@/stores/contactStore';
+import { useToast } from '@/app/providers/ToastProvider';
 
 const typeConfig: Record<string, { label: string; color: string; bg: string }> = {
     terrain: { label: 'Terrain', color: '#E96C2E', bg: 'rgba(233,108,46,0.1)' },
@@ -22,25 +10,50 @@ const typeConfig: Record<string, { label: string; color: string; bg: string }> =
     bureau: { label: 'Bureau / RDV', color: '#10B981', bg: '#f0fdf4' },
 };
 
-const emptyForm = { title: '', contact: '', phone: '', date: '', heure: '09:00', lieu: '', type: 'terrain', agent: '', notes: '' };
+const AGENTS = ['Abdou Sarr', 'Omar Diallo', 'Katos Admin'];
+const TECHNICIANS = ['Samba Tall', 'Moussa Sène', 'Katos Tech'];
+
+const emptyForm = { title: '', contactId: 0, date: '', heure: '09:00', lieu: '', type: 'terrain' as 'terrain' | 'chantier' | 'bureau', agent: '', technician: '', notes: '' };
 
 const Visites = () => {
-    const [visites, setVisites] = useState<Visite[]>(initialVisites);
+    const { contacts, visits, addVisit, moveVisitStatut } = useContactStore();
+    const { showToast } = useToast();
     const [filter, setFilter] = useState('all');
     const [showModal, setShowModal] = useState(false);
     const [form, setForm] = useState(emptyForm);
+    const [contactSearch, setContactSearch] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [dateFilter, setDateFilter] = useState('');
 
-    const filtered = visites.filter(v => filter === 'all' || v.statut === filter);
-    const countByStatut = (s: string) => visites.filter(v => v.statut === s).length;
+    const filtered = visits.filter(v => {
+        const matchesStatut = filter === 'all' || v.statut === filter;
+        const contact = contacts.find(c => c.id === v.contactId);
+        const matchesSearch = v.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (contact?.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        const matchesDate = !dateFilter || v.date === dateFilter;
 
-    const markDone = (id: number) => setVisites(prev => prev.map(v => v.id === id ? { ...v, statut: 'completed' } : v));
+        return matchesStatut && matchesSearch && matchesDate;
+    });
+    const countByStatut = (s: string) => visits.filter(v => v.statut === s).length;
+
+    const filteredContacts = useMemo(() => {
+        if (!contactSearch.trim()) return [];
+        return contacts.filter(c =>
+            c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
+            c.company.toLowerCase().includes(contactSearch.toLowerCase())
+        ).slice(0, 5);
+    }, [contacts, contactSearch]);
 
     const handleSave = () => {
-        if (!form.title.trim() || !form.contact.trim()) return;
-        const newId = Math.max(...visites.map(v => v.id)) + 1;
-        setVisites(prev => [...prev, { id: newId, ...form, statut: 'upcoming' }]);
+        if (!form.title.trim() || !form.contactId) {
+            showToast('Veuillez remplir le titre et sélectionner un contact', 'error');
+            return;
+        }
+        addVisit({ ...form, statut: 'upcoming' });
+        showToast('Nouvelle visite planifiée avec succès');
         setShowModal(false);
         setForm(emptyForm);
+        setContactSearch('');
     };
 
     const getStatutBadge = (statut: string) => {
@@ -48,6 +61,8 @@ const Visites = () => {
         if (statut === 'upcoming') return <span className="statut-badge statut-upcoming"><Calendar size={14} /> À venir</span>;
         return <span className="statut-badge statut-done"><CheckCircle2 size={14} /> Réalisée</span>;
     };
+
+    const getContactName = (id: number) => contacts.find(c => c.id === id)?.name || 'Inconnu';
 
     return (
         <div className="visites-page">
@@ -76,19 +91,57 @@ const Visites = () => {
                 </div>
                 <div className="vstat-card vstat-all" onClick={() => setFilter('all')}>
                     <div className="vstat-icon"><MapPin size={22} /></div>
-                    <div><div className="vstat-number">{visites.length}</div><div className="vstat-label">Total</div></div>
+                    <div><div className="vstat-number">{visits.length}</div><div className="vstat-label">Total</div></div>
                 </div>
             </div>
 
-            <div className="visites-filters">
-                {[{ key: 'all', label: 'Toutes' }, { key: 'today', label: "Aujourd'hui" }, { key: 'upcoming', label: 'À venir' }, { key: 'completed', label: 'Réalisées' }].map(f => (
-                    <button key={f.key} className={`filter-btn ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>{f.label}</button>
-                ))}
+            <div className="visites-filters-bar flex flex-wrap gap-4 items-center">
+                <div className="visites-statut-filters flex gap-1 bg-gray-100 p-1 rounded-lg">
+                    {[{ key: 'all', label: 'Toutes' }, { key: 'today', label: "Aujourd'hui" }, { key: 'upcoming', label: 'À venir' }, { key: 'completed', label: 'Réalisées' }].map(f => (
+                        <button
+                            key={f.key}
+                            className={`filter-btn ${filter === f.key ? 'active' : ''}`}
+                            onClick={() => setFilter(f.key)}
+                        >
+                            {f.label}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="search-input flex-1 min-w-[200px]">
+                    <Search size={18} />
+                    <input
+                        type="text"
+                        placeholder="Rechercher par contact ou titre..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+
+                <div className="date-filter flex items-center gap-2 bg-white px-3 py-2 border rounded-lg shadow-sm">
+                    <Calendar size={18} className="text-muted" />
+                    <input
+                        type="date"
+                        className="border-none outline-none text-sm"
+                        value={dateFilter}
+                        onChange={(e) => setDateFilter(e.target.value)}
+                    />
+                    {dateFilter && (
+                        <button
+                            className="clear-date"
+                            onClick={() => setDateFilter('')}
+                            title="Effacer le filtre date"
+                        >
+                            <Plus size={14} style={{ transform: 'rotate(45deg)' }} />
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="visites-list">
                 {filtered.map(visite => {
-                    const type = typeConfig[visite.type];
+                    const type = typeConfig[visite.type] || typeConfig.terrain;
+                    const contact = contacts.find(c => c.id === visite.contactId);
                     return (
                         <div key={visite.id} className={`visite-card ${visite.statut === 'today' ? 'visite-highlight' : ''}`}>
                             <div className="visite-type-badge" style={{ color: type.color, backgroundColor: type.bg }}>{type.label}</div>
@@ -105,16 +158,25 @@ const Visites = () => {
                                     {getStatutBadge(visite.statut)}
                                     <div className="visite-people">
                                         <div className="person-item">
-                                            <div className="person-avatar person-contact">{visite.contact.charAt(0)}</div>
-                                            <div><div className="person-role">Contact</div><div className="person-name">{visite.contact}</div></div>
+                                            <div className="person-avatar person-contact">{contact?.name.charAt(0) || 'C'}</div>
+                                            <div><div className="person-role">Contact</div><div className="person-name">{contact?.name || 'Inconnu'}</div></div>
                                         </div>
                                         <div className="person-item">
-                                            <div className="person-avatar person-agent">{visite.agent.charAt(0)}</div>
+                                            <div className="person-avatar person-agent">{visite.agent.charAt(0) || 'A'}</div>
                                             <div><div className="person-role">Agent</div><div className="person-name">{visite.agent}</div></div>
                                         </div>
+                                        {visite.technician && (
+                                            <div className="person-item">
+                                                <div className="person-avatar person-tech" style={{ backgroundColor: '#f59e0b' }}>{visite.technician.charAt(0) || 'T'}</div>
+                                                <div><div className="person-role">Tech</div><div className="person-name">{visite.technician}</div></div>
+                                            </div>
+                                        )}
                                     </div>
                                     {visite.statut !== 'completed' && (
-                                        <button className="btn-mark-done" onClick={() => markDone(visite.id)}>
+                                        <button className="btn-mark-done" onClick={() => {
+                                            moveVisitStatut(visite.id, 'completed');
+                                            showToast('Visite marquée comme réalisée');
+                                        }}>
                                             <CheckCircle2 size={14} /> Marquer réalisée
                                         </button>
                                     )}
@@ -135,14 +197,52 @@ const Visites = () => {
                         <label className="form-label">Titre de la visite *</label>
                         <input className="form-input" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Ex: Visite parcelle Almadies Phase 2" />
                     </div>
-                    <div className="form-group">
-                        <label className="form-label">Contact client *</label>
-                        <input className="form-input" value={form.contact} onChange={e => setForm({ ...form, contact: e.target.value })} placeholder="Nom du client" />
+
+                    <div className="form-group col-2">
+                        <label className="form-label">Rechercher un contact existant *</label>
+                        <div className="search-input-wrapper">
+                            <Search size={16} className="search-icon" />
+                            <input
+                                className="form-input search-input"
+                                value={form.contactId ? getContactName(form.contactId) : contactSearch}
+                                onChange={e => {
+                                    setContactSearch(e.target.value);
+                                    if (form.contactId) setForm({ ...form, contactId: 0 });
+                                }}
+                                placeholder="Taper le nom du contact..."
+                            />
+                            {form.contactId > 0 && (
+                                <button className="clear-search" onClick={() => { setForm({ ...form, contactId: 0 }); setContactSearch(''); }}>
+                                    <Plus size={14} style={{ transform: 'rotate(45deg)' }} />
+                                </button>
+                            )}
+                        </div>
+                        {contactSearch && !form.contactId && (
+                            <div className="search-results-dropdown">
+                                {filteredContacts.length > 0 ? filteredContacts.map(c => (
+                                    <div key={c.id} className="search-result-item" onClick={() => {
+                                        setForm({
+                                            ...form,
+                                            contactId: c.id,
+                                            type: c.service === 'foncier' ? 'terrain' : c.service === 'construction' ? 'chantier' : 'bureau',
+                                            lieu: c.propertyTitle || c.address || '',
+                                            title: c.propertyTitle ? `Visite ${c.propertyTitle}` : form.title
+                                        });
+                                        setContactSearch(c.name);
+                                    }}>
+                                        <div className="result-icon"><User size={14} /></div>
+                                        <div className="result-info">
+                                            <div className="result-name">{c.name}</div>
+                                            <div className="result-sub">{c.company} · {c.phone}</div>
+                                        </div>
+                                    </div>
+                                )) : (
+                                    <div className="search-result-empty">Aucun contact trouvé</div>
+                                )}
+                            </div>
+                        )}
                     </div>
-                    <div className="form-group">
-                        <label className="form-label">Téléphone</label>
-                        <input className="form-input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="+221 77 000 00 00" />
-                    </div>
+
                     <div className="form-group">
                         <label className="form-label">Date</label>
                         <input className="form-input" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
@@ -153,7 +253,7 @@ const Visites = () => {
                     </div>
                     <div className="form-group">
                         <label className="form-label">Type</label>
-                        <select className="form-select" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                        <select className="form-select" value={form.type} onChange={e => setForm({ ...form, type: e.target.value as any })}>
                             <option value="terrain">Visite Terrain</option>
                             <option value="chantier">Visite Chantier</option>
                             <option value="bureau">RDV Bureau</option>
@@ -161,7 +261,17 @@ const Visites = () => {
                     </div>
                     <div className="form-group">
                         <label className="form-label">Agent responsable</label>
-                        <input className="form-input" value={form.agent} onChange={e => setForm({ ...form, agent: e.target.value })} placeholder="Nom de l'agent" />
+                        <select className="form-select" value={form.agent} onChange={e => setForm({ ...form, agent: e.target.value })}>
+                            <option value="">— Sélectionner un agent —</option>
+                            {AGENTS.map(a => <option key={a} value={a}>{a}</option>)}
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Technicien (optionnel)</label>
+                        <select className="form-select" value={form.technician} onChange={e => setForm({ ...form, technician: e.target.value })}>
+                            <option value="">— Aucun technicien —</option>
+                            {TECHNICIANS.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
                     </div>
                     <div className="form-group col-2">
                         <label className="form-label">Lieu</label>

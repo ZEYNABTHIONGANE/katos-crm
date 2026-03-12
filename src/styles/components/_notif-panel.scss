@@ -72,7 +72,7 @@
 }
 
 .notif-close-btn:hover {
-    background: #fee2e2;
+    background: rgba(239, 68, 68, 0.15);
     color: #ef4444;
 }
 
@@ -115,7 +115,7 @@
     width: 36px;
     height: 36px;
     border-radius: var(--radius-md);
-    background: white;
+    background: var(--bg-card);
     display: flex;
     align-items: center;
     justify-content: center;
