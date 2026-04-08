@@ -1,14 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAuth } from '@/app/providers/AuthProvider';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, Plus, Phone, Mail, MapPin, Eye, Edit2, Trash2 } from 'lucide-react';
+import { Search, Filter, Plus, Phone, Mail, MapPin, Eye, Edit2, Trash2, MessageSquare, Upload } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import ServiceSelector from './ServiceSelector';
 import PropertyPicker, { type SelectedProperty } from './PropertyPicker';
-import { useContactStore, type CrmContact } from '@/stores/contactStore';
+import { useContactStore, type CrmContact, calculateLeadScore } from '@/stores/contactStore';
 import { useToast } from '@/app/providers/ToastProvider';
+import { useNotifications } from '@/app/providers/NotifProvider';
+import { fetchCommercials } from '../api/contactApi';
 
-const SOURCE_OPTIONS = ['Site web', 'Facebook', 'LinkedIn', 'Instagram', 'TikTok', 'Recommandation', 'Autre'];
-const AGENTS = ['Abdou Sarr', 'Omar Diallo', 'Katos Admin'];
+const SOURCE_OPTIONS = [
+    'Site web', 'Facebook', 'Instagram', 'TikTok', 'LinkedIn', 
+    'WhatsApp', 'SMS', 'Email', 'Appel (Apporteur)', 'Appel (Prospection)', 
+    'Terrain', 'Recommandation', 'Bouche à oreille', 'Autre'
+];
 
 const SERVICE_LABELS: Record<string, string> = {
     foncier: 'Foncier',
@@ -16,18 +22,34 @@ const SERVICE_LABELS: Record<string, string> = {
     gestion_immobiliere: 'Gestion Immo',
 };
 
+const getAgentColor = (name: string) => {
+    const colors = [
+        { bg: 'rgba(79, 70, 229, 0.1)', text: '#4f46e5' }, // Indigo
+        { bg: 'rgba(16, 185, 129, 0.1)', text: '#10b981' }, // Emerald
+        { bg: 'rgba(245, 158, 11, 0.1)', text: '#f59e0b' }, // Amber
+        { bg: 'rgba(236, 72, 153, 0.1)', text: '#ec4899' }, // Pink
+        { bg: 'rgba(6, 182, 212, 0.1)', text: '#06b6d4' }, // Cyan
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    return colors[Math.abs(hash) % colors.length];
+};
+
 type FormData = Omit<CrmContact, 'id'>;
 
 const emptyForm: FormData = {
     name: '', company: '', email: '', phone: '',
-    status: 'Prospect', address: '', country: 'Sénégal',
+    status: 'Prospect', address: '', country: '',
     source: '', service: undefined, propertyId: undefined, propertyTitle: undefined,
-    lastAction: '', budget: '', assignedAgent: '',
+    lastAction: '', budget: '', assignedAgent: '', notes: '', createdBy: '',
+    budgetConfirmed: false, isReactive: false,
 };
 
 const ContactsList = () => {
-    const { contacts, addContact, updateContact, deleteContact } = useContactStore();
+    const { user } = useAuth();
+    const { contacts, addContact, addContactsBulk, addInteractionsBulk, updateContact, deleteContact } = useContactStore();
     const { showToast } = useToast();
+    const { addNotif } = useNotifications();
     const [searchTerm, setSearchTerm] = useState('');
     const [filter, setFilter] = useState('Tous');
     const [openMenu, setOpenMenu] = useState<number | null>(null);
@@ -35,39 +57,379 @@ const ContactsList = () => {
     const [editContact, setEditContact] = useState<CrmContact | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<CrmContact | null>(null);
     const [form, setForm] = useState<FormData>(emptyForm);
+    const [commercials, setCommercials] = useState<{ id: string, name: string, service: string, role?: string, parent_id?: string, group_name?: string }[]>([]);
+    
+    // Import states
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [importData, setImportData] = useState<any[]>([]);
+    const [isImporting, setIsImporting] = useState(false);
+    
     const navigate = useNavigate();
 
-    const filtered = contacts.filter(c => {
-        const matchesSearch =
-            c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            c.company.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesFilter = filter === 'Tous' ? true : c.status === filter;
-        return matchesSearch && matchesFilter;
-    });
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
 
-    const getStatusBadge = (status: string) => {
-        switch (status) {
-            case 'Prospect': return <span className="badge badge-warning">Prospect</span>;
-            case 'En Qualification': return <span className="badge badge-info">En Qualification</span>;
-            case 'Client': return <span className="badge badge-success">Client</span>;
-            case 'Projet Livré': return <span className="badge badge-primary">Livré</span>;
-            default: return <span className="badge">{status}</span>;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const text = event.target?.result as string;
+            if (!text) return;
+
+            const rows = text.split(/\r?\n/).filter(row => row.trim());
+            if (rows.length < 2) {
+                showToast("Fichier vide ou invalide", "error");
+                return;
+            }
+
+            // Detect delimiter (automatic between , and ;)
+            const firstLine = rows[0];
+            const commaCount = (firstLine.match(/,/g) || []).length;
+            const semiCount = (firstLine.match(/;/g) || []).length;
+            const delimiter = semiCount > commaCount ? ';' : ',';
+
+            // Robust CSV line splitter (handles quotes)
+            const splitCsvLine = (line: string, sep: string) => {
+                const result = [];
+                let current = '';
+                let inQuotes = false;
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+                    if (char === '"') inQuotes = !inQuotes;
+                    else if (char === sep && !inQuotes) {
+                        result.push(current.trim());
+                        current = '';
+                    } else current += char;
+                }
+                result.push(current.trim());
+                return result.map(v => v.replace(/^"|"$/g, '').trim());
+            };
+
+            // Normalize header names (remove accents and lowercase)
+            const normalize = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+            const header = splitCsvLine(rows[0], delimiter).map(h => normalize(h));
+            const noteIdx = header.findIndex(h => h.includes('note') || h.includes('comment') || h.includes('obs') || h.includes('deta'));
+            
+            const data = rows.slice(1).map((row, rowIdx) => {
+                let values = splitCsvLine(row, delimiter);
+                
+                // --- Smart Merge: handle rows with extra columns due to unquoted commas in notes ---
+                if (values.length > header.length && noteIdx !== -1) {
+                    const extraCount = values.length - header.length;
+                    const beforeNote = values.slice(0, noteIdx);
+                    // Merge note parts using the detected delimiter
+                    const noteParts = values.slice(noteIdx, noteIdx + extraCount + 1);
+                    const afterNote = values.slice(noteIdx + extraCount + 1);
+                    values = [...beforeNote, noteParts.join(', '), ...afterNote];
+                    console.log(`[CSV] Row ${rowIdx+1} merged: ${extraCount} extra columns found.`);
+                }
+
+                const obj: any = {};
+                header.forEach((h, i) => {
+                    obj[h] = values[i] || '';
+                });
+                return obj;
+            });
+
+            // Map and normalize fields
+            const mappedData = data.map(item => {
+                let srv = item.service || '';
+                const normSrv = normalize(srv);
+                if (normSrv.includes('foncier')) srv = 'foncier';
+                else if (normSrv.includes('const')) srv = 'construction';
+                else if (normSrv.includes('gest')) srv = 'gestion_immobiliere';
+                else srv = 'construction';
+
+                // Robust date parsing (DD/MM/YYYY)
+                let cAt = item.date || item.creation || new Date().toISOString();
+                if (typeof cAt === 'string' && cAt.includes('/')) {
+                    const parts = cAt.split('/');
+                    if (parts.length === 3) {
+                        const day = parts[0].padStart(2, '0');
+                        const month = parts[1].padStart(2, '0');
+                        const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+                        cAt = `${year}-${month}-${day}`;
+                    }
+                }
+                
+                // Debug log for mapping
+                console.log('[CSV Map] Item:', item.nom, '-> Statut:', item.statut, '-> Agent:', item.commercial);
+
+                // Robust status mapping
+                let stat = item.statut || item.status || item.stat || item.situation || 'Prospect';
+                const normStat = normalize(stat);
+                // Simple mapping for common variations
+                if (normStat.includes('qualif')) stat = 'Qualification';
+                else if (normStat.includes('rdv')) stat = 'RDV';
+                else if (normStat.includes('prop')) stat = 'Proposition Commerciale';
+                else if (normStat.includes('nego')) stat = 'Négociation';
+                else if (normStat.includes('reser')) stat = 'Réservation';
+                else if (normStat.includes('cont')) stat = 'Contrat';
+                else if (normStat.includes('paie')) stat = 'Paiement';
+                else if (normStat.includes('client')) stat = 'Client';
+
+                return {
+                    name: item.nom || item.name || item.full_name || '',
+                    company: item.entreprise || item.societe || item.company || '',
+                    email: item.email || item.courriel || '',
+                    phone: item.telephone || item.phone || item.tel || item.contact || item.mobile || item.numero || '',
+                    status: stat,
+                    notes: item.note || item.notes || item.note_interne || item.observations || item.commentaires || item.comm || item.details || '',
+                    country: item.pays || item.country || '',
+                    source: item.origine || item.source || item.canal || item.provenance || 'Importation',
+                    service: srv as any,
+                    assignedAgent: item.commercial || item.agent || item.commercial_attribue || (user?.role === 'commercial' ? user.name : ''),
+                    createdBy: user?.name || '',
+                    createdAt: cAt
+                };
+            }).filter(item => item.name); // Filter out rows without a name
+
+            if (mappedData.length === 0) {
+                showToast("Aucun prospect valide trouvé dans le fichier", "info");
+                return;
+            }
+
+            setImportData(mappedData);
+        };
+        reader.readAsText(file);
+    };
+
+    const processImport = async () => {
+        if (importData.length === 0) return;
+        setIsImporting(true);
+        try {
+            const newContacts = await addContactsBulk(importData);
+            if (newContacts && newContacts.length > 0) {
+                // Créer des entrées d'historique (interactions) pour les notes
+                const notesInteractions = newContacts
+                    .filter(c => c.notes && c.notes.trim())
+                    .map(c => ({
+                        contactId: c.id,
+                        type: 'note' as any,
+                        title: 'Note d\'importation',
+                        description: c.notes,
+                        date: new Date().toISOString().split('T')[0],
+                        heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                        agent: c.assignedAgent || user?.name || 'Système'
+                    }));
+
+                if (notesInteractions.length > 0) {
+                    await addInteractionsBulk(notesInteractions);
+                }
+
+                showToast(`${newContacts.length} prospects importés avec succès !`);
+                setShowImportModal(false);
+                setImportData([]);
+            } else {
+                showToast("Erreur lors de l'importation massive", "error");
+            }
+        } catch (error) {
+            console.error(error);
+            showToast("Une erreur est survenue pendant l'importation", "error");
+        } finally {
+            setIsImporting(false);
         }
     };
 
-    const openAdd = () => { setEditContact(null); setForm(emptyForm); setShowModal(true); };
+    useEffect(() => {
+        const loadCommercials = async () => {
+            const data = await fetchCommercials() as any;
+            setCommercials(data);
+        };
+        loadCommercials();
+    }, []);
+
+    // Filtrer les commerciaux selon le service sélectionné dans le formulaire
+    const availableAgents = commercials.filter(c => {
+        // Pour les admins, dir_com et superviseurs, on montre TOUS les agents
+        if (user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') return true;
+        
+        // Pour un Responsable Commercial (RC), on montre ses managers et les agents de ses managers
+        if (user?.role === 'resp_commercial') {
+            const supervisedManagers = commercials.filter(comm => comm.parent_id === user.id);
+            const supervisedManagerIds = supervisedManagers.map(m => m.id);
+            return c.parent_id === user.id || (c.parent_id && supervisedManagerIds.includes(c.parent_id));
+        }
+
+        // Pour un manager, on montre les commerciaux de son groupe
+        if (user?.role === 'manager') {
+            return c.parent_id === user.id;
+        }
+        
+        return false;
+    });
+
+    const filtered = contacts.filter(c => {
+        // Filtrage par Recherche et Status (existant)
+        const matchesSearch =
+            c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            c.company.toLowerCase().includes(searchTerm.toLowerCase());
+        
+        const score = calculateLeadScore(c);
+        let matchesFilter = false;
+
+        if (filter === 'Tous') {
+            matchesFilter = true;
+        } else if (filter === 'temp-hot') {
+            matchesFilter = score >= 35;
+        } else if (filter === 'temp-warm') {
+            matchesFilter = score >= 16 && score < 35;
+        } else if (filter === 'temp-cold') {
+            matchesFilter = score < 16;
+        } else {
+            matchesFilter = c.status === filter;
+        }
+
+        if (!matchesSearch || !matchesFilter) return false;
+
+        // Filtrage par Rôle et Hiérarchie (NOUVELLES RÈGLES)
+        if (user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') {
+            return true; // Admin et Dir Commercial voient TOUT
+        }
+        
+        if (user?.role === 'resp_commercial') {
+            // Un responsable commercial voit les prospects de ses managers et de leurs agents
+            const supervisedManagers = commercials.filter(comm => comm.parent_id === user.id);
+            const supervisedManagerIds = supervisedManagers.map(m => m.id);
+            const supervisedAgents = commercials.filter(comm => 
+                comm.parent_id === user.id || 
+                (comm.parent_id && supervisedManagerIds.includes(comm.parent_id))
+            );
+            const supervisedNames = supervisedAgents.map(a => a.name);
+            return supervisedNames.includes(c.assignedAgent || '');
+        }
+
+        if (user?.role === 'manager') {
+            // Un manager voit les prospects des agents de son groupe
+            const groupAgents = commercials.filter(comm => comm.parent_id === user.id);
+            const groupAgentNames = [user.name, ...groupAgents.map(a => a.name)];
+            return groupAgentNames.includes(c.assignedAgent || '');
+        }
+
+        if (user?.role === 'commercial') {
+            // Un commercial voit ses propres prospects
+            return c.assignedAgent === user.name;
+        }
+
+        if (user?.role === 'assistante') {
+            // L'assistante voit ses propres créations ou les prospects non assignés
+            if (c.createdBy) {
+                return c.createdBy === user.name;
+            }
+            return !c.assignedAgent;
+        }
+
+        return true;
+    });
+
+    const getStatusBadge = (status: string) => {
+        const s = status || 'Prospect';
+        switch (s) {
+            case 'Prospect': return <span className="badge badge-warning text-uppercase">Prospect</span>;
+            case 'Qualification': 
+            case 'En Qualification': return <span className="badge badge-info text-uppercase">Qualification</span>;
+            case 'RDV': return <span className="badge badge-primary text-uppercase">RDV</span>;
+            case 'Proposition Commerciale': return <span className="badge badge-primary text-uppercase">Proposition</span>;
+            case 'Négociation': return <span className="badge badge-info text-uppercase">Négociation</span>;
+            case 'Réservation': return <span className="badge badge-secondary text-uppercase">Réservation</span>;
+            case 'Contrat': return <span className="badge badge-success text-uppercase">Contrat</span>;
+            case 'Paiement': return <span className="badge badge-success text-uppercase">Paiement</span>;
+            case 'Transfert de dossier technique':
+            case 'Transfert dossier tech': return <span className="badge badge-warning text-uppercase">Transfert Tech</span>;
+            case 'Suivi Chantier': return <span className="badge badge-warning text-uppercase">Chantier</span>;
+            case 'Livraison Client': return <span className="badge badge-success text-uppercase">Livré</span>;
+            case 'Fidélisation': return <span className="badge badge-primary text-uppercase">Fidélisation</span>;
+            default: return <span className="badge badge-secondary text-uppercase">{s}</span>;
+        }
+    };
+
+    const openAdd = () => { 
+        setEditContact(null); 
+        const initialForm = { ...emptyForm };
+        
+        // Auto-sélection du service pour manager
+        if (user?.role === 'manager' && user.service) {
+            initialForm.service = (user.service === 'gestion' ? 'gestion_immobiliere' : user.service) as any;
+        }
+        
+        setForm(initialForm); 
+        setShowModal(true); 
+    };
     const openEdit = (c: CrmContact) => { setEditContact(c); setForm({ ...c }); setShowModal(true); setOpenMenu(null); };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!form.name.trim()) return;
-        if (editContact) {
-            updateContact(editContact.id, form);
-            showToast('Contact mis à jour avec succès');
-        } else {
-            addContact(form);
-            showToast('Nouveau contact ajouté');
+
+        // Auto-assignation pour le commercial s'il crée lui-même, et forcer vide pour l'assistante.
+        const contactData = { ...form };
+
+        // Ajouter le créateur au contact lors de la création
+        if (!editContact) {
+            contactData.createdBy = user?.name || '';
         }
-        setShowModal(false);
+
+        if (user?.role === 'commercial') {
+            contactData.assignedAgent = user.name;
+        } else if (user?.role === 'assistante') {
+            contactData.assignedAgent = '';
+        }
+
+        try {
+            if (editContact && editContact.id) {
+                const isNewAssignment = contactData.assignedAgent && contactData.assignedAgent !== editContact.assignedAgent;
+                const success = await updateContact(editContact.id, contactData) as any;
+                
+                if (success) {
+                    showToast('Contact mis à jour avec succès');
+                    setShowModal(false);
+
+                    // Notification d'assignation
+                    if (isNewAssignment) {
+                        const targetAgent = commercials.find(c => c.name === contactData.assignedAgent);
+                        if (targetAgent) {
+                            await addNotif({
+                                type: 'prospect',
+                                title: 'Nouveau prospect assigné',
+                                message: `Le prospect ${contactData.name} vous a été assigné par ${user?.name || 'un administrateur'}.`,
+                                assigned_to: targetAgent.id,
+                                service: contactData.service
+                            });
+                        }
+                    }
+                } else {
+                    showToast('Erreur lors de la mise à jour (Vérifiez la base de données)', 'error');
+                }
+            } else {
+                const result = await addContact(contactData);
+                if (typeof result === 'object' && result !== null) {
+                    showToast('Nouveau prospect créé avec succès !');
+                    setShowModal(false);
+
+                    // Notification d'assignation pour nouvelle création
+                    if (contactData.assignedAgent) {
+                        const targetAgent = commercials.find(c => c.name === contactData.assignedAgent);
+                        if (targetAgent) {
+                            await addNotif({
+                                type: 'prospect',
+                                title: 'Nouveau prospect assigné',
+                                message: `Le prospect ${contactData.name} vient d'être créé et vous a été assigné par ${user?.name || 'un administrateur'}.`,
+                                assigned_to: targetAgent.id,
+                                service: contactData.service
+                            });
+                        }
+                    }
+
+                    // Accéder à l'ID en toute sécurité pour redirection éventuelle
+                    const newId = (result as CrmContact).id;
+                    if (newId) setTimeout(() => navigate(`/prospects/${newId}`), 300);
+                } else {
+                    const msg = typeof result === 'string' ? result : 'Erreur de création';
+                    showToast(`Erreur: ${msg}`, 'error');
+                }
+            }
+        } catch (error) {
+            console.error(error);
+            showToast('Une erreur inattendue est survenue', 'error');
+        }
     };
 
     const handleDelete = (c: CrmContact) => {
@@ -87,9 +449,14 @@ const ContactsList = () => {
                     <h1>Prospects & Clients</h1>
                     <p className="subtitle">Gérez votre base de contacts et suivez leurs dossiers</p>
                 </div>
-                <button className="btn-primary" onClick={openAdd}>
-                    <Plus size={18} /> Nouveau Contact
-                </button>
+                <div className="d-flex gap-2">
+                    <button className="btn-secondary" onClick={() => setShowImportModal(true)}>
+                        <Upload size={18} /> Importer
+                    </button>
+                    <button className="btn-primary" onClick={openAdd}>
+                        <Plus size={18} /> Nouveau Contact
+                    </button>
+                </div>
             </div>
 
             <div className="contacts-toolbar card-premium">
@@ -101,11 +468,17 @@ const ContactsList = () => {
                     <div className="filter-group">
                         <Filter size={18} className="text-muted" />
                         <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-                            <option value="Tous">Tous les statuts</option>
-                            <option value="Prospect">Prospects</option>
-                            <option value="En Qualification">En Qualification</option>
-                            <option value="Client">Clients</option>
-                            <option value="Projet Livré">Projets Livrés</option>
+                            <option value="Tous">Tous les prospects</option>
+                            <option disabled style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>— Par Température —</option>
+                            <option value="temp-hot">Chauds 🔥 (Priorité)</option>
+                            <option value="temp-warm">Tièdes (En cours)</option>
+                            <option value="temp-cold">Froids (À qualifier)</option>
+                            <option disabled style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>— Par Statut —</option>
+                            <option value="Prospect">Statut: Prospects</option>
+                            <option value="En Qualification">Statut: Qualification</option>
+                            <option value="RDV">Statut: RDV Effectués</option>
+                            <option value="Client">Statut: Clients</option>
+                            <option value="Projet Livré">Statut: Projets Livrés</option>
                         </select>
                     </div>
                 </div>
@@ -159,19 +532,94 @@ const ContactsList = () => {
                                     ) : <span className="text-sm text-muted">—</span>}
                                 </td>
                                 <td>
-                                    {contact.assignedAgent ? (
-                                        <div className="text-sm font-medium" style={{ color: 'var(--primary)' }}>{contact.assignedAgent}</div>
-                                    ) : <span className="text-sm text-muted">—</span>}
+                                    {contact.assignedAgent ? (() => {
+                                        const theme = getAgentColor(contact.assignedAgent);
+                                        return (
+                                            <div className="agent-badge-premium" style={{ 
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '8px',
+                                                padding: '4px 12px',
+                                                borderRadius: '20px',
+                                                background: theme.bg,
+                                                color: theme.text,
+                                                fontSize: '0.85rem',
+                                                fontWeight: 600,
+                                                border: `1px solid ${theme.text}20`
+                                            }}>
+                                                <div style={{ 
+                                                    width: '20px', 
+                                                    height: '20px', 
+                                                    borderRadius: '50%', 
+                                                    background: theme.text, 
+                                                    color: '#fff', 
+                                                    display: 'flex', 
+                                                    alignItems: 'center', 
+                                                    justifyContent: 'center',
+                                                    fontSize: '0.65rem'
+                                                }}>
+                                                    {contact.assignedAgent.charAt(0)}
+                                                </div>
+                                                {contact.assignedAgent}
+                                            </div>
+                                        );
+                                    })() : (
+                                        <span style={{ 
+                                            fontSize: '0.75rem', 
+                                            padding: '4px 12px', 
+                                            borderRadius: '20px', 
+                                            background: 'rgba(255, 165, 0, 0.08)', 
+                                            color: '#ffa500',
+                                            border: '1px solid rgba(255, 165, 0, 0.2)',
+                                            fontWeight: 600,
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.5px'
+                                        }}>
+                                            À dispatcher
+                                        </span>
+                                    )}
                                 </td>
-                                <td>{getStatusBadge(contact.status)}</td>
+                                <td>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-start' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            {getStatusBadge(contact.status)}
+                                            {(() => {
+                                                const score = calculateLeadScore(contact);
+                                                const color = score >= 35 ? '#dc2626' : score >= 16 ? '#ea580c' : '#0284c7';
+                                                const bg = score >= 35 ? '#fee2e2' : score >= 16 ? '#ffedd5' : '#e0f2fe';
+                                                return (
+                                                    <span style={{ 
+                                                        fontSize: '0.6rem', 
+                                                        fontWeight: 700, 
+                                                        padding: '1px 5px', 
+                                                        borderRadius: '4px', 
+                                                        background: bg, 
+                                                        color: color,
+                                                        border: `1px solid ${color}30`
+                                                    }}>
+                                                        {score} PTS {score >= 35 && '🔥'}
+                                                    </span>
+                                                );
+                                            })()}
+                                        </div>
+                                        {contact.createdAt && (
+                                            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 500, paddingLeft: '4px' }}>
+                                                Depuis {Math.floor((new Date().getTime() - new Date(contact.createdAt).getTime()) / (1000 * 60 * 60 * 24))}j
+                                            </span>
+                                        )}
+                                    </div>
+                                </td>
                                 <td className="actions-cell" onClick={(e) => e.stopPropagation()}>
                                     <div className="action-menu-wrap">
                                         <button className="btn-icon" onClick={() => setOpenMenu(openMenu === contact.id ? null : contact.id)}>⋮</button>
                                         {openMenu === contact.id && (
                                             <div className="action-dropdown">
                                                 <button onClick={() => { navigate(`/prospects/${contact.id}`); setOpenMenu(null); }}><Eye size={14} /> Voir</button>
+                                                <button onClick={() => { navigate(`/prospects/${contact.id}?action=interaction`); setOpenMenu(null); }}><MessageSquare size={14} /> Interaction</button>
                                                 <button onClick={() => openEdit(contact)}><Edit2 size={14} /> Modifier</button>
-                                                <button className="danger" onClick={() => { setShowDeleteConfirm(contact); setOpenMenu(null); }}><Trash2 size={14} /> Supprimer</button>
+                                                {user?.role !== 'commercial' && (
+                                                    <button className="danger" onClick={() => { setShowDeleteConfirm(contact); setOpenMenu(null); }}><Trash2 size={14} /> Supprimer</button>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -215,28 +663,62 @@ const ContactsList = () => {
                         <label className="form-label">Statut CRM</label>
                         <select className="form-select" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
                             <option value="Prospect">Prospect</option>
-                            <option value="En Qualification">En Qualification</option>
-                            <option value="Client">Client</option>
-                            <option value="Projet Livré">Projet Livré</option>
+                            <option value="Qualification">Qualification</option>
+                            <option value="RDV">RDV</option>
+                            <option value="Proposition Commerciale">Proposition Commerciale</option>
+                            <option value="Négociation">Négociation</option>
+                            <option value="Réservation">Réservation</option>
+                            <option value="Contrat">Contrat</option>
+                            <option value="Paiement">Paiement</option>
+                            <option value="Transfert de dossier technique">Transfert dossier tech</option>
+                            <option value="Suivi Chantier">Suivi Chantier</option>
+                            <option value="Livraison Client">Livraison Client</option>
+                            <option value="Fidélisation">Fidélisation</option>
                         </select>
                     </div>
                     <div className="form-group">
-                        <label className="form-label">Comment nous avez-vous connu ?</label>
+                        <label className="form-label">Canal d'acquisition</label>
                         <select className="form-select" value={form.source} onChange={e => setForm({ ...form, source: e.target.value })}>
                             <option value="">— Sélectionner —</option>
                             {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                     </div>
-                    <div className="form-group">
-                        <label className="form-label">Commercial affecté</label>
-                        <select className="form-select" value={form.assignedAgent || ''} onChange={e => setForm({ ...form, assignedAgent: e.target.value })}>
-                            <option value="">— Non assigné —</option>
-                            {AGENTS.map(a => <option key={a} value={a}>{a}</option>)}
-                        </select>
+                    <div className="form-group col-2" style={{ display: 'flex', gap: '24px', alignItems: 'center', background: 'rgba(0,0,0,0.02)', padding: '12px 16px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.05)', marginTop: '8px' }}>
+                        <label className="flex items-center gap-2 cursor-pointer" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input type="checkbox" checked={form.budgetConfirmed} onChange={e => setForm({ ...form, budgetConfirmed: e.target.checked })} style={{ width: '18px', height: '18px' }} />
+                            Budget Confirmé (+20 pts)
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer" style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input type="checkbox" checked={form.isReactive} onChange={e => setForm({ ...form, isReactive: e.target.checked })} style={{ width: '18px', height: '18px' }} />
+                            Prospect Réactif (+10 pts)
+                        </label>
                     </div>
-                    <div className="form-group">
-                        <label className="form-label">Budget estimé</label>
-                        <input className="form-input" value={form.budget || ''} onChange={e => setForm({ ...form, budget: e.target.value })} placeholder="Ex: 25M FCFA" />
+                    {(user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur' || user?.role === 'manager') && (
+                        <div className="form-group">
+                            <label className="form-label">Commercial affecté</label>
+                            <select 
+                                className="form-select" 
+                                value={form.assignedAgent || ''} 
+                                onChange={e => setForm({ ...form, assignedAgent: e.target.value })}
+                            >
+                                <option value="">— Non assigné —</option>
+                                {availableAgents.map(a => (
+                                    <option key={a.id} value={a.name}>
+                                        {a.name} ({a.service || 'Sans service'})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                    <div className="form-group col-2">
+                        <label className="form-label">Notes Internes</label>
+                        <textarea 
+                            className="form-textarea" 
+                            style={{ minHeight: '80px', fontSize: '0.88rem' }}
+                            value={form.notes || ''} 
+                            onChange={e => setForm({ ...form, notes: e.target.value })} 
+                            placeholder="Observations, commentaires sur le prospect..."
+                        />
                     </div>
                     <div className="form-group col-2">
                         <label className="form-label">Service demandé</label>
@@ -276,6 +758,85 @@ const ContactsList = () => {
                         Supprimer
                     </button>
                 </div>
+            </Modal>
+
+            {/* ---- Modale Importation CSV ---- */}
+            <Modal isOpen={showImportModal} onClose={() => { setShowImportModal(false); setImportData([]); }} title="Importer des prospects (CSV)" size="lg">
+                {!importData.length ? (
+                    <div className="import-dropzone" style={{ border: '2px dashed var(--border-color)', padding: '40px', borderRadius: '12px', textAlign: 'center', background: 'rgba(0,0,0,0.01)' }}>
+                        <Upload size={48} style={{ color: 'var(--primary)', marginBottom: '16px', opacity: 0.5 }} />
+                        <h3 style={{ marginBottom: '8px' }}>Sélectionnez votre fichier CSV pour Construction</h3>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '24px', lineHeight: '1.5' }}>
+                            Colonnes recommandées : <br />
+                            <strong>Nom, Téléphone, Commercial, Statut, Date, Note Interne</strong>
+                        </p>
+                        <input 
+                            type="file" 
+                            accept=".csv" 
+                            id="csv-upload" 
+                            style={{ display: 'none' }} 
+                            onChange={handleFileChange} 
+                        />
+                        <label htmlFor="csv-upload" className="btn-primary" style={{ cursor: 'pointer', display: 'inline-flex' }}>
+                            Choisir un fichier
+                        </label>
+                    </div>
+                ) : (
+                    <div className="import-preview">
+                        <p style={{ marginBottom: '16px' }}><strong>{importData.length}</strong> prospects détectés. Voici un aperçu :</p>
+                        <div className="table-responsive" style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '16px' }}>
+                            <table className="contacts-table" style={{ fontSize: '0.85rem' }}>
+                                <thead>
+                                    <tr>
+                                        <th>Nom</th>
+                                        <th>Émail / Téléphone</th>
+                                        <th>Statut</th>
+                                        <th>Commercial</th>
+                                        <th>Service</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {importData.slice(0, 5).map((row, i) => (
+                                        <tr key={i}>
+                                            <td>
+                                                <div style={{ fontWeight: 600 }}>{row.name}</div>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{row.company}</div>
+                                            </td>
+                                            <td>
+                                                <div>{row.email}</div>
+                                                <div>{row.phone}</div>
+                                            </td>
+                                            <td>{getStatusBadge(row.status)}</td>
+                                            <td>{row.assignedAgent || '—'}</td>
+                                            <td>{row.service ? SERVICE_LABELS[row.service] : '—'}</td>
+                                        </tr>
+                                    ))}
+                                    {importData.length > 5 && (
+                                        <tr>
+                                            <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '10px' }}>
+                                                ... et {importData.length - 5} autres lignes
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="alert alert-info" style={{ background: 'rgba(59, 130, 246, 0.05)', padding: '12px', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '16px', border: '1px solid rgba(59, 130, 246, 0.1)' }}>
+                            💡 Les prospects seront importés avec leurs statuts d'origine (ou <strong>Prospect</strong> par défaut) et la source <strong>Importation</strong>.
+                        </div>
+                        <div className="form-actions">
+                            <button className="btn-secondary" onClick={() => setImportData([])} disabled={isImporting}>Changer de fichier</button>
+                            <button 
+                                className="btn-primary" 
+                                onClick={processImport} 
+                                disabled={isImporting}
+                                style={{ minWidth: '150px' }}
+                            >
+                                {isImporting ? 'Importation en cours...' : `Confirmer l'import (${importData.length})`}
+                            </button>
+                        </div>
+                    </div>
+                )}
             </Modal>
         </div>
     );

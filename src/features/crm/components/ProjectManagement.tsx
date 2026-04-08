@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { HardHat, Camera, AlertTriangle, Calendar, User, MapPin, Search, Filter } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { HardHat, Camera, AlertTriangle, Calendar, User, MapPin, Search, Filter, ExternalLink } from 'lucide-react';
 import { useContactStore } from '@/stores/contactStore';
 import { useVillas } from '../api/villaApi';
 import type { ConstructionProject } from '../types/land';
@@ -18,6 +19,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ isCreateModalOpen
     const { constructionProjects, contacts, updateProject, addProject } = useContactStore();
     const { data: villas } = useVillas();
     const { showToast } = useToast();
+    const navigate = useNavigate();
     const [selectedProject, setSelectedProject] = useState<ConstructionProject | null>(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
@@ -67,8 +69,10 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ isCreateModalOpen
     const getContactName = (id: number) => contacts.find(c => c.id === id)?.name || 'Inconnu';
     const getContactAddress = (id: number) => contacts.find(c => c.id === id)?.address || 'Adresse non renseignée';
     const getContactAgent = (id: number) => contacts.find(c => c.id === id)?.assignedAgent || 'Non assigné';
-    const getVillaTitle = (id: string) => villas?.find(v => v.id === id)?.title || 'Modèle personnalisé';
-
+    const getVillaTitle = (id?: string) => {
+        if (!id) return 'Modèle personnalisé';
+        return villas?.find(v => v.id === id)?.title || 'Modèle personnalisé';
+    };
     const filteredProjects = constructionProjects.filter(project => {
         const contactName = getContactName(project.contactId).toLowerCase();
         const villaTitle = getVillaTitle(project.villaModelId).toLowerCase();
@@ -119,7 +123,14 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ isCreateModalOpen
                                     <HardHat size={18} />
                                     {getVillaTitle(project.villaModelId)}
                                 </h3>
-                                <div className="client-name">Client : {getContactName(project.contactId)}</div>
+                                <div 
+                                    className="client-name-clickable" 
+                                    onClick={() => navigate(`/prospects/${project.contactId}`)}
+                                    title="Voir la fiche client"
+                                >
+                                    Client : {getContactName(project.contactId)}
+                                    <ExternalLink size={12} className="ml-1 opacity-50" />
+                                </div>
                                 <div className="text-xs text-muted mt-1 flex items-center gap-1">
                                     <MapPin size={12} />
                                     {getContactAddress(project.contactId)}

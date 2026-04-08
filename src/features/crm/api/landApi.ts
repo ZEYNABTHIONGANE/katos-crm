@@ -1,137 +1,148 @@
-import { supabase } from '@/lib/supabaseClient';
+import { supabase } from '../../../lib/supabaseClient';
 import type { Land, LandFilters } from '../types/land';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-const MOCK_LANDS: Land[] = [
-    {
-        id: '1',
-        title: 'Terrain 500m² - Diamniadio',
-        description: 'Parcelle viabilisée en zone franche, idéale pour investissement.',
-        price: 15000000,
-        surface: 500,
-        location: 'Diamniadio, Dakar',
-        status: 'disponible',
-        reference: 'REF-TR-001',
-        legal_nature: 'Titre Foncier',
-        owner_name: 'Katos',
-        assignedAgent: 'Abdou Sarr',
-        created_at: new Date().toISOString()
-    }
-];
-
 export const landApi = {
-    async getLands(filters?: LandFilters) {
-        try {
-            let query = supabase
-                .from('properties')
-                .select('*')
-                .eq('type', 'terrain_katos');
-
-            if (filters?.status) query = query.eq('status', filters.status);
-            if (filters?.minPrice) query = query.gte('price', filters.minPrice);
-            if (filters?.maxPrice) query = query.lte('price', filters.maxPrice);
-
-            const { data, error } = await query.order('created_at', { ascending: false });
-
-            if (error || !data || data.length === 0) {
-                return MOCK_LANDS;
-            }
-
-            return (data as any) as Land[];
-        } catch (err) {
-            return MOCK_LANDS;
-        }
-    },
-
-    async getLandById(id: string) {
-        const { data, error } = await supabase
-            .from('properties')
+    async getLands(filters?: LandFilters): Promise<Land[]> {
+        let query = supabase
+            .from('lands')
             .select(`
                 *,
-                lots(*),
-                documents(*)
+                lots(*)
+            `);
+
+        if (filters?.status) query = query.eq('status', filters.status);
+        if (filters?.minPrice) query = query.gte('price', filters.minPrice);
+        if (filters?.maxPrice) query = query.lte('price', filters.maxPrice);
+
+        const { data, error } = await query.order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching lands:', error);
+            throw error;
+        }
+
+        return (data || []).map(d => ({
+            ...d,
+            assignedAgent: d.assigned_agent
+        })) as Land[];
+    },
+
+    async getLandById(id: string): Promise<Land> {
+        const { data, error } = await supabase
+            .from('lands')
+            .select(`
+                *,
+                lots(*)
             `)
             .eq('id', id)
             .single();
 
         if (error) {
-            const mock = MOCK_LANDS.find(p => p.id === id);
-            if (mock) return mock;
+            console.error('Error fetching land by id:', error);
             throw error;
         }
-        return data as Land;
+        
+        const d = data;
+        return {
+            ...d,
+            assignedAgent: d.assigned_agent
+        } as Land;
     },
 
-    async createLand(land: Partial<Land>) {
-        const { lots, documents, ...landData } = land;
+    async createLand(land: Partial<Land>): Promise<Land> {
+        const { lots, documents, assignedAgent, ...landData } = land;
 
         const { data, error } = await supabase
-            .from('properties')
-            .insert([{ ...landData, type: 'terrain_katos', category: 'terrain' }])
+            .from('lands')
+            .insert([landData])
             .select()
             .single();
 
-        if (error) throw error;
-        const newLand = data as Land;
+        if (error) {
+            console.error('Error creating land:', error);
+            throw error;
+        }
+        const newLand = {
+            ...data,
+            assignedAgent: data.assigned_agent
+        } as Land;
 
         // Insert related lots if any
         if (lots && lots.length > 0) {
-            await supabase.from('lots').insert(
-                lots.map(lot => ({ ...lot, property_id: newLand.id }))
+            const { error: lotError } = await supabase.from('lots').insert(
+                lots.map(lot => ({ ...lot, land_id: newLand.id }))
             );
-        }
-
-        // Insert related documents if any
-        if (documents && documents.length > 0) {
-            await supabase.from('documents').insert(
-                documents.map(doc => ({ ...doc, property_id: newLand.id }))
-            );
+            if (lotError) console.error('Error creating lots:', lotError);
         }
 
         return newLand;
     },
 
-    async updateLand(id: string, updates: Partial<Land>) {
-        const { lots, documents, ...landUpdates } = updates;
+    async updateLand(id: string, updates: Partial<Land>): Promise<Land> {
+        const { lots, documents, assignedAgent, ...landUpdates } = updates;
 
         const { data, error } = await supabase
-            .from('properties')
+            .from('lands')
             .update(landUpdates)
             .eq('id', id)
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            console.error('Error updating land:', error);
+            throw error;
+        }
 
-        // Sync lots (simple replace strategy for now)
+        // Notification: Vente de terrain (si le statut passe à 'vendu')
+        if (landUpdates.status === 'vendu') {
+            await supabase.from('notifications').insert([{
+                type: 'client',
+                title: 'Terrain Vendu !',
+                message: `Le terrain "${data.title}" est désormais vendu.`,
+                service: 'foncier'
+            }]);
+        }
+
+        // Sync lots (simple replace strategy)
         if (lots) {
-            await supabase.from('lots').delete().eq('property_id', id);
+            await supabase.from('lots').delete().eq('land_id', id);
             if (lots.length > 0) {
-                await supabase.from('lots').insert(
-                    lots.map(lot => ({ ...lot, property_id: id }))
+                const { error: lotError } = await supabase.from('lots').insert(
+                    lots.map(lot => {
+                        const { id: _, ...lotData } = lot as any;
+                        return { ...lotData, land_id: id };
+                    })
                 );
+                if (lotError) console.error('Error updating lots:', lotError);
             }
         }
 
-        // Sync documents
-        if (documents) {
-            await supabase.from('documents').delete().eq('property_id', id);
-            if (documents.length > 0) {
-                await supabase.from('documents').insert(
-                    documents.map(doc => ({ ...doc, property_id: id }))
-                );
-            }
-        }
+        const d = data;
+        return {
+            ...d,
+            assignedAgent: d.assigned_agent
+        } as Land;
+    },
 
-        return data as Land;
+    async deleteLand(id: string): Promise<void> {
+        const { error } = await supabase
+            .from('lands')
+            .delete()
+            .eq('id', id);
+        
+        if (error) {
+            console.error('Error deleting land:', error);
+            throw error;
+        }
     }
-
 };
 
-export const useLands = (filters?: LandFilters) => {
+export const useLands = (filters?: LandFilters, options?: { enabled?: boolean }) => {
     return useQuery({
         queryKey: ['lands', filters],
-        queryFn: () => landApi.getLands(filters)
+        queryFn: () => landApi.getLands(filters),
+        ...options
     });
 };
 
@@ -161,6 +172,16 @@ export const useUpdateLand = () => {
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ['lands'] });
             queryClient.invalidateQueries({ queryKey: ['land', data.id] });
+        }
+    });
+};
+
+export const useDeleteLand = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (id: string) => landApi.deleteLand(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['lands'] });
         }
     });
 };

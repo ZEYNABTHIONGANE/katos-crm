@@ -1,0 +1,5 @@
+
+> katos-crm@0.0.0 build
+> tsc -b && vite build
+
+src/features/crm/components/Historique.tsx(205,34): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type 'Record<InteractionType, { icon: ReactElement<unknown, string | JSXElementConstructor<any>>; label: string; color: string; bg: string; }>'.

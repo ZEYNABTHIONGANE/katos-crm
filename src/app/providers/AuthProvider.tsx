@@ -1,59 +1,113 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import type { User } from '@supabase/supabase-js';
 
-export type UserRole = 'admin' | 'manager' | 'commercial';
+export type UserRole = 'admin' | 'dir_commercial' | 'superviseur' | 'resp_commercial' | 'manager' | 'commercial' | 'assistante';
+
+export type UserService = 'foncier' | 'construction' | 'gestion';
 
 export type AuthUser = {
     id: string;
     name: string;
     email: string;
     role: UserRole;
-    avatar: string; // initiales
+    service: UserService | null;
+    avatar: string;
+    parent_id: string | null;
 };
 
 type AuthContextType = {
     user: AuthUser | null;
-    login: (email: string, password: string) => boolean;
-    logout: () => void;
+    login: (email: string, password: string) => Promise<{ error: any }>;
+    logout: () => Promise<void>;
     isAuthenticated: boolean;
+    loading: boolean;
 };
 
-// Comptes fictifs
-const MOCK_USERS: (AuthUser & { password: string })[] = [
-    { id: 'u1', name: 'Admin Katos', email: 'admin@katos.sn', password: 'admin123', role: 'admin', avatar: 'AK' },
-    { id: 'u2', name: 'Omar Diallo', email: 'omar@katos.sn', password: 'omar123', role: 'manager', avatar: 'OD' },
-    { id: 'u3', name: 'Abdou Sarr', email: 'abdou@katos.sn', password: 'abdou123', role: 'commercial', avatar: 'AS' },
-];
-
-const STORAGE_KEY = 'katos_user';
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-    const [user, setUser] = useState<AuthUser | null>(() => {
-        try {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            return stored ? JSON.parse(stored) : null;
-        } catch { return null; }
-    });
+    const [user, setUser] = useState<AuthUser | null>(null);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (user) localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-        else localStorage.removeItem(STORAGE_KEY);
-    }, [user]);
+        // Obtenir la session initiale
+        const initAuth = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+                await fetchProfile(session.user);
+            }
+            setLoading(false);
+        };
 
-    const login = (email: string, password: string): boolean => {
-        const found = MOCK_USERS.find(u => u.email === email && u.password === password);
-        if (!found) return false;
-        const { password: _, ...authUser } = found;
-        setUser(authUser);
-        return true;
+        initAuth();
+
+        // Écouter les changements d'état
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            if (session?.user) {
+                await fetchProfile(session.user);
+            } else {
+                setUser(null);
+            }
+            setLoading(false);
+        });
+
+        return () => {
+            subscription.unsubscribe();
+        };
+    }, []);
+
+    const fetchProfile = async (supabaseUser: User) => {
+        try {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', supabaseUser.id)
+                .single();
+
+            if (error) throw error;
+
+            setUser({
+                id: supabaseUser.id,
+                email: supabaseUser.email!,
+                name: data.name || supabaseUser.email!.split('@')[0],
+                role: data.role as UserRole,
+                service: data.service as UserService | null,
+                avatar: data.avatar_url || data.name?.charAt(0) || 'U',
+                parent_id: data.parent_id || null,
+            });
+        } catch (error) {
+            console.error('Error fetching profile:', error);
+            // Fallback user if profile doesn't exist yet
+            setUser({
+                id: supabaseUser.id,
+                email: supabaseUser.email!,
+                name: supabaseUser.email!.split('@')[0],
+                role: 'commercial', // Default role
+                service: null,
+                avatar: 'U',
+                parent_id: null,
+            });
+        }
     };
 
-    const logout = () => setUser(null);
+    const login = async (email: string, password: string) => {
+        const { error } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+        });
+        return { error };
+    };
+
+    const logout = async () => {
+        await supabase.auth.signOut();
+        setUser(null);
+    };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
-            {children}
+        <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user, loading }}>
+            {!loading && children}
         </AuthContext.Provider>
     );
 };

@@ -1,98 +1,105 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ImmobilierBien } from '../types/land';
-
-const MOCK_BIENS: ImmobilierBien[] = [
-    {
-        id: 'immo1',
-        title: 'Appartement 3 pièces - Plateau',
-        description: 'Bel appartement rénové au cœur du Plateau, vue sur mer.',
-        bien_type: 'location',
-        surface: 90,
-        price: 350000,
-        status: 'disponible',
-        location: 'Dakar Plateau',
-        assignedAgent: 'Omar Diallo',
-        created_at: new Date().toISOString(),
-    },
-    {
-        id: 'immo2',
-        title: 'Villa 5 chambres - Almadies',
-        description: 'Grande villa avec piscine, idéale pour famille ou entreprise.',
-        bien_type: 'achat',
-        surface: 400,
-        price: 150000000,
-        status: 'disponible',
-        location: 'Almadies, Dakar',
-        assignedAgent: 'Abdou Sarr',
-        created_at: new Date().toISOString(),
-    },
-    {
-        id: 'immo3',
-        title: 'Bureau 120m² - Point E',
-        description: 'Espace bureau lumineux au rez-de-chaussée avec parking.',
-        bien_type: 'location',
-        surface: 120,
-        price: 600000,
-        status: 'disponible',
-        location: 'Point E, Dakar',
-        assignedAgent: 'Omar Diallo',
-        created_at: new Date().toISOString(),
-    },
-    {
-        id: 'immo4',
-        title: 'Appartement 2 pièces - Mermoz',
-        description: 'Studio moderne meublé dans résidence sécurisée.',
-        bien_type: 'location',
-        surface: 55,
-        price: 200000,
-        status: 'disponible',
-        location: 'Mermoz, Dakar',
-        assignedAgent: 'Katos Admin',
-        created_at: new Date().toISOString(),
-    },
-    {
-        id: 'immo5',
-        title: 'Villa duplex - Ngor',
-        description: 'Duplex de luxe avec terrasse et accès plage.',
-        bien_type: 'achat',
-        surface: 320,
-        price: 95000000,
-        status: 'disponible',
-        location: 'Ngor, Dakar',
-        assignedAgent: 'Omar Diallo',
-        created_at: new Date().toISOString(),
-    },
-];
+import { supabase } from '../../../lib/supabaseClient';
 
 export const immobilierApi = {
     async getBiens(): Promise<ImmobilierBien[]> {
-        return MOCK_BIENS;
+        const { data, error } = await supabase
+            .from('immobilier_biens')
+            .select('*')
+            .order('created_at', { ascending: false });
+        
+        if (error) {
+            console.error('Error fetching immobilier biens:', error);
+            throw error;
+        }
+        return (data || []).map(d => ({
+            ...d,
+            assignedAgent: d.assigned_agent
+        })) as ImmobilierBien[];
     },
+
     async createBien(bien: Partial<ImmobilierBien>): Promise<ImmobilierBien> {
-        const newBien = {
-            ...bien,
-            id: 'immo' + Date.now(),
-            created_at: new Date().toISOString(),
+        const { assignedAgent, ...bienData } = bien;
+
+        const { data, error } = await supabase
+            .from('immobilier_biens')
+            .insert([{
+                ...bienData,
+                assigned_agent: assignedAgent,
+                owner_name: bien.owner_name
+            }])
+            .select()
+            .single();
+        
+        if (error) {
+            console.error('Error creating immobilier bien:', error);
+            throw error;
+        }
+        
+        const d = data;
+        return {
+            ...d,
+            assignedAgent: d.assigned_agent
         } as ImmobilierBien;
-        MOCK_BIENS.push(newBien);
-        return newBien;
     },
+
     async updateBien(id: string, updates: Partial<ImmobilierBien>): Promise<ImmobilierBien> {
-        const index = MOCK_BIENS.findIndex(b => b.id === id);
-        if (index === -1) throw new Error('Bien not found');
-        MOCK_BIENS[index] = { ...MOCK_BIENS[index], ...updates };
-        return MOCK_BIENS[index];
+        const { assignedAgent, ...bienUpdates } = updates;
+        
+
+        const { data, error } = await supabase
+            .from('immobilier_biens')
+            .update({
+                ...bienUpdates,
+                assigned_agent: assignedAgent,
+                owner_name: updates.owner_name
+            })
+            .eq('id', id)
+            .select()
+            .single();
+        
+        if (error) {
+            console.error('Error updating immobilier bien:', error);
+            throw error;
+        }
+
+        // Notification: Bien Loué ou Vendu
+        if (bienUpdates.status === 'loue' || bienUpdates.status === 'vendu') {
+            const isRental = bienUpdates.status === 'loue';
+            await supabase.from('notifications').insert([{
+                type: isRental ? 'info' : 'client',
+                title: isRental ? 'Bien Loué' : 'Bien Vendu',
+                message: `Le bien "${data.title}" est désormais ${isRental ? 'loué' : 'vendu'}.`,
+                service: 'gestion_immobiliere'
+            }]);
+        }
+        
+        const d = data;
+        return {
+            ...d,
+            assignedAgent: d.assigned_agent
+        } as ImmobilierBien;
     },
+
     async deleteBien(id: string): Promise<void> {
-        const index = MOCK_BIENS.findIndex(b => b.id === id);
-        if (index !== -1) MOCK_BIENS.splice(index, 1);
+        const { error } = await supabase
+            .from('immobilier_biens')
+            .delete()
+            .eq('id', id);
+        
+        if (error) {
+            console.error('Error deleting immobilier bien:', error);
+            throw error;
+        }
     }
 };
 
-export const useImmobilierBiens = () => {
+export const useImmobilierBiens = (options?: { enabled?: boolean }) => {
     return useQuery({
         queryKey: ['immobilier-biens'],
         queryFn: () => immobilierApi.getBiens(),
+        ...options
     });
 };
 

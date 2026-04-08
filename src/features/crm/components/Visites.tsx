@@ -1,8 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, MapPin, Clock, CheckCircle2, Calendar, AlertCircle, Search, User } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import { useContactStore } from '@/stores/contactStore';
 import { useToast } from '@/app/providers/ToastProvider';
+import { useAuth } from '@/app/providers/AuthProvider';
+import { fetchAvailableSlots, bookFieldSlot } from '../api/fieldApi';
+import type { FieldSlot } from '../api/fieldApi';
 
 const typeConfig: Record<string, { label: string; color: string; bg: string }> = {
     terrain: { label: 'Terrain', color: '#E96C2E', bg: 'rgba(233,108,46,0.1)' },
@@ -10,13 +13,14 @@ const typeConfig: Record<string, { label: string; color: string; bg: string }> =
     bureau: { label: 'Bureau / RDV', color: '#10B981', bg: '#f0fdf4' },
 };
 
-const AGENTS = ['Abdou Sarr', 'Omar Diallo', 'Katos Admin'];
-const TECHNICIANS = ['Samba Tall', 'Moussa Sène', 'Katos Tech'];
+// const AGENTS = ['Abdou Sarr', 'Omar Diallo', 'Katos Admin'];
+// const TECHNICIANS = ['Samba Tall', 'Moussa Sène', 'Katos Tech'];
 
 const emptyForm = { title: '', contactId: 0, date: '', heure: '09:00', lieu: '', type: 'terrain' as 'terrain' | 'chantier' | 'bureau', agent: '', technician: '', notes: '' };
 
 const Visites = () => {
     const { contacts, visits, addVisit, moveVisitStatut } = useContactStore();
+    const { user } = useAuth();
     const { showToast } = useToast();
     const [filter, setFilter] = useState('all');
     const [showModal, setShowModal] = useState(false);
@@ -24,10 +28,51 @@ const Visites = () => {
     const [contactSearch, setContactSearch] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [dateFilter, setDateFilter] = useState('');
+    const [availableSlots, setAvailableSlots] = useState<FieldSlot[]>([]);
+    const [selectedSlotId, setSelectedSlotId] = useState<string>('');
+
+    useEffect(() => {
+        if (user?.role === 'commercial') {
+            setForm(f => ({ ...f, agent: user.name }));
+        }
+    }, [user]);
+
+    // Charger les créneaux disponibles quand Date ou Type change
+    useEffect(() => {
+        const loadSlots = async () => {
+            if (!form.date) {
+                setAvailableSlots([]);
+                return;
+            }
+            const data = await fetchAvailableSlots(form.date, form.type !== 'bureau' ? form.type : undefined);
+            setAvailableSlots(data);
+            setSelectedSlotId('');
+        };
+        loadSlots();
+    }, [form.date, form.type]);
 
     const filtered = visits.filter(v => {
-        const matchesStatut = filter === 'all' || v.statut === filter;
         const contact = contacts.find(c => c.id === v.contactId);
+
+        // Filtrage par Rôle et Service (NOUVELLES RÈGLES)
+        if (user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') {
+            // Accès total
+        } else {
+            const userSvc = user?.service === 'gestion' ? 'gestion_immobiliere' : user?.service;
+
+            if (user?.role === 'manager') {
+                // Un manager ne voit que les visites des prospects de son service
+                if (contact?.service !== userSvc) return false;
+            } else if (user?.role === 'commercial') {
+                // Un commercial voit TOUTES les visites qui lui sont assignées (tous services confondus)
+                if (v.agent !== user.name) return false;
+            } else if (user?.role === 'assistante') {
+                const isCreator = contact?.createdBy ? contact.createdBy === user.name : !contact?.assignedAgent;
+                if (!isCreator) return false;
+            }
+        }
+
+        const matchesStatut = filter === 'all' || v.statut === filter;
         const matchesSearch = v.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (contact?.name.toLowerCase().includes(searchTerm.toLowerCase()));
         const matchesDate = !dateFilter || v.date === dateFilter;
@@ -38,22 +83,39 @@ const Visites = () => {
 
     const filteredContacts = useMemo(() => {
         if (!contactSearch.trim()) return [];
-        return contacts.filter(c =>
+        return contacts.filter((c: any) =>
             c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
             c.company.toLowerCase().includes(contactSearch.toLowerCase())
         ).slice(0, 5);
     }, [contacts, contactSearch]);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!form.title.trim() || !form.contactId) {
             showToast('Veuillez remplir le titre et sélectionner un contact', 'error');
             return;
         }
-        addVisit({ ...form, statut: 'upcoming' });
-        showToast('Nouvelle visite planifiée avec succès');
+
+        // VERROUILLAGE STRICT : Créneau obligatoire pour Terrain/Chantier
+        if (form.type !== 'bureau' && !selectedSlotId) {
+            showToast('Veuillez sélectionner un créneau de disponibilité pour cet agent de terrain', 'error');
+            return;
+        }
+
+        const newVisit = { ...form, statut: 'upcoming' as const };
+        const savedVisit = await addVisit(newVisit);
+        
+        if (savedVisit && selectedSlotId) {
+            // Marquer le créneau comme réservé
+            await bookFieldSlot(selectedSlotId, form.contactId);
+            showToast('Nouvelle visite planifiée et créneau réservé');
+        } else {
+            showToast('Nouvelle visite planifiée avec succès');
+        }
+
         setShowModal(false);
         setForm(emptyForm);
         setContactSearch('');
+        setSelectedSlotId('');
     };
 
     const getStatutBadge = (statut: string) => {
@@ -259,20 +321,67 @@ const Visites = () => {
                             <option value="bureau">RDV Bureau</option>
                         </select>
                     </div>
-                    <div className="form-group">
-                        <label className="form-label">Agent responsable</label>
-                        <select className="form-select" value={form.agent} onChange={e => setForm({ ...form, agent: e.target.value })}>
-                            <option value="">— Sélectionner un agent —</option>
-                            {AGENTS.map(a => <option key={a} value={a}>{a}</option>)}
-                        </select>
+                    <div className="form-group col-2">
+                        <label className="form-label" style={{ color: 'var(--primary)', fontWeight: 800 }}>Créneau disponible requis *</label>
+                        {availableSlots.length > 0 ? (
+                            <div className="slots-picker-grid">
+                                {availableSlots.map(s => (
+                                    <div 
+                                        key={s.id} 
+                                        className={`slot-picker-item ${selectedSlotId === s.id ? 'selected' : ''}`}
+                                        onClick={() => {
+                                            setSelectedSlotId(s.id);
+                                            setForm({ ...form, agent: s.agentName, heure: s.startTime.substring(0, 5) });
+                                        }}
+                                    >
+                                        <div className="slot-agent-name">{s.agentName}</div>
+                                        <div className="slot-time-badge">{s.startTime.substring(0, 5)} - {s.endTime.substring(0, 5)}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="p-10 bg-gray-50 rounded text-xs text-muted">
+                                {form.date ? "Aucun agent n'est disponible à cette date." : "Sélectionnez d'abord une date."}
+                            </div>
+                        )}
                     </div>
-                    <div className="form-group">
-                        <label className="form-label">Technicien (optionnel)</label>
-                        <select className="form-select" value={form.technician} onChange={e => setForm({ ...form, technician: e.target.value })}>
-                            <option value="">— Aucun technicien —</option>
-                            {TECHNICIANS.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                    </div>
+
+                    <style>{`
+                        .slots-picker-grid {
+                            display: grid;
+                            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+                            gap: 10px;
+                            max-height: 150px;
+                            overflow-y: auto;
+                            padding: 10px;
+                            background: #f8fafc;
+                            border-radius: 8px;
+                            border: 1px solid var(--border-color);
+                        }
+                        .slot-picker-item {
+                            padding: 10px;
+                            background: white;
+                            border: 1px solid var(--border-color);
+                            border-radius: 6px;
+                            cursor: pointer;
+                            transition: all 0.2s;
+                            text-align: center;
+                        }
+                        .slot-picker-item.selected {
+                            border-color: var(--primary);
+                            background: #f0f7ff;
+                            box-shadow: 0 0 0 2px rgba(43,46,131,0.1);
+                        }
+                        .slot-agent-name {
+                            font-weight: 700;
+                            font-size: 0.8rem;
+                            margin-bottom: 4px;
+                        }
+                        .slot-time-badge {
+                            font-size: 0.7rem;
+                            color: var(--text-muted);
+                        }
+                    `}</style>
                     <div className="form-group col-2">
                         <label className="form-label">Lieu</label>
                         <input className="form-input" value={form.lieu} onChange={e => setForm({ ...form, lieu: e.target.value })} placeholder="Adresse complète" />

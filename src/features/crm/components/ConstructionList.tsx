@@ -1,35 +1,104 @@
 import React, { useState } from 'react';
 import { Plus, Search, Filter } from 'lucide-react';
-import { useVillas } from '../api/villaApi';
+import { useVillas, useCreateVilla, useUpdateVilla, useDeleteVilla } from '../api/villaApi';
 import ProjectManagement from '@/features/crm/components/ProjectManagement';
+import VillaCard from './VillaCard';
+import VillaForm from './VillaForm';
+import type { Villa } from '../types/land';
+import { useToast } from '@/app/providers/ToastProvider';
+import { useAuth } from '@/app/providers/AuthProvider';
 
 const ConstructionList: React.FC = () => {
     const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
+    const [isVillaFormOpen, setIsVillaFormOpen] = useState(false);
+    const [editingVilla, setEditingVilla] = useState<Villa | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState<'catalog' | 'projects'>('catalog');
+    const { showToast } = useToast();
+    const { user } = useAuth();
 
     const { data: villas, isLoading } = useVillas();
+    console.log('[ConstructionList] Current user:', user?.id, 'Role:', user?.role);
+    const createVilla = useCreateVilla();
+    const updateVilla = useUpdateVilla();
+    const deleteVilla = useDeleteVilla();
 
-    const filteredVillas = villas?.filter(v =>
-        v.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        v.type.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredVillas = villas?.filter(v => {
+        // Restriction par service pour les commerciaux uniquement
+        // Les managers et admins devraient pouvoir voir tout le catalogue de construction
+        // Restriction par service pour les commerciaux et managers (Superviseurs et Admins voient tout)
+        if (user?.role === 'commercial' || user?.role === 'manager') {
+            const userSvc = user?.service === 'gestion' ? 'gestion_immobiliere' : user?.service;
+            if (userSvc !== 'construction') return false;
+        }
+
+        return v.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+               v.type.toLowerCase().includes(searchTerm.toLowerCase());
+    });
+
+    const handleAddVilla = () => {
+        setEditingVilla(null);
+        setIsVillaFormOpen(true);
+    };
+
+    const handleEditVilla = (villa: Villa) => {
+        setEditingVilla(villa);
+        setIsVillaFormOpen(true);
+    };
+
+    const handleDeleteVilla = async (id: string) => {
+        if (window.confirm('Voulez-vous vraiment supprimer ce modèle ?')) {
+            try {
+                await deleteVilla.mutateAsync(id);
+                showToast('Modèle supprimé du catalogue');
+                setIsVillaFormOpen(false); // Close form if open
+            } catch (error) {
+                console.error('Erreur lors de la suppression:', error);
+                showToast('Erreur lors de la suppression : ' + (error instanceof Error ? error.message : 'Permission refusée'), 'error');
+            }
+        }
+    };
+
+    const handleSaveVilla = async (data: Partial<Villa>) => {
+        try {
+            if (editingVilla) {
+                await updateVilla.mutateAsync({ id: editingVilla.id, updates: data });
+                showToast('Modèle mis à jour');
+            } else {
+                await createVilla.mutateAsync(data);
+                showToast('Nouveau modèle ajouté au catalogue');
+            }
+            setIsVillaFormOpen(false);
+        } catch (error) {
+            console.error('Erreur lors de l\'enregistrement de la villa:', error);
+            showToast('Erreur lors de l\'enregistrement : ' + (error instanceof Error ? error.message : 'Une erreur inconnue est survenue'), 'error');
+        }
+    };
 
     return (
         <div className="real-estate-page">
             <div className="page-header">
                 <div>
                     <h1 style={{ fontWeight: 800 }}>Construction</h1>
-                    <p className="subtitle">Catalogue des modèles de villas et projets</p>
+                    <p className="subtitle">Catalogue des modèles de construction &amp; suivi de chantier</p>
                 </div>
                 <div className="header-actions">
-                    {activeTab === 'projects' && (
-                        <button
-                            className="btn-primary flex items-center gap-2"
-                            onClick={() => setIsProjectFormOpen(true)}
-                        >
-                            <Plus size={18} /> Nouveau Projet
-                        </button>
+                    {user?.role !== 'commercial' && (
+                        activeTab === 'projects' ? (
+                            <button
+                                className="btn-primary flex items-center gap-2"
+                                onClick={() => setIsProjectFormOpen(true)}
+                            >
+                                <Plus size={18} /> Nouveau Projet
+                            </button>
+                        ) : (
+                            <button
+                                className="btn-primary flex items-center gap-2"
+                                onClick={handleAddVilla}
+                            >
+                                <Plus size={18} /> Nouveau Modèle
+                            </button>
+                        )
                     )}
                 </div>
             </div>
@@ -40,7 +109,7 @@ const ConstructionList: React.FC = () => {
                         className={`tab-segment ${activeTab === 'catalog' ? 'active' : ''}`}
                         onClick={() => setActiveTab('catalog')}
                     >
-                        Catalogue Villas
+                        Modèles de Construction
                     </button>
                     <button
                         className={`tab-segment ${activeTab === 'projects' ? 'active' : ''}`}
@@ -71,40 +140,29 @@ const ConstructionList: React.FC = () => {
                     {isLoading ? (
                         <div className="p-12 text-center">Chargement...</div>
                     ) : (
-                        <div className="contacts-table-container card-premium mt-8">
-                            <table className="contacts-table">
-                                <thead>
-                                    <tr>
-                                        <th>Modèle / Type</th>
-                                        <th>Prix Estimé</th>
-                                        <th style={{ textAlign: 'right' }}>Détails</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredVillas?.length ? filteredVillas.map((villa) => (
-                                        <tr key={villa.id} className="contact-row">
-                                            <td>
-                                                <div className="font-medium text-main">{villa.title}</div>
-                                                <div className="text-sm text-muted">{villa.type}</div>
-                                            </td>
-                                            <td>
-                                                <div className="property-price-tag" style={{ border: 'none', background: 'none', padding: 0 }}>
-                                                    {new Intl.NumberFormat('fr-FR').format(villa.price)} <small>FCFA</small>
-                                                </div>
-                                            </td>
-                                            <td style={{ textAlign: 'right' }}>
-                                                <button className="btn-icon">
-                                                    <Search size={16} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    )) : (
-                                        <tr><td colSpan={3} className="empty-state">Aucun modèle trouvé.</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
+                        <div className="property-list animate-fade-in">
+                            {filteredVillas?.length ? filteredVillas.map((villa) => (
+                                <VillaCard
+                                    key={villa.id}
+                                    villa={villa}
+                                    onEdit={handleEditVilla}
+                                    onDelete={handleDeleteVilla}
+                                />
+                            )) : (
+                                <div className="col-span-full p-12 text-center text-muted">
+                                    Aucun modèle trouvé dans le catalogue.
+                                </div>
+                            )}
                         </div>
                     )}
+
+                    <VillaForm
+                        isOpen={isVillaFormOpen}
+                        onClose={() => setIsVillaFormOpen(false)}
+                        onSave={handleSaveVilla}
+                        onDelete={user?.role !== 'commercial' ? handleDeleteVilla : undefined}
+                        initialData={editingVilla}
+                    />
                 </>
             ) : (
                 <ProjectManagement

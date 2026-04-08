@@ -7,6 +7,7 @@ import { useContactStore } from '@/stores/contactStore';
 import type { DocumentType, CrmDocument } from '../types/documents';
 import Modal from '@/components/ui/Modal';
 import { useToast } from '@/app/providers/ToastProvider';
+import { useAuth } from '@/app/providers/AuthProvider';
 
 interface DocumentManagerProps {
     contactId: number;
@@ -33,6 +34,7 @@ const TYPE_COLORS: Record<DocumentType, string> = {
 
 const DocumentManager: React.FC<DocumentManagerProps> = ({ contactId, projectId }) => {
     const { documents, addDocument, deleteDocument, updateDocumentVersion } = useContactStore();
+    const { user } = useAuth();
     const { showToast } = useToast();
     
     const [showUploadModal, setShowUploadModal] = useState(false);
@@ -45,6 +47,10 @@ const DocumentManager: React.FC<DocumentManagerProps> = ({ contactId, projectId 
         url: 'https://example.com/demo.pdf', // Mock URL
         size: '0.5 MB'
     });
+
+    if (user?.role !== 'admin' && user?.role !== 'dir_commercial' && user?.role !== 'superviseur') {
+        return null;
+    }
 
     const filteredDocs = documents.filter(doc => {
         if (projectId) return doc.projectId === projectId;

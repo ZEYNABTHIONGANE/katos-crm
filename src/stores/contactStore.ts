@@ -1,31 +1,28 @@
 import { create } from 'zustand';
 import type { ServiceType } from '../features/crm/components/ServiceSelector';
+import type { CrmDocument } from '../features/crm/types/documents';
+import type { ConstructionProject } from '../features/crm/types/land';
+import * as api from '../features/crm/api/contactApi';
+import * as projectApi from '../features/crm/api/projectApi';
 
 // ─── Status → Column map ─────────────────────────────────────────────
 export const STATUS_TO_COLUMN: Record<string, string> = {
-    'Prospect': 'nouveau',
+    'Prospect': 'prospect',
+    'Qualification': 'qualification',
     'En Qualification': 'qualification',
-    'RDV / Visite Terrain': 'rdv',
-    'Client': 'client',
-    'Projet Livré': 'livre',
+    'RDV': 'rdv',
+    'Proposition Commerciale': 'proposition',
+    'Négociation': 'negociation',
+    'Réservation': 'reservation',
+    'Contrat': 'contrat',
+    'Paiement': 'paiement',
+    'Transfert de dossier technique': 'transfert_technique',
+    'Suivi Chantier': 'suivi_chantier',
+    'Livraison Client': 'livraison',
+    'Fidélisation': 'fidelisation',
 };
 
 // ─── Shared Types ────────────────────────────────────────────────────────
-export interface CrmDocument {
-    id: string;
-    name: string;
-    type: 'contrat' | 'plan' | 'devis' | 'facture' | 'reservation' | 'autre';
-    url: string;
-    version: number;
-    versions: { version: number; url: string; createdAt: string; notes?: string }[];
-    contactId: number;
-    projectId?: string;
-    createdAt: string;
-    updatedAt: string;
-    size: string;
-    fileType: string;
-}
-
 export interface CrmContact {
     id: number;
     name: string;
@@ -43,6 +40,11 @@ export interface CrmContact {
     budget: string;
     notes: string;
     assignedAgent: string;
+    createdBy?: string;
+    createdAt?: string; // ISO date string
+    budgetConfirmed?: boolean;
+    isReactive?: boolean;
+    convertedAt?: string; // Date of conversion to client
 }
 
 export interface FollowUp {
@@ -69,7 +71,6 @@ export interface Interaction {
     agent: string;
     lieu?: string; // For RDV and visits
     issue?: string; // Follow-up action description
-    executionStatus: 'fait' | 'a_faire';
     technician?: string;
 }
 
@@ -81,106 +82,12 @@ export interface Visit {
     heure: string;
     lieu: string;
     type: 'terrain' | 'chantier' | 'bureau';
-    statut: 'upcoming' | 'today' | 'completed';
+    statut: 'upcoming' | 'today' | 'completed' | 'cancelled';
     agent: string;
     technician?: string;
     notes: string;
 }
 
-export interface ConstructionProject {
-    id: string;
-    contactId: number;
-    villaModelId?: string;
-    progress: number;
-    photos: string[];
-    technicalIssues: string[];
-    teamPlanning: string;
-    deliveryDate: string;
-    technicianName: string;
-    status: 'en_cours' | 'termine' | 'en_pause';
-    created_at: string;
-    updated_at: string;
-}
-
-// ─── Initial data ─────────────────────────────────────────────────────
-const fmt = (d: Date) => d.toISOString().split('T')[0];
-const today = new Date();
-const addDays = (n: number) => { const d = new Date(today); d.setDate(d.getDate() + n); return fmt(d); };
-
-const initialInteractions: Interaction[] = [
-    { id: 'int1', contactId: 1, type: 'call', title: 'Appel de qualification', date: '2026-03-05', heure: '14:30', agent: 'Abdou Sarr', description: 'Discussion sur le budget et les préférences de zone.', executionStatus: 'fait' },
-    { id: 'int2', contactId: 1, type: 'email', title: 'Envoi catalogue', date: '2026-03-04', heure: '09:15', agent: 'Abdou Sarr', description: 'Brochure PDF des terrains disponibles envoyée par email.', executionStatus: 'fait' },
-    { id: 'int3', contactId: 2, type: 'visite_terrain', title: 'Visite terrain - Almadies Phase 2', date: '2026-03-06', heure: '15:30', agent: 'Abdou Sarr', description: "Visite de la parcelle Lot 22. Cliente très intéressée.", issue: 'Envoi proposition de prix prévue le 10 Mar.', executionStatus: 'fait' },
-];
-
-const initialDocuments: CrmDocument[] = [
-    {
-        id: 'doc1',
-        name: 'Contrat Construction Villa Prestige',
-        type: 'contrat',
-        url: '#',
-        version: 1,
-        versions: [{ version: 1, url: '#', createdAt: '2026-02-10' }],
-        contactId: 5,
-        projectId: 'cp1',
-        createdAt: '2026-02-10',
-        updatedAt: '2026-02-10',
-        size: '1.2 MB',
-        fileType: 'pdf'
-    },
-    {
-        id: 'doc2',
-        name: 'Plan Architecture - Vue de face',
-        type: 'plan',
-        url: '#',
-        version: 1,
-        versions: [{ version: 1, url: '#', createdAt: '2026-02-12' }],
-        contactId: 5,
-        projectId: 'cp1',
-        createdAt: '2026-02-12',
-        updatedAt: '2026-02-12',
-        size: '4.5 MB',
-        fileType: 'dwg'
-    }
-];
-
-const initialContacts: CrmContact[] = [
-    { id: 1, name: 'Moussa Diop', company: 'SCAC Sénégal', email: 'm.diop@scac.sn', phone: '+221 77 123 45 67', status: 'Client', address: '12 Avenue Léopold Sédar Senghor', country: 'Sénégal', source: 'Recommandation', service: 'foncier', propertyId: '1', propertyTitle: 'Terrain 500m² - Diamniadio', lastAction: 'Livraison phase 1', budget: '80M FCFA', notes: 'Client très intéressé par le projet Résidence Horizon.', assignedAgent: 'Abdou Sarr' },
-    { id: 2, name: 'Awa Ndiaye', company: 'Particulier', email: 'awa.nd@gmail.com', phone: '+221 76 987 65 43', status: 'Prospect', address: 'Quartier des Almadies', country: 'Sénégal', source: 'Facebook', service: 'construction', propertyId: 'v1', propertyTitle: 'Villa Prestige R+1', lastAction: 'Appel de qualification', budget: 'NC', notes: 'Cherche une villa R+1 aux Almadies.', assignedAgent: 'Omar Diallo' },
-    { id: 3, name: 'Cheikh Fall', company: 'BTP Construction', email: 'c.fall@btp.sn', phone: '+221 77 555 11 22', status: 'En Qualification', address: 'Zone Franche, Diamniadio', country: 'Sénégal', source: 'LinkedIn', service: 'foncier', lastAction: 'Envoi devis', budget: '25M FCFA', notes: 'Intéressé par des terrains à Diamniadio.', assignedAgent: 'Abdou Sarr' },
-    { id: 4, name: 'Fatou Sow', company: 'Particulier', email: 'fsow.pro@yahoo.fr', phone: '+221 78 444 99 88', status: 'Prospect', address: 'Quartier Mermoz', country: 'Sénégal', source: 'Instagram', service: 'gestion_immobiliere', propertyId: 'immo1', propertyTitle: 'Appartement 3 pièces - Plateau', lastAction: 'Visite terrain planifiée', budget: '15M FCFA', notes: 'Intéressée par la location.', assignedAgent: 'Omar Diallo' },
-    { id: 5, name: 'Entreprise ABC', company: 'Groupe ABC', email: 'contact@abc-sn.com', phone: '+221 33 800 00 00', status: 'Client', address: 'Immeuble ABC, Rue de Thiong', country: 'Sénégal', source: 'Site web', service: 'construction', propertyId: 'v3', propertyTitle: 'Villa Duplex Premium', lastAction: 'Signature contrat', budget: '120M FCFA', notes: 'Projet résidentiel de 20 logements en cours.', assignedAgent: 'Katos Admin' },
-    { id: 6, name: 'Ibou Thiam', company: 'Particulier', email: 'ibou.thiam@hotmail.com', phone: '+221 70 111 22 33', status: 'Projet Livré', address: 'Résidence Saly 2', country: 'Sénégal', source: 'Recommandation', lastAction: 'Remise des clés', budget: '45M FCFA', notes: 'Projet livré en Janvier 2026. Client satisfait.', assignedAgent: 'Omar Diallo' },
-];
-
-const initialFollowUps: FollowUp[] = [
-    { id: 'r1', contactId: 2, agent: 'Abdou Sarr', dateRelance: addDays(-3), note: "Rappeler pour confirmation de la visite Almadies.", statut: 'retard', priorite: 'haute' },
-    { id: 'r2', contactId: 3, agent: 'Omar Diallo', dateRelance: addDays(-1), note: "Relance devis envoyé le 1er mars.", statut: 'retard', priorite: 'haute' },
-    { id: 'r3', contactId: 4, agent: 'Abdou Sarr', dateRelance: fmt(today), note: 'Suite visite terrain Mermoz.', statut: 'today', priorite: 'haute' },
-];
-
-const initialVisites: Visit[] = [
-    { id: 1, title: 'Visite parcelle Almadies Phase 2', contactId: 2, date: addDays(1), heure: '10:00', lieu: 'Lot 22 - Almadies Phase 2, Dakar', type: 'terrain', statut: 'upcoming', agent: 'Abdou Sarr', notes: 'Cliente cherche un terrain de 300m² minimum.' },
-    { id: 2, title: 'Visite chantier Résidence Horizon', contactId: 1, date: fmt(today), heure: '09:00', lieu: 'Chantier Résidence Horizon, Plateau', type: 'chantier', statut: 'today', agent: 'Omar Diallo', technician: 'Samba Tall', notes: 'Vérification avancement Phase 1.' },
-    { id: 3, title: 'RDV bureau - Signature contrat', contactId: 5, date: addDays(-2), heure: '14:30', lieu: 'Siège Katos, Dakar', type: 'bureau', statut: 'completed', agent: 'Katos Admin', notes: 'Signature du compromis de vente.' },
-];
-
-const initialProjects: ConstructionProject[] = [
-    {
-        id: 'cp1',
-        contactId: 5,
-        villaModelId: 'v1',
-        progress: 35,
-        photos: ['https://images.unsplash.com/photo-1541888946425-d81bb19480c5?q=80&w=2070&auto=format&fit=crop'],
-        technicalIssues: ['Retard livraison briques', 'Problème étanchéité dalles'],
-        teamPlanning: 'Équipe Maçonnerie : Lun-Ven 8h-17h',
-        deliveryDate: '2026-08-15',
-        technicianName: 'Samba Tall',
-        status: 'en_cours',
-        created_at: addDays(-30),
-        updated_at: fmt(today)
-    }
-];
 
 // ─── Store ────────────────────────────────────────────────────────────
 interface ContactStore {
@@ -188,190 +95,298 @@ interface ContactStore {
     followUps: FollowUp[];
     visits: Visit[];
     interactions: Interaction[];
-    addContact: (c: Omit<CrmContact, 'id'>) => void;
-    updateContact: (id: number, updates: Partial<CrmContact>) => void;
-    deleteContact: (id: number) => void;
-    moveContactStatus: (id: number, newStatus: string) => void;
 
-    addFollowUp: (f: Omit<FollowUp, 'id'>) => void;
-    updateFollowUp: (id: string, updates: Partial<FollowUp>) => void;
-    deleteFollowUp: (id: string) => void;
+    fetchData: () => Promise<void>;
 
-    addVisit: (v: Omit<Visit, 'id'>) => void;
-    updateVisit: (id: number, updates: Partial<Visit>) => void;
-    deleteVisit: (id: number) => void;
-    moveVisitStatut: (id: number, newStatut: 'upcoming' | 'today' | 'completed') => void;
+    addContact: (contact: Omit<CrmContact, 'id'>) => Promise<CrmContact | string>;
+    addContactsBulk: (contacts: Omit<CrmContact, 'id'>[]) => Promise<CrmContact[]>;
+    addInteractionsBulk: (interactions: Omit<Interaction, 'id'>[]) => Promise<number>;
+    updateContact: (id: number, updates: Partial<CrmContact>) => Promise<boolean>;
+    deleteContact: (id: number) => Promise<void>;
+    moveContactStatus: (id: number, newStatus: string) => Promise<void>;
 
-    addInteraction: (i: Omit<Interaction, 'id'>, relance?: Omit<FollowUp, 'id' | 'contactId' | 'interactionId'>) => void;
-    updateInteraction: (id: string, updates: Partial<Interaction>) => void;
-    deleteInteraction: (id: string) => void;
+    addFollowUp: (f: Omit<FollowUp, 'id'>) => Promise<void>;
+    updateFollowUp: (id: string, updates: Partial<FollowUp>) => Promise<void>;
+    deleteFollowUp: (id: string) => Promise<void>;
+
+    addVisit: (v: Omit<Visit, 'id'>) => Promise<Visit | null>;
+    updateVisit: (id: number, updates: Partial<Visit>) => Promise<void>;
+    deleteVisit: (id: number) => Promise<void>;
+    moveVisitStatut: (id: number, newStatut: 'upcoming' | 'today' | 'completed') => Promise<void>;
+
+    addInteraction: (i: Omit<Interaction, 'id'>, relance?: Omit<FollowUp, 'id' | 'contactId' | 'interactionId'>) => Promise<void>;
+    updateInteraction: (id: string, updates: Partial<Interaction>) => Promise<void>;
+    deleteInteraction: (id: string) => Promise<void>;
 
     constructionProjects: ConstructionProject[];
-    addProject: (p: Omit<ConstructionProject, 'id'>) => void;
-    updateProject: (id: string, updates: Partial<ConstructionProject>) => void;
-    deleteProject: (id: string) => void;
+    addProject: (p: Omit<ConstructionProject, 'id'>) => Promise<void>;
+    updateProject: (id: string, updates: Partial<ConstructionProject>) => Promise<void>;
+    deleteProject: (id: string) => Promise<void>;
 
     documents: CrmDocument[];
-    addDocument: (d: Omit<CrmDocument, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'versions'>) => void;
-    updateDocumentVersion: (id: string, url: string, notes?: string) => void;
-    deleteDocument: (id: string) => void;
+    addDocument: (d: Omit<CrmDocument, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'versions'>) => Promise<void>;
+    updateDocumentVersion: (id: string, url: string, notes?: string) => Promise<void>;
+    deleteDocument: (id: string) => Promise<void>;
 }
 
-export const useContactStore = create<ContactStore>()((set) => ({
-    contacts: initialContacts,
-    followUps: initialFollowUps,
-    visits: initialVisites,
-    interactions: initialInteractions,
+export const useContactStore = create<ContactStore>()((set, get) => ({
+    contacts: [],
+    followUps: [],
+    visits: [],
+    interactions: [],
+    constructionProjects: [],
+    documents: [],
 
-    addContact: (c) =>
-        set((state) => ({
-            contacts: [
-                ...state.contacts,
-                { ...c, id: Math.max(...state.contacts.map(x => x.id), 0) + 1 },
-            ],
-        })),
+    fetchData: async () => {
+        const [contacts, interactions, visits, followUps, projects, docs] = await Promise.all([
+            api.fetchContacts(),
+            api.fetchInteractions(),
+            api.fetchVisits(),
+            api.fetchFollowUps(),
+            projectApi.fetchProjects(),
+            projectApi.fetchDocuments()
+        ]);
+        set({ contacts, interactions, visits, followUps, constructionProjects: projects, documents: docs });
+    },
 
-    updateContact: (id, updates) =>
-        set((state) => ({
-            contacts: state.contacts.map(c => c.id === id ? { ...c, ...updates } : c),
-        })),
-
-    deleteContact: (id) =>
-        set((state) => ({
-            contacts: state.contacts.filter(c => c.id !== id),
-        })),
-
-    moveContactStatus: (id, newStatus) =>
-        set((state) => ({
-            contacts: state.contacts.map(c => c.id === id ? { ...c, status: newStatus } : c),
-        })),
-
-    addFollowUp: (f) =>
-        set((state) => ({
-            followUps: [
-                ...state.followUps,
-                { ...f, id: 'r' + Date.now() },
-            ],
-        })),
-
-    updateFollowUp: (id, updates) =>
-        set((state) => ({
-            followUps: state.followUps.map(f => f.id === id ? { ...f, ...updates } : f),
-        })),
-
-    deleteFollowUp: (id) =>
-        set((state) => ({
-            followUps: state.followUps.filter(f => f.id !== id),
-        })),
-
-    addVisit: (v) =>
-        set((state) => ({
-            visits: [
-                ...state.visits,
-                { ...v, id: Math.max(...state.visits.map(x => x.id), 0) + 1 },
-            ],
-        })),
-
-    updateVisit: (id, updates) =>
-        set((state) => ({
-            visits: state.visits.map(v => v.id === id ? { ...v, ...updates } : v),
-        })),
-
-    deleteVisit: (id) =>
-        set((state) => ({
-            visits: state.visits.filter(v => v.id !== id),
-        })),
-
-    moveVisitStatut: (id, newStatut) =>
-        set((state) => ({
-            visits: state.visits.map(v => v.id === id ? { ...v, statut: newStatut } : v),
-        })),
-
-    addInteraction: (i, relance) =>
-        set((state) => {
-            const intId = 'int' + Date.now();
-            const newInteraction = { ...i, id: intId };
-            let newFollowUps = [...state.followUps];
-
-            if (relance) {
-                newFollowUps.push({
-                    ...relance,
-                    id: 'r' + Date.now(),
-                    contactId: i.contactId,
-                    interactionId: intId
-                });
+    addContact: async (c) => {
+        try {
+            const newContact = await api.createContact(c);
+            if (newContact) {
+                set((state) => ({ contacts: [newContact, ...state.contacts] }));
+                return newContact;
             }
+            return 'Insertion échouée (voir console pour détails)';
+        } catch (err: any) {
+            console.error('[addContact] Exception:', err);
+            return err?.message || 'Erreur inconnue';
+        }
+    },
 
-            return {
-                interactions: [newInteraction, ...state.interactions],
-                followUps: newFollowUps
-            };
-        }),
+    addContactsBulk: async (contacts) => {
+        try {
+            const newContacts = await api.bulkCreateContacts(contacts);
+            if (newContacts.length > 0) {
+                set((state) => ({ contacts: [...newContacts, ...state.contacts] }));
+            }
+            return newContacts;
+        } catch (err) {
+            console.error('[contactStore] Error adding contacts bulk:', err);
+            return [];
+        }
+    },
+    addInteractionsBulk: async (interactions) => {
+        try {
+            const newInteractions = await api.bulkCreateInteractions(interactions);
+            if (newInteractions.length > 0) {
+                const mappedInteractions = newInteractions.map(i => ({
+                    id: i.id,
+                    contactId: i.contact_id,
+                    type: i.type,
+                    title: i.title,
+                    description: i.description,
+                    date: i.date,
+                    heure: i.heure,
+                    agent: i.agent,
+                    lieu: i.lieu,
+                    technician: i.technician
+                }));
+                set((state) => ({ interactions: [...mappedInteractions, ...state.interactions] }));
+            }
+            return newInteractions.length;
+        } catch (err) {
+            console.error('[contactStore] Error adding interactions bulk:', err);
+            return 0;
+        }
+    },
 
-    updateInteraction: (id, updates) =>
-        set((state) => ({
-            interactions: state.interactions.map(i => i.id === id ? { ...i, ...updates } : i),
-        })),
+    updateContact: async (id, updates) => {
+        const { contacts } = get();
+        const contact = contacts.find(c => c.id === id);
 
-    deleteInteraction: (id) =>
-        set((state) => ({
-            interactions: state.interactions.filter(i => i.id !== id),
-        })),
+        // Auto-set convertedAt if status moves to a sale status for the first time
+        if (contact && updates.status && !contact.convertedAt) {
+            const SALE_STATUSES = ['Client', 'Projet Livré', 'Contrat', 'Paiement', 'Transfert de dossier technique', 'Transfert dossier tech', 'Suivi Chantier', 'Livraison Client', 'Réservation', 'Fidélisation'];
+            if (SALE_STATUSES.includes(updates.status)) {
+                updates.convertedAt = new Date().toISOString();
+            }
+        }
 
-    constructionProjects: initialProjects,
-    addProject: (p) =>
-        set((state) => ({
-            constructionProjects: [
-                ...state.constructionProjects,
-                { ...p, id: 'cp' + Date.now() },
-            ],
-        })),
+        // Optimistic update
+        set((state) => ({ contacts: state.contacts.map(c => c.id === id ? { ...c, ...updates } : c) }));
+        const success = await api.updateContactApi(id, updates);
+        return success !== false;
+    },
 
-    updateProject: (id, updates) =>
+    deleteContact: async (id) => {
+        set((state) => ({ contacts: state.contacts.filter(c => c.id !== id) }));
+        await api.deleteContactApi(id);
+    },
+
+    moveContactStatus: async (id, newStatus) => {
+        const { contacts } = get();
+        const contact = contacts.find(c => c.id === id);
+        const updates: Partial<CrmContact> = { status: newStatus };
+
+        // Auto-set convertedAt if status moves to a sale status for the first time
+        if (contact && !contact.convertedAt) {
+            const SALE_STATUSES = ['Client', 'Projet Livré', 'Contrat', 'Paiement', 'Transfert de dossier technique', 'Transfert dossier tech', 'Suivi Chantier', 'Livraison Client'];
+            if (SALE_STATUSES.includes(newStatus)) {
+                updates.convertedAt = new Date().toISOString();
+            }
+        }
+
+        set((state) => ({ contacts: state.contacts.map(c => c.id === id ? { ...c, ...updates } : c) }));
+        await api.updateContactApi(id, updates);
+    },
+
+    addFollowUp: async (f) => {
+        const saved = await api.createFollowUpApi(f);
+        if (saved) {
+            set((state) => ({ followUps: [saved, ...state.followUps] }));
+        }
+    },
+
+    updateFollowUp: async (id, updates) => {
+        set((state) => ({ followUps: state.followUps.map(f => f.id === id ? { ...f, ...updates } : f) }));
+        await api.updateFollowUpApi(id, updates);
+    },
+
+    deleteFollowUp: async (id) => {
+        set((state) => ({ followUps: state.followUps.filter(f => f.id !== id) }));
+        await api.deleteFollowUpApi(id);
+    },
+
+    addVisit: async (v) => {
+        try {
+            const saved = await api.createVisitApi(v);
+            if (saved) {
+                set((state) => ({ visits: [saved, ...state.visits] }));
+                return saved;
+            }
+            return null;
+        } catch (error) {
+            console.error('[STORE] addVisit error:', error);
+            return null;
+        }
+    },
+
+    updateVisit: async (id, updates) => {
+        set((state) => ({ visits: state.visits.map(v => v.id === id ? { ...v, ...updates } : v) }));
+        await api.updateVisitApi(id, updates);
+    },
+
+    deleteVisit: async (id) => {
+        set((state) => ({ visits: state.visits.filter(v => v.id !== id) }));
+        await api.deleteVisitApi(id);
+    },
+
+    moveVisitStatut: async (id, newStatut) => {
+        set((state) => ({ visits: state.visits.map(v => v.id === id ? { ...v, statut: newStatut } : v) }));
+        await api.updateVisitApi(id, { statut: newStatut });
+    },
+
+    addInteraction: async (i, relance) => {
+        try {
+            console.log('[STORE] addInteraction START - Payload:', i);
+            const newInt = await api.createInteractionApi(i);
+            console.log('[STORE] createInteractionApi RETURNED:', newInt);
+
+            if (newInt) {
+                set((state) => ({ interactions: [newInt, ...state.interactions] }));
+                console.log('[STORE] Interaction state updated');
+
+                if (relance) {
+                    console.log('[STORE] Adding associated relance...');
+                    const newRelance = await api.createFollowUpApi({
+                        ...relance,
+                        contactId: i.contactId,
+                        interactionId: newInt.id
+                    });
+                    if (newRelance) {
+                        set((state) => ({ followUps: [newRelance, ...state.followUps] }));
+                        console.log('[STORE] Relance state updated');
+                    }
+                }
+            } else {
+                console.warn('[STORE] addInteraction: API returned NULL');
+            }
+        } catch (error) {
+            console.error('[STORE] addInteraction CRASH:', error);
+            throw error;
+        }
+    },
+
+    updateInteraction: async (id, updates) => {
+        set((state) => ({ interactions: state.interactions.map(i => i.id === id ? { ...i, ...updates } : i) }));
+        await api.updateInteractionApi(id, updates);
+    },
+
+    deleteInteraction: async (id) => {
+        set((state) => ({ interactions: state.interactions.filter(i => i.id !== id) }));
+        await api.deleteInteractionApi(id);
+    },
+
+    addProject: async (p) => {
+        const saved = await projectApi.createProject(p);
+        if (saved) {
+            set((state) => ({ constructionProjects: [...state.constructionProjects, saved] }));
+        }
+    },
+
+    updateProject: async (id, updates) => {
         set((state) => ({
             constructionProjects: state.constructionProjects.map(p => p.id === id ? { ...p, ...updates, updated_at: new Date().toISOString().split('T')[0] } : p),
-        })),
+        }));
+        await projectApi.updateProjectApi(id, updates);
+    },
 
-    deleteProject: (id) =>
-        set((state) => ({
-            constructionProjects: state.constructionProjects.filter(p => p.id !== id),
-        })),
+    deleteProject: async (id) => {
+        set((state) => ({ constructionProjects: state.constructionProjects.filter(p => p.id !== id) }));
+        await projectApi.deleteProjectApi(id);
+    },
 
-    documents: initialDocuments,
-    addDocument: (d) =>
-        set((state) => {
-            const now = new Date().toISOString().split('T')[0];
-            const newDoc: CrmDocument = {
-                ...d,
-                id: 'doc' + Date.now(),
-                version: 1,
-                versions: [{ version: 1, url: d.url, createdAt: now }],
-                createdAt: now,
-                updatedAt: now
-            };
-            return { documents: [...state.documents, newDoc] };
-        }),
+    addDocument: async (d) => {
+        const saved = await projectApi.createDocumentApi(d);
+        if (saved) {
+            set((state) => ({ documents: [...state.documents, saved] }));
+        }
+    },
 
-    updateDocumentVersion: (id, url, notes) =>
+    updateDocumentVersion: async (id, url, notes) => {
+        // Version update is actually handled by creating a new document in the metadata for this version
+        // In this simple implementation we'll just delete and re-create or similar, but for now let's keep it simple
+        // and just update the local state as the current API doesn't handle versions explicitly yet
         set((state) => ({
             documents: state.documents.map(doc => {
                 if (doc.id === id) {
-                    const newVersion = doc.version + 1;
-                    const now = new Date().toISOString().split('T')[0];
+                    const newVersion = (doc.version || 1) + 1;
+                    const now = new Date().toISOString();
                     return {
                         ...doc,
                         url,
                         version: newVersion,
-                        versions: [...doc.versions, { version: newVersion, url, createdAt: now, notes }],
+                        versions: [...(doc.versions || []), { version: newVersion, url, createdAt: now, notes }],
                         updatedAt: now
                     };
                 }
                 return doc;
             })
-        })),
+        }));
+        // Note: Real API for versioning would be needed here
+    },
 
-    deleteDocument: (id) =>
-        set((state) => ({
-            documents: state.documents.filter(doc => doc.id !== id),
-        })),
+    deleteDocument: async (id) => {
+        set((state) => ({ documents: state.documents.filter(doc => doc.id !== id) }));
+        await projectApi.deleteDocumentApi(id);
+    },
 }));
+
+export const calculateLeadScore = (c: CrmContact) => {
+    let score = 0;
+    if (c.budgetConfirmed) score += 20;
+    const rdvStatuses = ['RDV', 'Proposition Commerciale', 'Négociation', 'Réservation', 'Contrat', 'Paiement', 'Transfert de dossier technique', 'Suivi Chantier', 'Livraison Client'];
+    if (rdvStatuses.includes(c.status)) score += 15;
+    if (c.isReactive) score += 10;
+    return score;
+};

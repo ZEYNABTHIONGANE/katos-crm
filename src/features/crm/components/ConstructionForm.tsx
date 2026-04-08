@@ -18,8 +18,20 @@ const ConstructionForm: React.FC<ConstructionFormProps> = ({ initialData, onSave
         surface: 0,
         location: '',
         status: 'disponible',
+        assignedAgent: '',
         ...initialData
     });
+
+    const [commercials, setCommercials] = useState<{ id: string, name: string, service: string }[]>([]);
+
+    React.useEffect(() => {
+        const loadCommercials = async () => {
+            const { fetchCommercials } = await import('../api/contactApi');
+            const data = await fetchCommercials();
+            setCommercials(data);
+        };
+        loadCommercials();
+    }, []);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -103,12 +115,13 @@ const ConstructionForm: React.FC<ConstructionFormProps> = ({ initialData, onSave
                         <label className="form-label">Commercial Responsable</label>
                         <select
                             className="form-select"
-                            value={formData.assignedAgent}
+                            value={formData.assignedAgent || ''}
                             onChange={(e) => setFormData({ ...formData, assignedAgent: e.target.value as any })}
                         >
-                            <option value="Abdou Sarr">Abdou Sarr</option>
-                            <option value="Omar Diallo">Omar Diallo</option>
-                            <option value="Katos Admin">Katos Admin</option>
+                            <option value="">— Non assigné —</option>
+                            {commercials.map(agent => (
+                                <option key={agent.id} value={agent.name}>{agent.name}</option>
+                            ))}
                         </select>
                     </div>
 

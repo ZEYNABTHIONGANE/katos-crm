@@ -26,9 +26,9 @@ const formatPrice = (price: number) => price.toLocaleString('fr-FR') + ' FCFA';
 const PropertyPicker: React.FC<PropertyPickerProps> = ({ service, selectedId, onSelect }) => {
     const [search, setSearch] = useState('');
 
-    const { data: lands = [], isLoading: loadingLands } = useLands(undefined);
-    const { data: villas = [], isLoading: loadingVillas } = useVillas();
-    const { data: biens = [], isLoading: loadingBiens } = useImmobilierBiens();
+    const { data: lands = [], isLoading: loadingLands } = useLands(undefined, { enabled: service === 'foncier' });
+    const { data: villas = [], isLoading: loadingVillas } = useVillas({ enabled: service === 'construction' });
+    const { data: biens = [], isLoading: loadingBiens } = useImmobilierBiens({ enabled: service === 'gestion_immobiliere' });
 
     const isLoading = loadingLands || loadingVillas || loadingBiens;
 
@@ -95,7 +95,7 @@ const PropertyPicker: React.FC<PropertyPickerProps> = ({ service, selectedId, on
             {isLoading ? (
                 <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>Chargement...</div>
             ) : filtered.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>Aucun bien trouvé.</div>
+                <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>Aucun produit trouvé.</div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '280px', overflowY: 'auto', paddingRight: '2px' }}>
                     {filtered.map(item => {

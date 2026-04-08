@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
-import { Plus, Search, Filter, MapPin, Tag, Trash2, Eye } from 'lucide-react';
+import { Plus, Search, Filter } from 'lucide-react';
 import { useImmobilierBiens, useCreateImmobilierBien, useUpdateImmobilierBien, useDeleteImmobilierBien } from '../api/immobilierApi';
 import GestionForm from '@/features/crm/components/GestionForm';
+import GestionCard from './GestionCard';
 import type { ImmobilierBien } from '../types/land';
+import { useToast } from '@/app/providers/ToastProvider';
+import { useAuth } from '@/app/providers/AuthProvider';
 
 const GestionList: React.FC = () => {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingBien, setEditingBien] = useState<ImmobilierBien | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [filterType, setFilterType] = useState<'all' | 'location' | 'achat'>('all');
+    const { showToast } = useToast();
+    const { user } = useAuth();
 
     const { data: biens, isLoading } = useImmobilierBiens();
     const createMutation = useCreateImmobilierBien();
@@ -18,13 +24,16 @@ const GestionList: React.FC = () => {
         try {
             if (editingBien) {
                 await updateMutation.mutateAsync({ id: editingBien.id, updates: data });
+                showToast('Bien mis à jour');
             } else {
                 await createMutation.mutateAsync(data);
+                showToast('Nouveau bien ajouté au catalogue');
             }
             setIsFormOpen(false);
             setEditingBien(null);
         } catch (err) {
-            console.error("Erreur lors de la sauvegarde:", err);
+            console.error('Erreur lors de la sauvegarde:', err);
+            showToast('Erreur lors de la sauvegarde : ' + (err instanceof Error ? err.message : 'Une erreur inconnue est survenue'), 'error');
         }
     };
 
@@ -33,41 +42,45 @@ const GestionList: React.FC = () => {
         setIsFormOpen(true);
     };
 
-    const handleDelete = async (id: string, e: React.MouseEvent) => {
-        e.stopPropagation();
+    const handleDelete = async (id: string) => {
         if (window.confirm('Êtes-vous sûr de vouloir supprimer ce bien ?')) {
             await deleteMutation.mutateAsync(id);
+            showToast('Bien supprimé du catalogue');
         }
     };
 
-    const filteredBiens = biens?.filter(b =>
-        b.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.location.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredBiens = biens?.filter(b => {
+        // Restriction par service pour les commerciaux et managers (Superviseurs et Admins voient tout)
+        if (user?.role === 'commercial' || user?.role === 'manager') {
+            const userSvc = user?.service === 'gestion' ? 'gestion_immobiliere' : user?.service;
+            if (userSvc !== 'gestion_immobiliere') return false;
+        }
+
+        const matchSearch =
+            b.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            b.location.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchType = filterType === 'all' || b.bien_type === filterType;
+        return matchSearch && matchType;
+    });
 
     return (
         <div className="real-estate-page">
             <div className="page-header">
                 <div>
-                    <h1>Gestion Immobilière</h1>
-                    <p className="subtitle">Location et vente de biens immobiliers</p>
+                    <h1 style={{ fontWeight: 800 }}>Gestion Immobilière</h1>
+                    <p className="subtitle">Catalogue des biens en location &amp; à la vente</p>
                 </div>
-                <button
-                    className="btn-primary flex items-center gap-2"
-                    onClick={() => { setEditingBien(null); setIsFormOpen(true); }}
-                >
-                    <Plus size={18} /> Nouveau bien
-                </button>
+                {user?.role !== 'commercial' && (
+                    <button
+                        className="btn-primary flex items-center gap-2"
+                        onClick={() => { setEditingBien(null); setIsFormOpen(true); }}
+                    >
+                        <Plus size={18} /> Nouveau bien
+                    </button>
+                )}
             </div>
 
-            {isFormOpen && (
-                <GestionForm
-                    initialData={editingBien || undefined}
-                    onSave={handleSave}
-                    onCancel={() => { setIsFormOpen(false); setEditingBien(null); }}
-                />
-            )}
-
+            {/* Filtres */}
             <div className="filters-bar mt-6 flex gap-4">
                 <div className="search-input flex-1">
                     <Search size={18} />
@@ -78,80 +91,52 @@ const GestionList: React.FC = () => {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
+                <div className="tabs-segmented">
+                    {[
+                        { k: 'all', l: 'Tous' },
+                        { k: 'location', l: 'Location' },
+                        { k: 'achat', l: 'Vente' },
+                    ].map(f => (
+                        <button
+                            key={f.k}
+                            className={`tab-segment ${filterType === f.k ? 'active' : ''}`}
+                            onClick={() => setFilterType(f.k as any)}
+                        >
+                            {f.l}
+                        </button>
+                    ))}
+                </div>
                 <button className="btn-secondary flex items-center gap-2">
                     <Filter size={18} /> Filtres
                 </button>
             </div>
 
+            {/* Grille de cartes */}
             {isLoading ? (
                 <div className="p-12 text-center">Chargement...</div>
             ) : (
-                <div className="contacts-table-container card-premium mt-8">
-                    <table className="contacts-table">
-                        <thead>
-                            <tr>
-                                <th>Bien / Type</th>
-                                <th>Localisation</th>
-                                <th>Surface</th>
-                                <th>Prix (FCFA)</th>
-                                <th>Commercial</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredBiens?.length ? filteredBiens.map((bien) => (
-                                <tr key={bien.id} className="contact-row clickable" onClick={() => handleEdit(bien)}>
-                                    <td>
-                                        <div className="font-medium text-main">{bien.title}</div>
-                                        <div className="badge badge-info" style={{ textTransform: 'capitalize' }}>
-                                            {bien.bien_type === 'location' ? 'Location' : 'Vente'}
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div className="icon-text text-sm">
-                                            <MapPin size={14} className="text-muted" />
-                                            <span>{bien.location}</span>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div className="icon-text text-sm">
-                                            <Tag size={14} className="text-muted" />
-                                            <span>{bien.surface} m²</span>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div className="font-medium">
-                                            {new Intl.NumberFormat('fr-FR').format(bien.price)}
-                                            {bien.bien_type === 'location' && <small> / mois</small>}
-                                        </div>
-                                    </td>
-                                    <td>
-                                        {bien.assignedAgent ? (
-                                            <div className="text-sm font-medium" style={{ color: 'var(--primary)' }}>{bien.assignedAgent}</div>
-                                        ) : <span className="text-sm text-muted">—</span>}
-                                    </td>
-                                    <td className="actions-cell">
-                                        <div className="flex gap-2">
-                                            <button className="btn-icon" onClick={(e) => { e.stopPropagation(); handleEdit(bien); }}>
-                                                <Eye size={16} />
-                                            </button>
-                                            <button
-                                                className="btn-icon text-danger"
-                                                onClick={(e) => handleDelete(bien.id, e)}
-                                                style={{ color: 'var(--danger)' }}
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            )) : (
-                                <tr><td colSpan={6} className="empty-state">Aucun bien trouvé.</td></tr>
-                            )}
-                        </tbody>
-                    </table>
+                <div className="property-list animate-fade-in">
+                    {filteredBiens?.length ? filteredBiens.map((bien) => (
+                        <GestionCard
+                            key={bien.id}
+                            bien={bien}
+                            onEdit={user?.role !== 'commercial' ? handleEdit : undefined}
+                            onDelete={user?.role !== 'commercial' ? handleDelete : undefined}
+                        />
+                    )) : (
+                        <div className="col-span-full p-12 text-center text-muted">
+                            Aucun bien trouvé dans le catalogue.
+                        </div>
+                    )}
                 </div>
             )}
+
+            <GestionForm
+                isOpen={isFormOpen}
+                initialData={editingBien || undefined}
+                onSave={handleSave}
+                onCancel={() => { setIsFormOpen(false); setEditingBien(null); }}
+            />
         </div>
     );
 };

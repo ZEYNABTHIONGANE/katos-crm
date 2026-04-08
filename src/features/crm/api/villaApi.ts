@@ -1,98 +1,139 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Villa } from '../types/land';
-
-const MOCK_VILLAS: Villa[] = [
-    {
-        id: 'v1',
-        title: 'Villa Zahra F3',
-        description: 'Modèle F3 élégant et fonctionnel pour petite famille.',
-        type: 'Villa Zahra F3',
-        surface: 120,
-        price: 25000000,
-        status: 'disponible',
-        location: 'Sénégal',
-        assignedAgent: 'Omar Diallo',
-        created_at: new Date().toISOString(),
-    },
-    {
-        id: 'v2',
-        title: 'Villa Kenza F3',
-        description: 'Design moderne F3 optimisé pour le confort.',
-        type: 'Villa Kenza F3',
-        surface: 125,
-        price: 27000000,
-        status: 'disponible',
-        location: 'Sénégal',
-        assignedAgent: 'Abdou Sarr',
-        created_at: new Date().toISOString(),
-    },
-    {
-        id: 'v3',
-        title: 'Villa Fatima F4',
-        description: 'Villa F4 spacieuse idéale pour famille moyenne.',
-        type: 'Villa Fatima F4',
-        surface: 180,
-        price: 45000000,
-        status: 'disponible',
-        location: 'Sénégal',
-        assignedAgent: 'Omar Diallo',
-        created_at: new Date().toISOString(),
-    },
-    {
-        id: 'v4',
-        title: 'Villa Amina F6',
-        description: 'Grande villa F6 grand standing.',
-        type: 'Villa Amina F6',
-        surface: 350,
-        price: 85000000,
-        status: 'disponible',
-        location: 'Sénégal',
-        assignedAgent: 'Katos Admin',
-        created_at: new Date().toISOString(),
-    },
-    {
-        id: 'v5',
-        title: 'Villa Aicha F6',
-        description: 'Le summum du luxe en modèle F6.',
-        type: 'Villa Aicha F6',
-        surface: 380,
-        price: 95000000,
-        status: 'disponible',
-        location: 'Sénégal',
-        assignedAgent: 'Abdou Sarr',
-        created_at: new Date().toISOString(),
-    }
-];
+import { supabase } from '../../../lib/supabaseClient';
 
 export const villaApi = {
     async getVillas(): Promise<Villa[]> {
-        return MOCK_VILLAS;
+        const { data, error } = await supabase
+            .from('villas')
+            .select('*')
+            .order('created_at', { ascending: false });
+        
+        if (error) {
+            console.error('Error fetching villas:', error);
+            throw error;
+        }
+        return (data || []).map(d => ({
+            ...d,
+            assignedAgent: d.assigned_agent
+        })) as Villa[];
     },
+
     async createVilla(villa: Partial<Villa>): Promise<Villa> {
-        const newVilla = {
-            ...villa,
-            id: 'v' + Date.now(),
-            created_at: new Date().toISOString(),
-        } as Villa;
-        MOCK_VILLAS.push(newVilla);
-        return newVilla;
+        // Clean and sanitize data
+        const dbVilla: any = {
+            title: (villa.title || '').trim(),
+            description: (villa.description || '').trim(),
+            type: (villa.type || '').trim(),
+            surface: villa.surface ? Math.round(Number(villa.surface)) : 0,
+            price: villa.price ? Math.round(Number(villa.price)) : 0,
+            status: 'disponible',
+            location: 'Sénégal',
+            image_url: villa.image_url || null
+        };
+
+        const imageLength = dbVilla.image_url?.length || 0;
+        console.log('[villaApi] Image size:', (imageLength / 1024).toFixed(2), 'KB');
+        
+        // Si l'image est trop lourde (> 1Mo), on prévient car ça risque de bloquer Supabase
+        if (imageLength > 1000000) {
+            console.warn('[villaApi] Image too large (> 1MB). Attempting anyway, but may hang.');
+        }
+
+        console.log('[villaApi] Sending to Supabase...');
+        
+        try {
+            console.log('[villaApi] Inserting into villas table...');
+            const { error: insertError } = await supabase
+                .from('villas')
+                .insert([dbVilla]);
+            
+            if (insertError) {
+                console.error('[villaApi] Supabase insert error:', insertError);
+                throw insertError;
+            }
+            
+            console.log('[villaApi] Insert success. Fetching result...');
+            
+            // On récupère la villa créée (pour l'ID) par son titre
+            const { data, error: fetchError } = await supabase
+                .from('villas')
+                .select('*')
+                .eq('title', dbVilla.title)
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            if (fetchError || !data || data.length === 0) {
+                console.warn('[villaApi] Could not fetch created villa, using temp ID');
+                return { ...dbVilla, id: 'temp-' + Date.now() } as any;
+            }
+
+            console.log('[villaApi] Created villa fetched:', data[0].id);
+            return {
+                ...data[0],
+                assignedAgent: data[0].assigned_agent
+            } as Villa;
+
+        } catch (err: any) {
+            console.error('[villaApi] Fatal error in createVilla:', err);
+            throw err;
+        }
     },
+
     async updateVilla(id: string, updates: Partial<Villa>): Promise<Villa> {
-        const index = MOCK_VILLAS.findIndex(v => v.id === id);
-        if (index === -1) throw new Error('Villa not found');
-        MOCK_VILLAS[index] = { ...MOCK_VILLAS[index], ...updates };
-        return MOCK_VILLAS[index];
+        const { assignedAgent, id: _, ...restUpdates } = updates as any;
+        const dbUpdates: any = { ...restUpdates };
+
+        if (dbUpdates.surface !== undefined) {
+            dbUpdates.surface = dbUpdates.surface ? Math.round(Number(dbUpdates.surface)) : 0;
+        }
+        if (dbUpdates.price !== undefined) {
+            dbUpdates.price = dbUpdates.price ? Math.round(Number(dbUpdates.price)) : 0;
+        }
+
+        console.log('[villaApi] Updating villa:', id, dbUpdates);
+        
+        try {
+            const { error } = await supabase
+                .from('villas')
+                .update(dbUpdates)
+                .eq('id', id);
+            
+            if (error) {
+                console.error('[villaApi] Supabase error updating villa:', error);
+                throw error;
+            }
+
+            console.log('[villaApi] Villa updated successfully');
+            
+            return {
+                id,
+                ...dbUpdates
+            } as any;
+        } catch (err) {
+            console.error('[villaApi] Unexpected error in updateVilla:', err);
+            throw err;
+        }
     },
+
     async deleteVilla(id: string): Promise<void> {
-        const index = MOCK_VILLAS.findIndex(v => v.id === id);
-        if (index !== -1) MOCK_VILLAS.splice(index, 1);
+        const { error } = await supabase
+            .from('villas')
+            .delete()
+            .eq('id', id);
+        
+        if (error) {
+            console.error('Error deleting villa:', error);
+            throw error;
+        }
     }
 };
 
-export const useVillas = () => {
+export const useVillas = (options?: { enabled?: boolean }) => {
     return useQuery({
         queryKey: ['villas'],
         queryFn: () => villaApi.getVillas(),
+        ...options
     });
 };
 

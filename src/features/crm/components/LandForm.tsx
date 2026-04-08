@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { Save, Plus, Trash2, FilePlus, AlertCircle } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
+import UploadZone from '@/components/ui/UploadZone';
 import type { Land, LandStatus, Lot, LandDocument } from '../types/land';
 
 interface LandFormProps {
     initialData?: Partial<Land>;
-    onSave: (data: Partial<Land>) => void;
+    onSave: (data: Partial<Land>) => Promise<void>;
     onCancel: () => void;
 }
 
 const LEGAL_NATURES = ['Bail', 'Titre Foncier', 'Permis d\'occuper', 'Délibération', 'Attestation de cession'];
-const AGENTS = ['Abdou Sarr', 'Omar Diallo', 'Katos Admin'];
+// const AGENTS = ['Abdou Sarr', 'Omar Diallo', 'Katos Admin'];
 
 const LandForm: React.FC<LandFormProps> = ({ initialData, onSave, onCancel }) => {
     const [formData, setFormData] = useState<Partial<Land>>({
@@ -23,13 +24,14 @@ const LandForm: React.FC<LandFormProps> = ({ initialData, onSave, onCancel }) =>
         legal_nature: LEGAL_NATURES[0],
         status: 'disponible',
         owner_name: 'Katos',
-        assignedAgent: AGENTS[0],
         lots: [],
         documents: [],
         ...initialData
     });
 
     const [activeTab, setActiveTab] = useState<'info' | 'lots' | 'docs'>('info');
+    const [isSaving, setIsSaving] = useState(false);
+
 
     const handleAddLot = () => {
         const newLot: Partial<Lot> = {
@@ -86,9 +88,14 @@ const LandForm: React.FC<LandFormProps> = ({ initialData, onSave, onCancel }) =>
         });
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(formData);
+        setIsSaving(true);
+        try {
+            await onSave(formData);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -123,25 +130,23 @@ const LandForm: React.FC<LandFormProps> = ({ initialData, onSave, onCancel }) =>
                 {activeTab === 'info' && (
                     <div className="form-grid">
                         <div className="form-group">
-                            <label className="form-label">Référence du terrain *</label>
+                            <label className="form-label">Référence du terrain</label>
                             <input
                                 type="text"
-                                required
                                 className="form-input"
                                 placeholder="Ex: REF-TR-001"
-                                value={formData.reference}
+                                value={formData.reference || ''}
                                 onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
                             />
                         </div>
 
                         <div className="form-group col-2">
-                            <label className="form-label">Titre de l'annonce terrain *</label>
+                            <label className="form-label">Titre de l'annonce terrain</label>
                             <input
                                 type="text"
-                                required
                                 className="form-input"
                                 placeholder="Ex: Terrain 500m² - Sangalkam"
-                                value={formData.title}
+                                value={formData.title || ''}
                                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                             />
                         </div>
@@ -172,24 +177,11 @@ const LandForm: React.FC<LandFormProps> = ({ initialData, onSave, onCancel }) =>
                             </select>
                         </div>
 
-                        <div className="form-group">
-                            <label className="form-label">Commercial Responsable</label>
-                            <select
-                                className="form-select"
-                                value={formData.assignedAgent}
-                                onChange={(e) => setFormData({ ...formData, assignedAgent: e.target.value })}
-                            >
-                                {AGENTS.map(agent => (
-                                    <option key={agent} value={agent}>{agent}</option>
-                                ))}
-                            </select>
-                        </div>
 
                         <div className="form-group">
                             <label className="form-label">Surface (m²)</label>
                             <input
                                 type="number"
-                                required
                                 className="form-input"
                                 value={formData.surface}
                                 onChange={(e) => setFormData({ ...formData, surface: Number(e.target.value) })}
@@ -200,23 +192,29 @@ const LandForm: React.FC<LandFormProps> = ({ initialData, onSave, onCancel }) =>
                             <label className="form-label">Prix (FCFA)</label>
                             <input
                                 type="number"
-                                required
                                 className="form-input"
                                 value={formData.price}
                                 onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
                             />
                         </div>
 
-                        <div className="form-group col-2">
-                            <label className="form-label">Localisation *</label>
+                        <div className="form-group">
+                            <label className="form-label">Localisation</label>
                             <input
                                 type="text"
-                                required
                                 className="form-input"
                                 placeholder="Ville, quartier..."
-                                value={formData.location}
+                                value={formData.location || ''}
                                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                             />
+                        </div>
+
+                        <div className="form-group col-2">
+                             <UploadZone 
+                                label="Photo du terrain (ou plan de masse)"
+                                value={formData.image_url}
+                                onChange={(url) => setFormData({ ...formData, image_url: url })}
+                             />
                         </div>
 
                         <div className="form-group col-2">
@@ -225,7 +223,7 @@ const LandForm: React.FC<LandFormProps> = ({ initialData, onSave, onCancel }) =>
                                 rows={3}
                                 className="form-textarea"
                                 placeholder="Détails supplémentaires..."
-                                value={formData.description}
+                                value={formData.description || ''}
                                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                             ></textarea>
                         </div>
@@ -370,11 +368,15 @@ const LandForm: React.FC<LandFormProps> = ({ initialData, onSave, onCancel }) =>
                 )}
 
                 <div className="form-actions mt-8 pt-4 border-top">
-                    <button type="button" onClick={onCancel} className="btn-secondary">
+                    <button type="button" onClick={onCancel} className="btn-secondary" disabled={isSaving}>
                         Annuler
                     </button>
-                    <button type="submit" className="btn-primary">
-                        <Save size={18} /> {initialData?.id ? 'Enregistrer les modifications' : 'Créer le terrain'}
+                    <button type="submit" className="btn-primary" disabled={isSaving}>
+                        {isSaving ? 'Enregistrement...' : (
+                            <>
+                                <Save size={18} /> {initialData?.id ? 'Enregistrer les modifications' : 'Créer le terrain'}
+                            </>
+                        )}
                     </button>
                 </div>
             </form>

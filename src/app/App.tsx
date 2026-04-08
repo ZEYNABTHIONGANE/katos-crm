@@ -18,9 +18,11 @@ import LandDetails from '@/features/crm/components/LandDetails';
 import ConstructionList from '@/features/crm/components/ConstructionList';
 import GestionList from '@/features/crm/components/GestionList';
 import DocumentsPage from '@/features/crm/components/DocumentsPage';
+import FieldAgenda from '@/features/crm/components/FieldAgenda';
+import FAQ from '@/features/crm/components/FAQ';
 
 
-import { ProtectedRoute } from '@/router';
+import { ProtectedRoute, RoleGuard } from '@/router';
 import { QueryProvider } from '@/app/providers/QueryProvider';
 
 function App() {
@@ -40,16 +42,18 @@ function App() {
                   <Route path="prospects" element={<ContactsList />} />
                   <Route path="prospects/:id" element={<ContactDetail />} />
                   <Route path="pipeline" element={<Pipeline />} />
-                  <Route path="relances" element={<Relances />} />
-                  <Route path="agents" element={<Agents />} />
-                  <Route path="rapports" element={<Rapports />} />
+                  <Route path="relances" element={<RoleGuard allowedRoles={['commercial']}><Relances /></RoleGuard>} />
+                  <Route path="agents" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'superviseur', 'manager']}><Agents /></RoleGuard>} />
+                  <Route path="rapports" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'superviseur', 'manager']}><Rapports /></RoleGuard>} />
                   <Route path="foncier" element={<LandList />} />
                   <Route path="foncier/:id" element={<LandDetails />} />
                   <Route path="construction" element={<ConstructionList />} />
                   <Route path="gestion" element={<GestionList />} />
                   <Route path="visites" element={<Visites />} />
-                  <Route path="documents" element={<DocumentsPage />} />
-                  <Route path="historique" element={<Historique />} />
+                  <Route path="agenda-terrain" element={<FieldAgenda />} />
+                  <Route path="documents" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'superviseur']}><DocumentsPage /></RoleGuard>} />
+                  <Route path="historique" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'superviseur', 'manager']}><Historique /></RoleGuard>} />
+                  <Route path="faq" element={<FAQ />} />
                 </Route>
 
                 {/* Fallback */}
