@@ -484,16 +484,16 @@ const ContactsList = () => {
                 </div>
             </div>
 
-            <div className="contacts-table-container card-premium">
+            <div className="table-responsive-v2">
                 <table className="contacts-table">
                     <thead>
                         <tr>
-                            <th>Contact / Entreprise</th>
-                            <th>Coordonnées</th>
-                            <th>Adresse / Pays</th>
-                            <th>Service</th>
-                            <th>Commercial</th>
-                            <th>Statut</th>
+                            <th>Prospect / Client</th>
+                            <th>Contact</th>
+                            <th>Localisation</th>
+                            <th>Service & Projet</th>
+                            <th>Agent assigné</th>
+                            <th>Statut & Score</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -523,10 +523,10 @@ const ContactsList = () => {
                                 </td>
                                 <td>
                                     {contact.service ? (
-                                        <div>
-                                            <div className="text-sm font-medium">{SERVICE_LABELS[contact.service]}</div>
+                                        <div className="service-pill-v2">
+                                            <div className="main-label">{SERVICE_LABELS[contact.service]}</div>
                                             {contact.propertyTitle && (
-                                                <div className="text-sm text-muted" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.propertyTitle}</div>
+                                                <div className="sub-label">{contact.propertyTitle}</div>
                                             )}
                                         </div>
                                     ) : <span className="text-sm text-muted">—</span>}
@@ -535,78 +535,29 @@ const ContactsList = () => {
                                     {contact.assignedAgent ? (() => {
                                         const theme = getAgentColor(contact.assignedAgent);
                                         return (
-                                            <div className="agent-badge-premium" style={{ 
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                gap: '8px',
-                                                padding: '4px 12px',
-                                                borderRadius: '20px',
-                                                background: theme.bg,
-                                                color: theme.text,
-                                                fontSize: '0.85rem',
-                                                fontWeight: 600,
-                                                border: `1px solid ${theme.text}20`
-                                            }}>
-                                                <div style={{ 
-                                                    width: '20px', 
-                                                    height: '20px', 
-                                                    borderRadius: '50%', 
-                                                    background: theme.text, 
-                                                    color: '#fff', 
-                                                    display: 'flex', 
-                                                    alignItems: 'center', 
-                                                    justifyContent: 'center',
-                                                    fontSize: '0.65rem'
-                                                }}>
-                                                    {contact.assignedAgent.charAt(0)}
-                                                </div>
+                                            <div className="agent-pill-v2" style={{ background: theme.bg, color: theme.text }}>
+                                                <div className="pill-avatar">{contact.assignedAgent.charAt(0)}</div>
                                                 {contact.assignedAgent}
                                             </div>
                                         );
                                     })() : (
-                                        <span style={{ 
-                                            fontSize: '0.75rem', 
-                                            padding: '4px 12px', 
-                                            borderRadius: '20px', 
-                                            background: 'rgba(255, 165, 0, 0.08)', 
-                                            color: '#ffa500',
-                                            border: '1px solid rgba(255, 165, 0, 0.2)',
-                                            fontWeight: 600,
-                                            textTransform: 'uppercase',
-                                            letterSpacing: '0.5px'
-                                        }}>
+                                        <div className="agent-pill-v2 unassigned">
                                             À dispatcher
-                                        </span>
+                                        </div>
                                     )}
                                 </td>
                                 <td>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-start' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            {getStatusBadge(contact.status)}
-                                            {(() => {
-                                                const score = calculateLeadScore(contact);
-                                                const color = score >= 35 ? '#dc2626' : score >= 16 ? '#ea580c' : '#0284c7';
-                                                const bg = score >= 35 ? '#fee2e2' : score >= 16 ? '#ffedd5' : '#e0f2fe';
-                                                return (
-                                                    <span style={{ 
-                                                        fontSize: '0.6rem', 
-                                                        fontWeight: 700, 
-                                                        padding: '1px 5px', 
-                                                        borderRadius: '4px', 
-                                                        background: bg, 
-                                                        color: color,
-                                                        border: `1px solid ${color}30`
-                                                    }}>
-                                                        {score} PTS {score >= 35 && '🔥'}
-                                                    </span>
-                                                );
-                                            })()}
-                                        </div>
-                                        {contact.createdAt && (
-                                            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 500, paddingLeft: '4px' }}>
-                                                Depuis {Math.floor((new Date().getTime() - new Date(contact.createdAt).getTime()) / (1000 * 60 * 60 * 24))}j
-                                            </span>
-                                        )}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                                        {getStatusBadge(contact.status)}
+                                        {(() => {
+                                            const score = calculateLeadScore(contact);
+                                            const scoreClass = score >= 35 ? 'score-hot' : score >= 16 ? 'score-warm' : 'score-cold';
+                                            return (
+                                                <span className={`lead-score-badge ${scoreClass}`}>
+                                                    {score} PTS {score >= 35 && '🔥'}
+                                                </span>
+                                            );
+                                        })()}
                                     </div>
                                 </td>
                                 <td className="actions-cell" onClick={(e) => e.stopPropagation()}>

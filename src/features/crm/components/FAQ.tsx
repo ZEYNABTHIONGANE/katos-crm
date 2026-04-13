@@ -177,9 +177,9 @@ const FAQ = () => {
 
     return (
         <div className="faq-page-container">
-            <div className="page-header">
+            <div className="page-header d-flex-between">
                 <div>
-                    <h1 className="text-katos-blue" style={{ fontWeight: 800 }}>Guide & FAQ Commerciaux</h1>
+                    <h1>Guide & FAQ Commerciaux</h1>
                     <p className="subtitle">Retrouvez toutes les procédures et réponses aux questions fréquentes.</p>
                 </div>
                 

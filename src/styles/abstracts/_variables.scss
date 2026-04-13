@@ -1,0 +1,102 @@
+@use 'sass:color';
+// -----------------------------------------------------------------------------
+// Design System Tokens - Katos CRM
+// -----------------------------------------------------------------------------
+
+// 1. Color Palette (HSL based for better harmony)
+$clr-primary-h: 238;
+$clr-primary-s: 50%;
+$clr-primary-l: 34%; // #2B2E83 equivalent
+
+$clr-primary: hsl($clr-primary-h, $clr-primary-s, $clr-primary-l);
+$clr-primary-light: hsl($clr-primary-h, $clr-primary-s, 95%);
+$clr-primary-dark: hsl($clr-primary-h, $clr-primary-s, 25%);
+
+$clr-accent-h: 20;
+$clr-accent-s: 82%;
+$clr-accent-l: 54%; // #E96C2E equivalent
+
+$clr-accent: hsl($clr-accent-h, $clr-accent-s, $clr-accent-l);
+$clr-accent-light: hsl($clr-accent-h, $clr-accent-s, 90%);
+$clr-accent-hover: hsl($clr-accent-h, $clr-accent-s, 45%);
+
+// System Colors
+$clr-success: #10b981;
+$clr-warning: #f59e0b;
+$clr-danger: #ef4444;
+$clr-info: #3b82f6;
+
+// Neutral Colors
+$clr-white: #ffffff;
+$clr-black: #0f172a;
+$clr-grey-50: #f8fafc;
+$clr-grey-100: #f1f5f9;
+$clr-grey-200: #e2e8f0;
+$clr-grey-300: #cbd5e1;
+$clr-grey-400: #94a3b8;
+$clr-grey-500: #64748b;
+$clr-grey-600: #475569;
+$clr-grey-700: #334155;
+$clr-grey-800: #1e293b;
+$clr-grey-900: #0f172a;
+
+// Surface Colors (UI specific)
+$clr-bg-app: #FDFCFB; 
+$clr-bg-card: $clr-white;
+$clr-bg-sidebar: #0B0E2A;
+$clr-border: color.change($clr-primary, $alpha: 0.08);
+
+// 2. Typography hierarchy
+$font-main: 'Outfit', 'Inter', system-ui, sans-serif;
+$font-serif: 'Playfair Display', serif;
+
+$text-xs: 0.75rem;   // 12px
+$text-sm: 0.875rem;  // 14px
+$text-base: 1rem;    // 16px
+$text-lg: 1.125rem;  // 18px
+$text-xl: 1.25rem;   // 20px
+$text-2xl: 1.5rem;   // 24px
+$text-3xl: 1.875rem; // 30px
+$text-4xl: 2.25rem;  // 36px
+$text-5xl: 3rem;     // 48px
+
+// 3. Spacing System (Factor: 4px)
+$space-1: 0.25rem;
+$space-2: 0.5rem;
+$space-3: 0.75rem;
+$space-4: 1rem;
+$space-5: 1.25rem;
+$space-6: 1.5rem;
+$space-8: 2rem;
+$space-10: 2.5rem;
+$space-12: 3rem;
+
+// 4. Borders & Radius
+$radius-xs: 4px;
+$radius-sm: 8px;
+$radius-md: 12px;
+$radius-lg: 20px;
+$radius-xl: 24px;
+$radius-full: 9999px;
+
+// 5. Shadows (Natural Elevation)
+$shadow-sm: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+$shadow-md: 0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -1px rgba(0,0,0,0.04);
+$shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+$shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+$shadow-premium: 0 15px 35px rgba($clr-primary, 0.12);
+
+// 6. Transitions
+$trans-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+$trans-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+$trans-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+
+// 7. Z-Index Scale
+$z-negative: -1;
+$z-elevate: 1;
+$z-dropdown: 1000;
+$z-sticky: 1100;
+$z-fixed: 1200;
+$z-modal: 1300;
+$z-toast: 1400;
+$z-tooltip: 1500;

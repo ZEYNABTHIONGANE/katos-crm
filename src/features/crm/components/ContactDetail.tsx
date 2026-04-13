@@ -408,19 +408,9 @@ const ContactDetail = () => {
                             {getStatusBadge(contact.status)}
                             {(() => {
                                 const score = calculateLeadScore(contact);
-                                const color = score >= 35 ? '#dc2626' : score >= 16 ? '#ea580c' : '#0284c7';
-                                const bg = score >= 35 ? '#fee2e2' : score >= 16 ? '#ffedd5' : '#e0f2fe';
+                                const scoreClass = score >= 35 ? 'score-hot' : score >= 16 ? 'score-warm' : 'score-cold';
                                 return (
-                                    <span style={{ 
-                                        marginLeft: '4px',
-                                        fontSize: '0.65rem', 
-                                        fontWeight: 700, 
-                                        padding: '2px 6px', 
-                                        borderRadius: '4px', 
-                                        background: bg, 
-                                        color: color,
-                                        border: `1px solid ${color}30`
-                                    }}>
+                                    <span className={`lead-score-badge ${scoreClass}`} style={{ marginLeft: '8px' }}>
                                         {score} PTS {score >= 35 && '🔥'}
                                     </span>
                                 );
@@ -428,30 +418,13 @@ const ContactDetail = () => {
                         </div>
                         <p className="subtitle">
                             {contact.company || 'Particulier'} · Réf #{contact.id} · 
-                            <span style={{ 
-                                marginLeft: '8px', 
-                                background: 'rgba(43,46,131,0.1)', 
-                                color: '#2B2E83', 
-                                padding: '1px 8px', 
-                                borderRadius: '12px',
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                textTransform: 'capitalize'
-                            }}>
+                            <span className="badge-soft-primary" style={{ marginLeft: '8px', textTransform: 'capitalize' }}>
                                 {contact.service === 'gestion_immobiliere' ? 'Gestion' : contact.service}
                             </span>
 
                             {contact.propertyTitle && (
-                                <span style={{ 
-                                    marginLeft: '8px', 
-                                    background: 'rgba(233,108,46,0.1)', 
-                                    color: '#E96C2E', 
-                                    padding: '1px 8px', 
-                                    borderRadius: '12px',
-                                    fontSize: '0.75rem',
-                                    fontWeight: 600
-                                }}>
-                                    Produit: {contact.propertyTitle}
+                                <span className="badge-soft-orange" style={{ marginLeft: '8px' }}>
+                                    {contact.propertyTitle}
                                 </span>
                             )}
                         </p>
@@ -531,15 +504,17 @@ const ContactDetail = () => {
                             <button 
                                 className={`tab ${activeTab === 'history' ? 'active' : ''}`}
                                 onClick={() => setActiveTab('history')}
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                             >
-                                <ClipboardList size={16} className="mr-2" style={{ verticalAlign: 'middle', marginTop: -2 }} />
+                                <ClipboardList size={16} />
                                 Historique des interactions
                             </button>
                             <button 
                                 className={`tab ${activeTab === 'documents' ? 'active' : ''}`}
                                 onClick={() => setActiveTab('documents')}
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                             >
-                                <Folder size={16} className="mr-2" style={{ verticalAlign: 'middle', marginTop: -2 }} />
+                                <Folder size={16} />
                                 Documents & Contrats
                             </button>
                         </div>
@@ -561,66 +536,64 @@ const ContactDetail = () => {
                                         unifiedHistory.map((item) => {
                                             const config = INTERACTION_CONFIG[item.type];
                                             const Icon = config.icon;
+                                            const isReschedulable = item.category === 'visit' && item.statut !== 'completed';
+
                                             return (
-                                                <div key={item.id} className={`timeline-item ${item.statut}`}>
-                                                    <div className="timeline-marker">
-                                                        <div className="timeline-icon" style={{ backgroundColor: config.color + '20', color: config.color }}>
-                                                            <Icon size={16} />
-                                                        </div>
+                                                <div key={item.id} className="timeline-item-premium">
+                                                    <div className="timeline-marker-v2" style={{ backgroundColor: config.color + '20', color: config.color }}>
+                                                        <Icon size={14} />
                                                     </div>
-                                                    <div className="timeline-content">
+                                                    <div className="timeline-card-v2">
                                                         <div className="timeline-header">
                                                             <strong>{item.title}</strong>
-                                                            {item.category === 'visit' && item.statut !== 'completed' && (
-                                                                <button 
-                                                                    style={{ fontSize: '0.7rem', color: '#10b981', cursor: 'pointer', background: 'none', border: '1px solid #10b981', borderRadius: '4px', padding: '1px 6px' }} 
-                                                                    onClick={() => markVisitDone(Number(item.id))}
-                                                                >
-                                                                    ✓ Réalisé
-                                                                </button>
-                                                            )}
-                                                            {item.category === 'visit' && item.statut === 'completed' && (
-                                                                <CheckCircle2 size={14} className="text-success" />
-                                                            )}
-                                                        </div>
-                                                        <div className="timeline-meta">
-                                                            <span><Clock size={12} /> {item.date} à {item.heure}</span>
-                                                            {item.lieu && <span><MapPin size={12} /> {item.lieu}</span>}
-                                                            <span><User size={12} /> Commercial : {item.agent}</span>
-                                                            {item.technician && <span><HardHat size={12} /> Expert Tech : {item.technician}</span>}
-                                                        </div>
-                                                        {item.description && <p className="timeline-desc">{item.description}</p>}
-                                                            <div className="d-flex gap-sm mt-5">
-                                                                <button 
-                                                                    className="btn-action-edit"
-                                                                    onClick={() => handleEditItem(item)}
-                                                                >
-                                                                    <Edit2 size={12} />
-                                                                    Modifier
-                                                                </button>
+                                                            <div className="d-flex align-center gap-xs">
                                                                 {item.category === 'visit' && item.statut !== 'completed' && (
                                                                     <button 
-                                                                        className="btn-action-edit"
-                                                                        style={{ color: 'var(--primary)', borderColor: 'var(--primary)' }}
-                                                                        onClick={() => {
-                                                                            // Direct navigate to Relances or open a specific reporter modal?
-                                                                            // The user asked to "maittez la possibilité de repoter un rendez ou u visite aussi"
-                                                                            // For now, "Modifier" already allows reporting, but I can add a dedicated button
-                                                                            // that specifically targets the date/time fields.
-                                                                            handleEditItem(item);
-                                                                        }}
+                                                                        className="btn-soft-success btn-xs"
+                                                                        style={{ fontSize: '0.65rem', padding: '2px 8px' }}
+                                                                        onClick={() => markVisitDone(Number(item.id))}
                                                                     >
-                                                                        <ChevronDown size={12} />
-                                                                        Reporter
+                                                                        Terminer
                                                                     </button>
                                                                 )}
-                                                                <button 
-                                                                    className="btn-action-delete"
-                                                                    onClick={() => handleDeleteItem(item)}
-                                                                >
-                                                                    <Trash2 size={12} />
-                                                                </button>
+                                                                {item.category === 'visit' && item.statut === 'completed' && (
+                                                                    <span className="text-success d-flex align-center gap-xs" style={{ fontSize: '0.7rem', fontWeight: 600 }}>
+                                                                        <CheckCircle2 size={12} /> Effectué
+                                                                    </span>
+                                                                )}
                                                             </div>
+                                                        </div>
+                                                        
+                                                        <div className="timeline-meta-v2">
+                                                            <span><Clock size={12} /> {item.date} à {item.heure}</span>
+                                                            {item.lieu && <span><MapPin size={12} /> {item.lieu}</span>}
+                                                            <span><User size={12} /> {item.agent}</span>
+                                                            {item.technician && <span><HardHat size={12} /> {item.technician}</span>}
+                                                        </div>
+
+                                                        {item.description && <p className="timeline-desc">{item.description}</p>}
+
+                                                        <div className="d-flex-between mt-10">
+                                                            <div className="d-flex gap-sm">
+                                                                <button className="btn-ghost btn-xs" onClick={() => handleEditItem(item)}>
+                                                                    <Edit2 size={12} /> Modifier
+                                                                </button>
+                                                                {isReschedulable && (
+                                                                    <button 
+                                                                        className="btn-ghost btn-xs text-primary" 
+                                                                        onClick={() => handleEditItem(item)}
+                                                                    >
+                                                                        <Calendar size={12} /> Reporter
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                            <button 
+                                                                className="btn-ghost btn-xs text-danger"
+                                                                onClick={() => handleDeleteItem(item)}
+                                                            >
+                                                                <Trash2 size={12} />
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             );

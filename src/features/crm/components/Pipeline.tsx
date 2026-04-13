@@ -245,31 +245,22 @@ const Pipeline = () => {
 
     return (
         <div className="pipeline-page">
-            <div className="page-header d-flex-between" style={{ marginBottom: '1rem' }}>
+            <div className="page-header d-flex-between">
                 <div>
-                    <h1 style={{ fontSize: '1.5rem', marginBottom: '4px' }}>Pipeline Commercial</h1>
-                    <p className="subtitle" style={{ fontSize: '0.813rem' }}>
-                        {search ? `${filteredTotal} résultat(s) sur ${totalCards}` : `${totalCards} dossiers actifs`}
-                        {' · '}Suivre les prospects par étapes
-                    </p>
+                    <h1>Pipeline Commercial</h1>
+                    <p className="subtitle">Suivi visuel du cycle de vente ({filteredTotal} prospects)</p>
                 </div>
-            </div>
-
-            {/* ── Barre de recherche ── */}
-            <div className="card-premium" style={{ padding: '0.5rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <Search size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                <input
-                    type="text"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    placeholder="Chercher par nom, téléphone, service..."
-                    style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: '0.813rem', color: 'var(--text-main)' }}
-                />
-                {search && (
-                    <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
-                        <X size={14} />
-                    </button>
-                )}
+                <div className="d-flex gap-2">
+                    <div className="search-box">
+                        <Search size={18} className="text-muted" />
+                        <input 
+                            type="text" 
+                            placeholder="Rechercher..." 
+                            value={search} 
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                    </div>
+                </div>
             </div>
 
 

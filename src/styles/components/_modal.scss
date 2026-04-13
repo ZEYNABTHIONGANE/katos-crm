@@ -1,181 +1,96 @@
-/* Modal.css */
+@use 'sass:color';
+@use '../abstracts/variables' as *;
+// -----------------------------------------------------------------------------
+// Modal Style System
+// -----------------------------------------------------------------------------
 
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(15, 23, 42, 0.55);
-    backdrop-filter: blur(4px);
-    z-index: 1000;
+    background: color.change($clr-bg-sidebar, $alpha: 0.4);
+    backdrop-filter: blur(8px);
+    z-index: $z-modal;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 1.5rem;
-    animation: overlayIn 0.2s ease;
-}
-
-@keyframes overlayIn {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
-    }
+    padding: $space-6;
+    animation: fadeIn $trans-base;
 }
 
 .modal-container {
     background: var(--bg-card);
-    border-radius: var(--radius-lg);
-    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+    border-radius: $radius-xl;
+    box-shadow: $shadow-xl;
     display: flex;
     flex-direction: column;
     max-height: 90vh;
     width: 100%;
-    animation: modalIn 0.25s ease;
+    animation: modalIn $trans-base;
     overflow: hidden;
+    border: 1px solid color.change($clr-white, $alpha: 0.5);
 }
 
 @keyframes modalIn {
     from {
         opacity: 0;
-        transform: translateY(20px) scale(0.97);
+        transform: translateY(30px) scale(0.95);
     }
-
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
     }
 }
 
-.modal-sm {
-    max-width: 420px;
-}
-
-.modal-md {
-    max-width: 560px;
-}
-
-.modal-lg {
-    max-width: 740px;
-}
+.modal-sm { max-width: 440px; }
+.modal-md { max-width: 600px; }
+.modal-lg { max-width: 800px; }
+.modal-xl { max-width: 1100px; }
 
 .modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1.5rem 1.75rem;
+    padding: $space-6 $space-8;
     border-bottom: 1px solid var(--border-color);
-    background: linear-gradient(to right, var(--primary-light), transparent);
+    background: linear-gradient(to right, color.change($clr-primary, $alpha: 0.02), transparent);
 }
 
 .modal-title {
-    font-size: 1.125rem;
-    font-weight: 700;
+    font-size: $text-xl;
+    font-weight: 800;
     color: var(--text-main);
     margin: 0;
+    letter-spacing: -0.02em;
 }
 
 .modal-close {
-    background: var(--bg-app);
+    background: $clr-grey-100;
     color: var(--text-muted);
-    border: 1px solid var(--border-color);
-    width: 34px;
-    height: 34px;
-    border-radius: var(--radius-full);
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: $radius-full;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s;
-}
+    transition: all $trans-base;
 
-.modal-close:hover {
-    background: var(--danger);
-    color: white;
-    border-color: var(--danger);
+    &:hover {
+        background: $clr-danger;
+        color: white;
+        transform: rotate(90deg);
+    }
 }
 
 .modal-body {
-    padding: 1.75rem;
+    padding: $space-8;
     overflow-y: auto;
     flex: 1;
-}
-
-/* ---- Styles des formulaires dans les modales ---- */
-.form-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-}
-
-.form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-}
-
-.form-group.col-2 {
-    grid-column: span 2;
-}
-
-.form-label {
-    font-size: 0.813rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.form-input,
-.form-select,
-.form-textarea {
-    padding: 0.6rem 0.875rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    font-size: 0.875rem;
-    font-family: inherit;
-    color: var(--text-main);
-    background: var(--bg-app);
-    transition: all 0.2s;
-    width: 100%;
-    outline: none;
-}
-
-.form-input:focus,
-.form-select:focus,
-.form-textarea:focus {
-    border-color: var(--secondary);
-    box-shadow: 0 0 0 3px rgba(233, 108, 46, 0.15);
-    background: var(--bg-card);
-}
-
-.form-textarea {
-    resize: vertical;
-    min-height: 90px;
-}
-
-.form-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-    margin-top: 1.5rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--border-color);
-}
-
-.btn-secondary {
-    background: var(--bg-app);
-    color: var(--text-muted);
-    border: 1px solid var(--border-color);
-    padding: 0.6rem 1.25rem;
-    border-radius: var(--radius-md);
-    font-weight: 500;
-    cursor: pointer;
-    font-family: inherit;
-    transition: all 0.2s;
-}
-
-.btn-secondary:hover {
-    background: var(--border-color);
-    color: var(--text-main);
+    
+    // Custom scrollbar for modal body
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+    &::-webkit-scrollbar { width: 6px; }
+    &::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 10px; }
 }

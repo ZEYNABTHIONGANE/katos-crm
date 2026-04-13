@@ -3,28 +3,6 @@
 .real-estate-page {
     animation: fadeIn 0.5s ease-out;
     padding-bottom: 2rem;
-
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-        margin-bottom: 2rem;
-
-        h1 {
-            font-size: var(--text-4xl);
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 0.25rem;
-
-        }
-
-        .subtitle {
-            color: var(--text-muted);
-            font-weight: 500;
-        }
-    }
 }
 
 .filters-bar {

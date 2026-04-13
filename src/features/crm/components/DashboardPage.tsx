@@ -302,9 +302,18 @@ const Dashboard = () => {
                 { label: 'Ventes Globales', value: statsData.salesCount, change: '+10%', positive: true, icon: <LayoutDashboard size={22} />, gradient: 'grad-purple' },
                 { 
                     label: "Délai (Record)", 
-                    value: `${statsData.avgProcessingTime}j (Rec: ${statsData.recordProcessingTime.days}j)`, 
+                    value: (
+                        <>
+                            {statsData.avgProcessingTime}
+                            <span style={{ fontSize: '0.65em', opacity: 0.85, fontWeight: 600 }}>j</span>
+                            <span style={{ fontSize: '0.5em', opacity: 0.7, fontWeight: 500, marginLeft: '6px' }}>
+                                (Rec: {statsData.recordProcessingTime.days}j)
+                            </span>
+                        </>
+                    ), 
                     change: `Par: ${statsData.recordProcessingTime.holder}`, 
                     positive: true, 
+                    hideArrow: true,
                     icon: <Clock size={22} />, 
                     gradient: 'grad-blue' 
                 },
@@ -313,8 +322,21 @@ const Dashboard = () => {
 
         return [
             ...base,
-            { label: 'Mes Ventes', value: statsData.salesCount, change: 'Objectif 10', positive: statsData.salesCount >= 10, icon: <LayoutDashboard size={22} />, gradient: 'grad-green' },
-            { label: "Performance", value: `${Math.round((statsData.salesCount / 10) * 100)}%`, change: 'Score', positive: true, icon: <TrendingUp size={22} />, gradient: 'grad-purple' },
+            { label: 'Mes Ventes', value: statsData.salesCount, change: 'Objectif 10', positive: statsData.salesCount >= 10, hideArrow: true, icon: <LayoutDashboard size={22} />, gradient: 'grad-green' },
+            { 
+                label: "Performance", 
+                value: (
+                    <>
+                        {Math.round((statsData.salesCount / 10) * 100)}
+                        <span style={{ fontSize: '0.65em', opacity: 0.85, fontWeight: 600 }}>%</span>
+                    </>
+                ), 
+                change: 'Score', 
+                positive: true, 
+                hideArrow: true, 
+                icon: <TrendingUp size={22} />, 
+                gradient: 'grad-purple' 
+            },
         ];
     };
 
@@ -466,7 +488,8 @@ const Dashboard = () => {
                                 <span className="stat-label-v2">{s.label}</span>
                                 <span className="stat-value-v2">{s.value}</span>
                                 <span className={`stat-change ${s.positive ? 'pos' : 'neg'}`}>
-                                    {s.positive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                                    {/* @ts-ignore */}
+                                    {!s.hideArrow && (s.positive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />)}
                                     {s.change}
                                 </span>
                             </div>
@@ -475,7 +498,7 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            <div className="combo-block card-premium">
+            <div className="combo-block card-premium mt-6">
                 <div className="combo-left">
                     <div className="combo-section-header">
                         <div>
@@ -539,10 +562,7 @@ const Dashboard = () => {
                                             {agent.deals} ventes · {agent.touchpoints} RDV/Visites
                                         </span>
                                     </div>
-                                    <div className="agent-rating" style={{ 
-                                        background: agent.conversionRate > 20 ? '#059669' : '#6366F1', 
-                                        color: 'white', padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700 
-                                    }}>
+                                    <div className={`lead-score-badge ${agent.conversionRate >= 20 ? 'score-hot' : 'score-cold'}`} style={{ borderRadius: '12px', padding: '4px 12px' }}>
                                         {agent.conversionRate}% Conv.
                                     </div>
                                 </div>
