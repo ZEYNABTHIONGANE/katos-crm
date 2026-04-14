@@ -17,14 +17,21 @@ $clr-accent-s: 82%;
 $clr-accent-l: 54%; // #E96C2E equivalent
 
 $clr-accent: hsl($clr-accent-h, $clr-accent-s, $clr-accent-l);
+$clr-secondary: $clr-accent; // Alias for consistency
 $clr-accent-light: hsl($clr-accent-h, $clr-accent-s, 90%);
 $clr-accent-hover: hsl($clr-accent-h, $clr-accent-s, 45%);
 
-// System Colors
+// System Colors (Semantic)
 $clr-success: #10b981;
 $clr-warning: #f59e0b;
 $clr-danger: #ef4444;
 $clr-info: #3b82f6;
+
+// Semantic HSL (For opacity logic)
+$clr-success-h: 161; $clr-success-s: 84%; $clr-success-l: 39%;
+$clr-warning-h: 38;  $clr-warning-s: 92%; $clr-warning-l: 50%;
+$clr-danger-h: 0;    $clr-danger-s: 84%;  $clr-danger-l: 60%;
+$clr-info-h: 217;    $clr-info-s: 91%;    $clr-info-l: 60%;
 
 // Neutral Colors
 $clr-white: #ffffff;

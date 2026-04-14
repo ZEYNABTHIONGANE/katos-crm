@@ -2,30 +2,21 @@
 @use '../abstracts/mixins' as *;
 
 .document-manager {
-    padding: 1.5rem;
-    background: rgba(255, 255, 255, 0.4);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-md);
+    padding: $space-6;
+    @include glass(0.4, 10px);
+    border-radius: $radius-lg;
+    box-shadow: $shadow-md;
 
     .document-list {
         display: grid;
-        gap: 1rem;
-        margin-top: 1.5rem;
+        gap: $space-4;
+        margin-top: $space-6;
     }
 
     .document-card {
-        background: white;
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-md);
-        padding: 1rem;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        position: relative;
-        overflow: hidden;
+        @include premium-card(true, $space-4);
+        @include flex-between;
+        gap: $space-4;
 
         &::before {
             content: '';
@@ -36,12 +27,10 @@
             width: 4px;
             background: var(--primary);
             opacity: 0;
-            transition: opacity 0.3s ease;
+            transition: opacity $trans-base;
         }
 
         &:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
             border-color: var(--primary-light);
 
             &::before {
@@ -52,34 +41,31 @@
         .doc-icon {
             width: 48px;
             height: 48px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            @include flex-center;
             background: var(--bg-card);
-            border-radius: var(--radius-sm);
+            border-radius: $radius-sm;
             color: var(--primary);
-            transition: background 0.3s ease;
+            transition: background $trans-base;
         }
 
         .doc-info {
             flex: 1;
-            margin-left: 1rem;
 
             .doc-name {
                 font-weight: 700;
-                font-size: var(--text-sm);
+                font-size: $text-sm;
                 color: var(--text-main);
-                margin-bottom: 0.25rem;
-                display: flex;
-                align-items: center;
-                gap: 0.5rem;
+                margin-bottom: $space-1;
+                @include flex-between;
+                justify-content: flex-start;
+                gap: $space-2;
 
                 .version-tag {
                     font-size: 10px;
                     background: var(--bg-app);
                     color: var(--text-muted);
                     padding: 2px 6px;
-                    border-radius: var(--radius-full);
+                    border-radius: $radius-full;
                     font-weight: 500;
                 }
             }
@@ -87,14 +73,14 @@
             .doc-meta {
                 display: flex;
                 align-items: center;
-                gap: 0.75rem;
+                gap: $space-3;
 
                 .type-badge {
                     font-size: 10px;
                     font-weight: 800;
                     text-transform: uppercase;
                     padding: 2px 8px;
-                    border-radius: var(--radius-full);
+                    border-radius: $radius-full;
                     letter-spacing: 0.05em;
                 }
 

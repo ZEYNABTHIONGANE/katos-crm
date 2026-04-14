@@ -1,5 +1,7 @@
 @use 'sass:color';
 @use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
 /* En-tête de page */
 .real-estate-page {
     animation: fadeIn 0.4s ease-out;
@@ -9,35 +11,26 @@
 .property-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 1.5rem;
-    margin-top: 2rem;
+    gap: $space-6;
+    margin-top: $space-8;
 }
 
 .property-list {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
-    margin-top: 2rem;
+    gap: $space-4;
+    margin-top: $space-8;
 }
 
 /* Item de liste de propriété Premium (Alternative à la carte) */
 .property-list-item {
-    background: var(--bg-card);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border-color);
-    padding: 1rem 1.5rem;
-    display: flex;
-    align-items: center;
-    gap: 2rem;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    cursor: pointer;
-    box-shadow: var(--shadow-sm);
+    @include premium-card(true, $space-4 $space-6);
+    @include flex-between;
+    gap: $space-8;
 
     &:hover {
         transform: translateX(4px);
-        box-shadow: var(--shadow-md);
         border-color: var(--primary-light);
-        background: var(--bg-app);
     }
 
     .item-icon {
@@ -144,18 +137,10 @@
 
 /* Carte de propriété Premium */
 .property-card {
-    background: var(--bg-card);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border-color);
-    overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    display: flex;
-    flex-direction: column;
-    box-shadow: var(--shadow-sm);
+    @include premium-card(true, 0);
+    @include flex-column;
 
     &:hover {
-        transform: translateY(-6px);
-        box-shadow: var(--shadow-xl);
         border-color: var(--primary-light);
 
         .property-card-actions {
@@ -338,15 +323,15 @@
 }
 
 .property-card-price {
-    font-size: 1.1rem;
+    font-size: $text-lg;
     font-weight: 800;
     color: var(--primary);
     
     small {
-        font-size: 0.65rem;
+        font-size: $text-xs;
         color: var(--text-muted);
         font-weight: 600;
-        margin-left: 0.25rem;
+        margin-left: $space-1;
     }
 }
 

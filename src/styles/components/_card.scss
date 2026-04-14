@@ -1,79 +1,63 @@
 @use 'sass:color';
 @use '../abstracts/variables' as *;
-/* Global Property Card Styles */
+@use '../abstracts/mixins' as *;
+
+/* Global Card Styles */
 
 .property-card {
-    background: var(--bg-card);
+    @include premium-card(true, 0);
     border-radius: $radius-lg;
-    overflow: hidden;
-    border: 1px solid var(--border-color);
-    transition: all $trans-base;
-    cursor: pointer;
     display: flex;
     flex-direction: column;
-    box-shadow: $shadow-sm;
     height: 100%;
-    position: relative;
 
     &:hover {
-        transform: translateY(-8px);
-        box-shadow: $shadow-premium;
         border-color: rgba($clr-primary, 0.15);
-
         .property-image img {
-            transform: scale(1.1);
+            transform: scale(1.05);
         }
     }
 
     /* Compact Image Area */
     .property-image,
     .property-image-placeholder {
-        height: 160px;
+        height: 180px;
         position: relative;
         overflow: hidden;
-        background: $clr-grey-100;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        background: var(--bg-app);
+        @include flex-center;
 
         img {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            transition: transform 0.5s ease;
+            transition: transform $trans-slow;
         }
     }
 
     /* Service Themes */
     &.card-foncier {
-        border-color: rgba($clr-success, 0.1);
-        &:hover { border-color: $clr-success; }
-        .property-price-tag, .price-tag { color: color.adjust($clr-success, $lightness: -10%); }
-        .details-btn { color: color.adjust($clr-success, $lightness: -10%); }
-        .property-badge { background: $clr-success; }
+        &:hover { border-color: var(--success); }
+        .property-price-tag, .price-tag { color: var(--success); }
+        .property-badge { background: var(--success); }
     }
 
     &.card-construction {
-        border-color: rgba($clr-warning, 0.1);
-        &:hover { border-color: $clr-warning; }
-        .property-price-tag, .price-tag { color: color.adjust($clr-warning, $lightness: -10%); }
-        .details-btn { color: color.adjust($clr-warning, $lightness: -10%); }
-        .property-badge { background: $clr-warning; }
+        &:hover { border-color: var(--warning); }
+        .property-price-tag, .price-tag { color: var(--warning); }
+        .property-badge { background: var(--warning); }
     }
 
     &.card-gestion {
-        border-color: rgba($clr-info, 0.1);
-        &:hover { border-color: $clr-info; }
-        .property-price-tag, .price-tag { color: color.adjust($clr-info, $lightness: -10%); }
-        .details-btn { color: color.adjust($clr-info, $lightness: -10%); }
-        .property-badge { background: $clr-info; }
+        &:hover { border-color: var(--info); }
+        .property-price-tag, .price-tag { color: var(--info); }
+        .property-badge { background: var(--info); }
     }
 
     .property-content {
-        padding: $space-4;
+        padding: $space-5;
         flex: 1;
-        display: flex;
-        flex-direction: column;
+        @include flex-column;
 
         .property-title {
             font-size: $text-base;
@@ -81,11 +65,7 @@
             color: var(--text-main);
             margin-bottom: $space-2;
             line-height: 1.4;
-            display: -webkit-box;
-            -webkit-line-clamp: 1;
-            line-clamp: 1;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
+            @include line-clamp(1);
         }
 
         .property-info-row,
@@ -98,17 +78,17 @@
             margin-bottom: $space-1;
 
             svg {
-                opacity: 0.6;
+                opacity: 0.7;
+                width: 16px;
+                height: 16px;
             }
         }
 
         .property-price-row,
         .property-price-tag {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            @include flex-between;
             margin-top: auto;
-            padding-top: $space-3;
+            padding-top: $space-4;
             border-top: 1px solid var(--border-color);
             font-weight: 800;
             font-size: $text-lg;
@@ -124,7 +104,7 @@
         .agent-tag,
         .agent-name {
             background: var(--bg-app);
-            padding: 0.2rem 0.6rem;
+            padding: $space-1 $space-3;
             border-radius: $radius-xs;
             font-weight: 600;
             font-size: $text-xs;
@@ -137,9 +117,9 @@
     .property-badge,
     .property-status-badge {
         position: absolute;
-        top: $space-3;
-        right: $space-3;
-        padding: 0.35rem 0.75rem;
+        top: $space-4;
+        right: $space-4;
+        padding: $space-1 $space-3;
         border-radius: $radius-full;
         font-size: $text-xs;
         font-weight: 700;
@@ -150,15 +130,8 @@
 }
 
 .card-premium {
-    background: var(--bg-card);
-    border-radius: $radius-lg;
-    border: 1px solid var(--border-color);
-    box-shadow: $shadow-sm;
-    padding: $space-6;
-    transition: all $trans-base;
-    position: relative;
-    overflow: hidden;
-
+    @include premium-card(true, $space-6);
+    
     &::before {
         content: '';
         position: absolute;
@@ -168,10 +141,6 @@
         height: 100%;
         background: radial-gradient(circle at top right, rgba($clr-primary, 0.03), transparent 70%);
         pointer-events: none;
-    }
-
-    &:hover {
-        box-shadow: $shadow-premium;
     }
 }
 

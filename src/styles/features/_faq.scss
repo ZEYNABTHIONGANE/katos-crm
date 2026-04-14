@@ -1,85 +1,85 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
 .faq-page-container {
     max-width: 1000px;
     margin: 0 auto;
-    padding: 30px;
+    padding: $space-8;
     animation: fadeIn 0.4s ease-out;
 }
 
 .faq-search-wrapper {
-    background: white;
-    border-radius: 20px;
-    padding: 2.5rem;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-    border: 1px solid rgba(0, 0, 0, 0.03);
+    @include premium-card(false, $space-10);
+    backdrop-filter: blur(10px);
 
     .search-box {
         position: relative;
-        display: flex;
-        align-items: center;
-        background: #f8fafc;
-        border-radius: 16px;
-        padding: 4px 12px;
+        @include flex-center;
+        background: var(--bg-app);
+        border-radius: $radius-md;
+        padding: 4px $space-3;
         border: 2px solid transparent;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: all $trans-base;
 
         .search-icon {
-            color: #94a3b8;
-            margin-left: 8px;
+            color: var(--text-muted);
+            margin-left: $space-2;
         }
 
         input {
             width: 100%;
             border: none;
             background: transparent;
-            padding: 16px;
-            font-size: 1.1rem;
-            color: #2B2E83;
+            padding: $space-4;
+            font-size: $text-lg;
+            color: var(--primary);
             outline: none;
             font-weight: 500;
 
             &::placeholder {
-                color: #cbd5e1;
+                color: var(--text-muted);
+                opacity: 0.5;
             }
         }
 
         &:focus-within {
-            border-color: #2B2E83;
-            background: white;
-            box-shadow: 0 0 0 4px rgba(43, 46, 131, 0.1);
+            border-color: var(--primary);
+            background: var(--bg-card);
+            box-shadow: 0 0 0 4px rgba($clr-primary, 0.1);
             transform: translateY(-2px);
         }
     }
 
     .category-tabs {
         display: flex;
-        gap: 12px;
+        gap: $space-3;
         flex-wrap: wrap;
-        margin-top: 1.5rem;
+        margin-top: $space-6;
 
         .cat-tab {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 20px;
-            border-radius: 12px;
-            font-size: 0.9rem;
+            @include flex-center;
+            gap: $space-2;
+            padding: $space-2 $space-5;
+            border-radius: $radius-md;
+            font-size: $text-sm;
             font-weight: 700;
-            background: #f1f5f9;
-            color: #64748b;
+            background: var(--bg-app);
+            color: var(--text-muted);
             border: none;
             cursor: pointer;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all $trans-fast;
 
             &:hover {
-                background: #e2e8f0;
-                color: #2B2E83;
+                background: var(--bg-card);
+                color: var(--primary);
                 transform: translateY(-1px);
+                box-shadow: $shadow-sm;
             }
 
             &.active {
-                background: #2B2E83;
+                background: var(--primary);
                 color: white;
-                box-shadow: 0 4px 12px rgba(43, 46, 131, 0.25);
+                box-shadow: 0 4px 12px rgba($clr-primary, 0.25);
             }
         }
     }
@@ -88,25 +88,20 @@
 .faq-list {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: $space-4;
 
     .faq-item-card {
-        background: white;
-        border-radius: 16px;
-        border: 1px solid #f1f5f9;
-        overflow: hidden;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        @include premium-card(true, 0);
+        border-radius: $radius-md;
         cursor: pointer;
 
         &:hover {
-            border-color: #e2e8f0;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
             transform: translateX(4px);
         }
 
         &.open {
-            border-color: #2B2E83;
-            box-shadow: 0 8px 30px rgba(43, 46, 131, 0.08);
+            border-color: var(--primary);
+            box-shadow: 0 8px 30px rgba($clr-primary, 0.08);
             transform: translateX(0);
         }
 
