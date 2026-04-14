@@ -1,9 +1,9 @@
-/* En-tête de page */
+/* En-tÃªte de page */
 .real-estate-page {
     animation: fadeIn 0.4s ease-out;
 }
 
-/* Grille ou Liste de propriétés */
+/* Grille ou Liste de propriÃ©tÃ©s */
 .property-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -18,7 +18,7 @@
     margin-top: 2rem;
 }
 
-/* Item de liste de propriété Premium (Alternative à la carte) */
+/* Item de liste de propriÃ©tÃ© Premium (Alternative Ã  la carte) */
 .property-list-item {
     background: var(--bg-card);
     border-radius: var(--radius-lg);
@@ -140,7 +140,7 @@
     }
 }
 
-/* Carte de propriété Premium */
+/* Carte de propriÃ©tÃ© Premium */
 .property-card {
     background: var(--bg-card);
     border-radius: var(--radius-lg);
@@ -346,7 +346,7 @@
     gap: 1.5rem;
 }
 
-/* Bulles décoratives animées */
+/* Bulles dÃ©coratives animÃ©es */
 .hero-orb {
     position: absolute;
     border-radius: 50%;
@@ -420,7 +420,7 @@
     z-index: 2;
 }
 
-/* ---- En-tête ---- */
+/* ---- En-tÃªte ---- */
 .dash-header {
     display: flex;
     justify-content: space-between;
@@ -1612,7 +1612,7 @@
     transform: translateX(2px);
 }
 
-/* ---- Résumé rapide ---- */
+/* ---- RÃ©sumÃ© rapide ---- */
 .pipeline-summary {
     display: flex;
     gap: 1rem;
@@ -2162,7 +2162,7 @@
     margin-top: 0.25rem;
 }
 
-/* ---- Côté droit ---- */
+/* ---- CÃ´tÃ© droit ---- */
 .visite-side {
     display: flex;
     flex-direction: column;
@@ -2332,7 +2332,7 @@
     gap: 0;
 }
 
-/* ---- Séparateur de date ---- */
+/* ---- SÃ©parateur de date ---- */
 .timeline-date-header {
     display: flex;
     align-items: center;
@@ -2352,7 +2352,7 @@
     border-radius: var(--radius-full);
 }
 
-/* ---- Entrée de timeline ---- */
+/* ---- EntrÃ©e de timeline ---- */
 .timeline-entry {
     display: flex;
     align-items: flex-start;
@@ -2372,7 +2372,7 @@
     z-index: 0;
 }
 
-/* Icône de type */
+/* IcÃ´ne de type */
 .te-icon {
     width: 40px;
     height: 40px;
@@ -2465,7 +2465,7 @@
     white-space: nowrap;
 }
 
-/* ---- Entrée expansible ---- */
+/* ---- EntrÃ©e expansible ---- */
 .te-chevron {
     position: absolute;
     right: 1rem;
@@ -2848,7 +2848,7 @@
     gap: 0.25rem;
 }
 
-/* ---- Priorité ---- */
+/* ---- PrioritÃ© ---- */
 .prio {
     font-size: 0.75rem;
     font-weight: 600;
@@ -3319,7 +3319,7 @@
     }
 }
 
-/* CSS à ajouter à la fin de ContactsList.css */
+/* CSS Ã  ajouter Ã  la fin de ContactsList.css */
 
 /* ---- Action Menu Dropdown ---- */
 .action-menu-wrap {
@@ -3759,5 +3759,155 @@
         color: #2B2E83 !important; /* var(--primary) fallback */
         text-decoration: underline;
         opacity: 0.8;
+    }
+}
+
+/* User Management Styles */
+.agent-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 10px 5px;
+
+    .form-section {
+        background: var(--bg-app);
+        padding: 1.25rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-color);
+
+        h4 {
+            margin-bottom: 1.25rem;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.75rem;
+        }
+    }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.25rem;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+
+        label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        input, select, textarea {
+            padding: 0.75rem;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-main);
+            font-size: 0.9rem;
+            transition: all 0.2s;
+
+            &:focus {
+                outline: none;
+                border-color: var(--primary);
+                box-shadow: 0 0 0 3px rgba(43, 46, 131, 0.1);
+            }
+        }
+    }
+
+    .input-with-icon {
+        position: relative;
+        display: flex;
+        align-items: center;
+
+        svg {
+            position: absolute;
+            left: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        input {
+            padding-left: 2.5rem;
+            width: 100%;
+        }
+    }
+
+    .alert-info-sm {
+        background: rgba(43, 46, 131, 0.05);
+        border: 1px solid rgba(43, 46, 131, 0.1);
+        padding: 10px 15px;
+        border-radius: var(--radius-sm);
+        font-size: 0.825rem;
+        color: var(--text-muted);
+        line-height: 1.4;
+    }
+
+    .form-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        margin-top: 0.5rem;
+    }
+}
+
+.agent-card {
+    position: relative;
+    
+    .btn-icon-sm {
+        position: absolute;
+        top: 1rem;
+        right: 3.5rem; /* Ajusté pour ne pas chevaucher le badge de performance */
+        opacity: 0.4;
+        transition: opacity 0.2s;
+        
+        &:hover {
+            opacity: 1;
+        }
+    }
+
+    &:hover .btn-icon-sm {
+        opacity: 0.8;
+    }
+}
+
+@media (max-width: 600px) {
+    .agent-form {
+        .form-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+}
+
+.btn-danger-outline {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    background: transparent;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover:not(:disabled) {
+        background: rgba(239, 68, 68, 0.05);
+        transform: translateY(-1px);
+    }
+    
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
     }
 }

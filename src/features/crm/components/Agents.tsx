@@ -2,9 +2,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { Users, TrendingUp, Target, Award, Star, Mail, Phone, Search, Upload } from 'lucide-react';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { fetchCommercials, bulkInsertProfiles, type ProfileRow } from '../api/contactApi';
+import { manageAgentAccount, fetchPotentialManagers, deleteAgentAccount, type AgentData } from '../api/usersApi';
 import { useContactStore } from '@/stores/contactStore';
 import Modal from '@/components/ui/Modal';
 import { useToast } from '@/app/providers/ToastProvider';
+import { Edit2, Plus, UserPlus, Shield, Briefcase, Lock, User, Trash2 } from 'lucide-react';
 
 const getAgentColor = (name: string) => {
     const colors = [
@@ -38,6 +40,24 @@ const Agents = () => {
     const [showImportModal, setShowImportModal] = useState(false);
     const [importData, setImportData] = useState<ProfileRow[]>([]);
     const [isImporting, setIsImporting] = useState(false);
+
+    // User Management state
+    const [showAgentModal, setShowAgentModal] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [potentialManagers, setPotentialManagers] = useState<{ id: string, name: string, role: string }[]>([]);
+    
+    const [formData, setFormData] = useState<AgentData>({
+        name: '',
+        email: '',
+        password: '',
+        role: 'commercial',
+        service: 'foncier',
+        parent_id: '',
+        group_name: '',
+        phone: ''
+    });
 
     const loadAgents = async () => {
         setLoading(true);
@@ -146,6 +166,84 @@ const Agents = () => {
             setIsImporting(false);
         }
     };
+
+    const handleOpenCreateModal = () => {
+        setIsEditing(false);
+        setSelectedAgentId(null);
+        setFormData({
+            name: '',
+            email: '',
+            password: '',
+            role: 'commercial',
+            service: 'foncier',
+            parent_id: '',
+            group_name: '',
+            phone: ''
+        });
+        setShowAgentModal(true);
+    };
+
+    const handleOpenEditModal = (agent: any) => {
+        setIsEditing(true);
+        setSelectedAgentId(agent.id);
+        setFormData({
+            id: agent.id,
+            name: agent.name,
+            email: agent.email || '',
+            password: '', // On ne pré-remplit pas le mot de passe
+            role: agent.role as any,
+            service: agent.service as any,
+            parent_id: agent.parent_id || '',
+            group_name: agent.group_name || '',
+            phone: agent.phone || ''
+        });
+        setShowAgentModal(true);
+    };
+
+    const handleFormSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        try {
+            const action = isEditing ? 'update' : 'create';
+            await manageAgentAccount(action, formData);
+            showToast(isEditing ? 'Agent mis à jour avec succès' : 'Agent créé avec succès');
+            setShowAgentModal(false);
+            await loadAgents();
+        } catch (err: any) {
+            console.error(err);
+            showToast(err.message || 'Erreur lors de l\'opération', 'error');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleDeleteAgent = async () => {
+        if (!selectedAgentId) return;
+        if (!window.confirm("Êtes-vous sûr de vouloir supprimer ce collaborateur ? Cette action est irréversible et supprimera également son compte d'authentification.")) return;
+        
+        setIsSubmitting(true);
+        try {
+            await deleteAgentAccount(selectedAgentId);
+            showToast('Agent supprimé avec succès');
+            setShowAgentModal(false);
+            await loadAgents();
+        } catch (err: any) {
+            console.error(err);
+            showToast(err.message || 'Erreur lors de la suppression', 'error');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    useEffect(() => {
+        const updateManagers = async () => {
+            if (formData.role) {
+                const managers = await fetchPotentialManagers(formData.role as any);
+                setPotentialManagers(managers);
+            }
+        };
+        updateManagers();
+    }, [formData.role]);
 
     useEffect(() => {
         loadAgents();
@@ -267,9 +365,14 @@ const Agents = () => {
                 
                 <div className="d-flex gap-2">
                     {(user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') && (
-                        <button className="btn-secondary" onClick={() => setShowImportModal(true)}>
-                            <Upload size={18} /> Importer des agents
-                        </button>
+                        <>
+                            <button className="btn-primary" onClick={handleOpenCreateModal}>
+                                <Plus size={18} /> Nouveau Collaborateur
+                            </button>
+                            <button className="btn-secondary" onClick={() => setShowImportModal(true)}>
+                                <Upload size={18} /> Importer
+                            </button>
+                        </>
                     )}
                     <div className="header-search card-premium" style={{ 
                         display: 'flex', 
@@ -382,6 +485,11 @@ const Agents = () => {
                                     <Star size={14} fill="currentColor" />
                                     {agent.stats.performance}%
                                 </div>
+                                {(user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') && (
+                                    <button className="btn-icon-sm" onClick={() => handleOpenEditModal(agent)} title="Modifier l'agent">
+                                        <Edit2 size={14} />
+                                    </button>
+                                )}
                             </div>
 
                             <div className="agent-contact-info">
@@ -483,6 +591,147 @@ const Agents = () => {
                         </div>
                     </div>
                 )}
+            </Modal>
+
+            {/* ---- Modale de Création/Edition d'Agent ---- */}
+            <Modal 
+                isOpen={showAgentModal} 
+                onClose={() => setShowAgentModal(false)} 
+                title={isEditing ? "Modifier le collaborateur" : "Nouveau collaborateur"}
+                size="md"
+            >
+                <form onSubmit={handleFormSubmit} className="agent-form">
+                    <div className="form-section">
+                        <h4><User size={18} /> Informations personnelles</h4>
+                        <div className="form-group">
+                            <label>Nom complet</label>
+                            <input 
+                                type="text" 
+                                required 
+                                value={formData.name} 
+                                onChange={e => setFormData({...formData, name: e.target.value})}
+                                placeholder="ex: Jean Dupont"
+                            />
+                        </div>
+                        <div className="form-grid">
+                            <div className="form-group">
+                                <label>Email professionnel</label>
+                                <input 
+                                    type="email" 
+                                    required 
+                                    value={formData.email} 
+                                    onChange={e => setFormData({...formData, email: e.target.value})}
+                                    placeholder="jean.dupont@katos.com"
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Téléphone</label>
+                                <input 
+                                    type="tel" 
+                                    value={formData.phone} 
+                                    onChange={e => setFormData({...formData, phone: e.target.value})}
+                                    placeholder="+221 ..."
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="form-section">
+                        <h4><Shield size={18} /> Rôle et Sécurité</h4>
+                        <div className="form-grid">
+                            <div className="form-group">
+                                <label>Rôle</label>
+                                <select 
+                                    value={formData.role} 
+                                    onChange={e => setFormData({...formData, role: e.target.value as any})}
+                                >
+                                    <option value="commercial">Commercial</option>
+                                    <option value="manager">Manager</option>
+                                    <option value="resp_commercial">Responsable Commercial</option>
+                                    <option value="superviseur">Superviseur</option>
+                                    <option value="dir_commercial">Directeur Commercial</option>
+                                    <option value="assistante">Assistante</option>
+                                    {user?.role === 'admin' && <option value="admin">Administrateur</option>}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label>{isEditing ? "Changer le mot de passe" : "Mot de passe"}</label>
+                                <div className="input-with-icon">
+                                    <Lock size={16} />
+                                    <input 
+                                        type="password" 
+                                        required={!isEditing}
+                                        value={formData.password} 
+                                        onChange={e => setFormData({...formData, password: e.target.value})}
+                                        placeholder={isEditing ? "Laisser vide pour ne pas changer" : "Minimum 6 caractères"}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="form-section">
+                        <h4><Briefcase size={18} /> Affectation</h4>
+                        <div className="form-grid">
+                            <div className="form-group">
+                                <label>Service</label>
+                                <select 
+                                    value={formData.service || ''} 
+                                    onChange={e => setFormData({...formData, service: e.target.value as any})}
+                                >
+                                    <option value="foncier">Foncier</option>
+                                    <option value="construction">Construction</option>
+                                    <option value="gestion">Gestion Immobilière</option>
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label>Supérieur hiérarchique (Facultatif)</label>
+                                <select 
+                                    value={formData.parent_id || ''} 
+                                    onChange={e => setFormData({...formData, parent_id: e.target.value})}
+                                >
+                                    <option value="">Aucun</option>
+                                    {potentialManagers.map(m => (
+                                        <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label>Nom du groupe / équipe (Facultatif)</label>
+                            <input 
+                                type="text" 
+                                value={formData.group_name} 
+                                onChange={e => setFormData({...formData, group_name: e.target.value})}
+                                placeholder="ex: Groupe Alpha"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="alert-info-sm" style={{ marginBottom: '20px' }}>
+                        <p>💡 L'utilisateur recevra un email de confirmation (si activé sur Supabase) et pourra se connecter immédiatement avec son mot de passe.</p>
+                    </div>
+
+                    <div className="form-actions">
+                        <div className="d-flex gap-2">
+                            {isEditing && (
+                                <button 
+                                    type="button" 
+                                    className="btn-danger-outline" 
+                                    onClick={handleDeleteAgent}
+                                    disabled={isSubmitting}
+                                    style={{ marginRight: 'auto' }}
+                                >
+                                    <Trash2 size={16} /> Supprimer le compte
+                                </button>
+                            )}
+                            <button type="button" className="btn-secondary" onClick={() => setShowAgentModal(false)}>Annuler</button>
+                            <button type="submit" className="btn-primary" disabled={isSubmitting}>
+                                {isSubmitting ? 'Enregistrement...' : (isEditing ? 'Enregistrer les modifications' : 'Créer le collaborateur')}
+                            </button>
+                        </div>
+                    </div>
+                </form>
             </Modal>
         </div>
     );
