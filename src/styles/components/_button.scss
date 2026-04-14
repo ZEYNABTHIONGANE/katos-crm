@@ -1,0 +1,168 @@
+@use '../abstracts/variables' as *;
+// -----------------------------------------------------------------------------
+// Button Component System
+// -----------------------------------------------------------------------------
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: $space-2;
+    padding: $space-2 $space-4;
+    font-family: $font-main;
+    font-size: $text-sm;
+    font-weight: 600;
+    border-radius: $radius-md;
+    transition: all $trans-base;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    border: 1px solid transparent;
+
+    svg {
+        flex-shrink: 0;
+    }
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        filter: grayscale(1);
+    }
+}
+
+// 1. Primary Button
+.btn-primary {
+    @extend .btn;
+    background: linear-gradient(135deg, $clr-primary, $clr-primary-dark);
+    color: $clr-white;
+    box-shadow: 0 4px 12px rgba($clr-primary, 0.25);
+    border: none;
+
+    &:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba($clr-primary, 0.35);
+        filter: brightness(1.1);
+    }
+
+    &:active:not(:disabled) {
+        transform: translateY(0);
+    }
+}
+
+// 2. Secondary Button
+.btn-secondary {
+    @extend .btn;
+    background: linear-gradient(135deg, $clr-accent, $clr-accent-hover);
+    color: $clr-white;
+    box-shadow: 0 4px 12px rgba($clr-accent, 0.25);
+    border: none;
+
+    &:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba($clr-accent, 0.35);
+        filter: brightness(1.1);
+    }
+}
+
+// 3. Outline Button
+.btn-outline {
+    @extend .btn;
+    background: transparent;
+    border-color: var(--primary);
+    color: var(--primary);
+
+    &:hover:not(:disabled) {
+        background: var(--primary-light);
+        color: var(--primary-hover);
+        border-color: var(--primary-hover);
+    }
+}
+
+// 4. Ghost / Soft Button
+.btn-soft {
+    @extend .btn;
+    background: var(--primary-light);
+    color: var(--primary);
+    
+    &:hover:not(:disabled) {
+        background: var(--primary);
+        color: white;
+    }
+}
+
+// 5. Danger Button
+.btn-danger {
+    @extend .btn;
+    background: rgba($clr-danger, 0.1);
+    color: $clr-danger;
+    border-color: rgba($clr-danger, 0.2);
+
+    &:hover:not(:disabled) {
+        background: $clr-danger;
+        color: white;
+        border-color: $clr-danger;
+    }
+}
+
+// 6. Glass Button
+.btn-glass {
+    @extend .btn;
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: $clr-black;
+    box-shadow: $shadow-sm;
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.9);
+        transform: scale(1.05);
+    }
+}
+
+// Sizes
+.btn-sm {
+    padding: $space-1 $space-3;
+    font-size: $text-xs;
+    border-radius: $radius-sm;
+}
+
+.btn-xs {
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    border-radius: $radius-sm;
+    font-weight: 600;
+}
+
+.btn-lg {
+    padding: $space-3 $space-6;
+    font-size: $text-base;
+    border-radius: $radius-lg;
+}
+
+// 7. Ghost Button (transparent, icon-friendly)
+.btn-ghost {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s, color 0.2s;
+    gap: 4px;
+
+    &:hover {
+        background: var(--bg-app);
+        color: var(--text-main);
+    }
+}
+
+.btn-soft-success {
+    background: rgba($clr-success, 0.1);
+    color: $clr-success;
+    border: none;
+    &:hover {
+        background: $clr-success;
+        color: white;
+    }
+}

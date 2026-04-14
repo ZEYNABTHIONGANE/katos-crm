@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { 
     Search, Filter, FileText, Download, Trash2, 
-    User, HardHat, ExternalLink, Folders
+    User, HardHat, ExternalLink
 } from 'lucide-react';
 import { useContactStore } from '@/stores/contactStore';
 import type { DocumentType } from '../types/documents';
@@ -56,14 +56,11 @@ const DocumentsPage = () => {
     };
 
     return (
-        <div className="documents-page p-6">
-            <div className="page-header flex justify-between items-center mb-8">
+        <div className="documents-page">
+            <div className="page-header d-flex-between">
                 <div>
-                    <h1 className="text-4xl font-black flex items-center gap-3" style={{ background: 'linear-gradient(135deg, var(--primary), var(--secondary))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                        <Folders size={36} style={{ stroke: 'var(--primary)' }} />
-                        Gestion Documentaire
-                    </h1>
-                    <p className="text-muted font-medium mt-1">Centralisez et sécurisez tous vos actifs documentaires</p>
+                    <h1>Gestion Documentaire</h1>
+                    <p className="subtitle">Centralisez et sécurisez tous vos actifs documentaires</p>
                 </div>
             </div>
 

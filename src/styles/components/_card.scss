@@ -1,21 +1,18 @@
-/* Global Property Card Styles */
+@use 'sass:color';
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
+/* Global Card Styles */
 
 .property-card {
-    background: var(--bg-card);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    border: 1px solid var(--border-color);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    cursor: pointer;
+    @include premium-card(true, 0);
+    border-radius: $radius-lg;
     display: flex;
     flex-direction: column;
-    box-shadow: var(--shadow-sm);
     height: 100%;
 
     &:hover {
-        transform: translateY(-4px);
-        box-shadow: var(--shadow-md);
-
+        border-color: rgba($clr-primary, 0.15);
         .property-image img {
             transform: scale(1.05);
         }
@@ -24,143 +21,93 @@
     /* Compact Image Area */
     .property-image,
     .property-image-placeholder {
-        height: 160px;
+        height: 180px;
         position: relative;
         overflow: hidden;
-        background: var(--bg-secondary);
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        background: var(--bg-app);
+        @include flex-center;
 
         img {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            transition: transform 0.5s ease;
+            transition: transform $trans-slow;
         }
     }
 
     /* Service Themes */
     &.card-foncier {
-        border-color: rgba(16, 185, 129, 0.1);
-
-        &:hover {
-            border-color: #10b981;
-        }
-
-        .property-price-tag,
-        .price-tag {
-            color: #059669;
-        }
-
-        .details-btn {
-            color: #059669;
-        }
-
-        .property-badge {
-            background: #10b981;
-        }
+        &:hover { border-color: var(--success); }
+        .property-price-tag, .price-tag { color: var(--success); }
+        .property-badge { background: var(--success); }
     }
 
     &.card-construction {
-        border-color: rgba(245, 158, 11, 0.1);
-
-        &:hover {
-            border-color: #f59e0b;
-        }
-
-        .property-price-tag,
-        .price-tag {
-            color: #d97706;
-        }
-
-        .details-btn {
-            color: #d97706;
-        }
-
-        .property-badge {
-            background: #f59e0b;
-        }
+        &:hover { border-color: var(--warning); }
+        .property-price-tag, .price-tag { color: var(--warning); }
+        .property-badge { background: var(--warning); }
     }
 
     &.card-gestion {
-        border-color: rgba(59, 130, 246, 0.1);
-
-        &:hover {
-            border-color: #3b82f6;
-        }
-
-        .property-price-tag,
-        .price-tag {
-            color: #2563eb;
-        }
-
-        .details-btn {
-            color: #2563eb;
-        }
-
-        .property-badge {
-            background: #3b82f6;
-        }
+        &:hover { border-color: var(--info); }
+        .property-price-tag, .price-tag { color: var(--info); }
+        .property-badge { background: var(--info); }
     }
 
     .property-content {
-        padding: 1rem;
+        padding: $space-5;
         flex: 1;
-        display: flex;
-        flex-direction: column;
+        @include flex-column;
 
         .property-title {
-            font-size: 1rem;
+            font-size: $text-base;
             font-weight: 700;
             color: var(--text-main);
-            margin-bottom: 0.5rem;
+            margin-bottom: $space-2;
             line-height: 1.4;
-            display: -webkit-box;
-            -webkit-line-clamp: 1;
-            line-clamp: 1;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
+            @include line-clamp(1);
         }
 
         .property-info-row,
         .meta-item {
             display: flex;
             align-items: center;
-            gap: 0.4rem;
+            gap: $space-2;
             color: var(--text-muted);
-            font-size: 0.813rem;
-            margin-bottom: 0.35rem;
+            font-size: $text-sm;
+            margin-bottom: $space-1;
 
             svg {
                 opacity: 0.7;
+                width: 16px;
+                height: 16px;
             }
         }
 
         .property-price-row,
         .property-price-tag {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            @include flex-between;
             margin-top: auto;
-            padding-top: 0.75rem;
+            padding-top: $space-4;
             border-top: 1px solid var(--border-color);
             font-weight: 800;
-            font-size: 1.125rem;
+            font-size: $text-lg;
+            color: var(--primary);
 
             small {
                 font-size: 0.65em;
                 margin-left: 2px;
-                opacity: 0.8;
+                opacity: 0.7;
             }
         }
 
         .agent-tag,
         .agent-name {
             background: var(--bg-app);
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
+            padding: $space-1 $space-3;
+            border-radius: $radius-xs;
             font-weight: 600;
+            font-size: $text-xs;
             display: inline-flex;
             width: fit-content;
         }
@@ -170,19 +117,35 @@
     .property-badge,
     .property-status-badge {
         position: absolute;
-        top: 0.75rem;
-        right: 0.75rem;
-        padding: 0.25rem 0.65rem;
-        border-radius: 20px;
-        font-size: 0.7rem;
+        top: $space-4;
+        right: $space-4;
+        padding: $space-1 $space-3;
+        border-radius: $radius-full;
+        font-size: $text-xs;
         font-weight: 700;
         color: white;
         z-index: 5;
+        box-shadow: $shadow-md;
+    }
+}
+
+.card-premium {
+    @include premium-card(true, $space-6);
+    
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle at top right, rgba($clr-primary, 0.03), transparent 70%);
+        pointer-events: none;
     }
 }
 
 .properties-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1.25rem;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: $space-6;
 }

@@ -77,9 +77,9 @@ const ConstructionList: React.FC = () => {
 
     return (
         <div className="real-estate-page">
-            <div className="page-header">
+            <div className="page-header d-flex-between">
                 <div>
-                    <h1 style={{ fontWeight: 800 }}>Construction</h1>
+                    <h1>Construction</h1>
                     <p className="subtitle">Catalogue des modèles de construction &amp; suivi de chantier</p>
                 </div>
                 <div className="header-actions">

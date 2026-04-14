@@ -65,14 +65,14 @@ const GestionList: React.FC = () => {
 
     return (
         <div className="real-estate-page">
-            <div className="page-header">
+            <div className="page-header d-flex-between">
                 <div>
-                    <h1 style={{ fontWeight: 800 }}>Gestion Immobilière</h1>
+                    <h1>Gestion Immobilière</h1>
                     <p className="subtitle">Catalogue des biens en location &amp; à la vente</p>
                 </div>
                 {user?.role !== 'commercial' && (
                     <button
-                        className="btn-primary flex items-center gap-2"
+                        className="btn-primary"
                         onClick={() => { setEditingBien(null); setIsFormOpen(true); }}
                     >
                         <Plus size={18} /> Nouveau bien

@@ -4,7 +4,7 @@ import { useAuth } from '@/app/providers/AuthProvider';
 import { useNotifications } from '@/app/providers/NotifProvider';
 import NotifPanel from '@/components/ui/NotifPanel';
 
-const Header = () => {
+const Header = ({ onToggleSidebar }: { onToggleSidebar: () => void }) => {
     const { user } = useAuth();
     const { unreadCount } = useNotifications();
     const [showNotifs, setShowNotifs] = useState(false);
@@ -12,13 +12,9 @@ const Header = () => {
     return (
         <header className="header">
             <div className="header-left">
-                <button className="menu-btn" aria-label="Menu">
+                <button className="menu-btn" aria-label="Menu" onClick={onToggleSidebar}>
                     <Menu size={24} />
                 </button>
-                <div className="search-bar">
-                    <Search size={18} className="search-icon" />
-                    <input type="text" placeholder="Rechercher un prospect, un client, un RDV..." />
-                </div>
             </div>
 
             <div className="header-right">

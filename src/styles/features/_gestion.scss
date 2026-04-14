@@ -1,3 +1,6 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
 /* Gestion Immobilière Feature Styles */
 
 .gestion-container {
@@ -5,24 +8,20 @@
 }
 
 .gestion-header {
-    margin-bottom: 2rem;
+    margin-bottom: $space-8;
 
     h1 {
-        font-size: 2rem;
+        @include responsive-font(1.5rem, 2rem);
         font-weight: 800;
         color: var(--text-main);
     }
 }
 
 .gestion-filters {
-    background: var(--bg-card);
-    padding: 1.25rem;
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-sm);
+    @include premium-card(false, $space-5);
     display: flex;
-    gap: 1rem;
-    margin-bottom: 2rem;
+    gap: $space-4;
+    margin-bottom: $space-8;
     flex-wrap: wrap;
 
     .search-box {
@@ -31,10 +30,9 @@
     }
 }
 
-/* Specific overrides for Gestion Card if needed */
+/* Specific overrides for Gestion Card */
 .card-gestion {
     .property-price-tag {
-        color: #2563eb;
-        /* Blue-600 */
+        color: var(--info);
     }
 }

@@ -50,13 +50,14 @@ const LandList: React.FC = () => {
 
     return (
         <div className="real-estate-page">
-            <div className="page-header">
+            <div className="page-header d-flex-between">
                 <div>
+                    <h1>Foncier</h1>
                     <p className="subtitle">Catalogue des parcelles foncières disponibles</p>
                 </div>
                 {user?.role !== 'commercial' && (
                     <button
-                        className="btn-primary flex items-center gap-2"
+                        className="btn-primary"
                         onClick={() => setIsFormOpen(true)}
                     >
                         <Plus size={18} /> Nouveau terrain

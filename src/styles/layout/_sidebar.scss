@@ -1,119 +1,193 @@
+@use '../abstracts/variables' as *;
 .sidebar {
-    width: 260px;
+    width: 280px;
     background-color: var(--bg-sidebar);
     color: var(--text-light);
     display: flex;
     flex-direction: column;
     height: 100vh;
-    box-shadow: var(--shadow-md);
-    transition: all 0.3s ease;
+    box-shadow: 10px 0 40px rgba(0, 0, 0, 0.3);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 100;
+    flex-shrink: 0;
+    overflow-x: hidden;
+
+    &.collapsed {
+        width: 80px;
+
+        .sidebar-logo {
+            padding: 1.5rem 0.5rem;
+            .logo-img { 
+                max-height: 48px;
+                object-fit: contain;
+            }
+        }
+
+        .nav-section-title,
+        .nav-name,
+        .user-info,
+        .user-role {
+            display: none;
+        }
+
+        .nav-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .nav-item {
+            justify-content: center;
+            padding: 0;
+            width: 44px;
+            height: 44px;
+            margin: 0.5rem auto;
+            border-radius: 12px;
+
+            &:hover .nav-icon {
+                transform: scale(1.1);
+            }
+        }
+
+        .nav-icon {
+            margin: 0;
+            transition: transform 0.2s;
+        }
+
+        .nav-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            min-width: 18px;
+            height: 18px;
+            font-size: 0.65rem;
+            padding: 0 4px;
+        }
+
+        .user-profile-sm {
+            justify-content: center;
+            padding: 0.5rem;
+            .avatar { margin: 0; }
+        }
+        
+        .sidebar-footer {
+            flex-direction: column;
+            gap: 1.25rem;
+            padding: 1.5rem 0.5rem;
+        }
+
+        .logout-btn {
+            margin: 0 auto;
+        }
+    }
 }
 
 .sidebar-logo {
-    padding: 2rem 1.25rem;
+    padding: 2.5rem 1.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    margin-bottom: 1rem;
+    position: relative;
+    
+    &::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 20%;
+        width: 60%;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+    }
 }
 
 .logo-img {
     max-width: 100%;
-    max-height: 80px;
+    max-height: 90px;
     object-fit: contain;
+    filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.15));
 }
 
 .sidebar-nav {
     flex: 1;
-    padding: 0 0.75rem;
+    padding: 1.5rem 1.25rem;
     overflow-y: auto;
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
 }
 
 .nav-section {
-    margin-bottom: 1.5rem;
-
-    &:last-child {
-        margin-bottom: 0.5rem;
-    }
+    margin-bottom: 2.5rem;
 }
 
 .nav-section-title {
     padding: 0 1rem;
-    margin-bottom: 0.5rem;
+    margin-bottom: 1rem;
     font-size: 0.7rem;
     font-weight: 800;
-    color: var(--text-muted);
-    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.45); // Increased contrast
+    letter-spacing: 0.15em;
     text-transform: uppercase;
-    opacity: 0.6;
 }
 
 .nav-item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 0.75rem 1rem;
-    color: var(--text-muted);
-    border-radius: var(--radius-md);
-    margin-bottom: 0.25rem;
-    transition: all 0.2s ease;
+    gap: 14px;
+    padding: 0.9rem 1.25rem;
+    color: rgba(255, 255, 255, 0.65); // Increased contrast
+    border-radius: 14px;
+    margin-bottom: 0.5rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     font-weight: 500;
     position: relative;
-}
+    font-size: 0.95rem;
 
-.nav-name {
-    flex: 1;
-}
-
-.nav-badge {
-    background: #ef4444;
-    color: white;
-    font-size: 0.65rem;
-    font-weight: 700;
-    min-width: 18px;
-    height: 18px;
-    border-radius: 9999px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 4px;
-    animation: pulseBadge 2s ease infinite;
-}
-
-@keyframes pulseBadge {
-
-    0%,
-    100% {
-        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5);
+    svg {
+        opacity: 0.8;
+        transition: transform 0.3s ease;
     }
 
-    50% {
-        box-shadow: 0 0 0 5px rgba(239, 68, 68, 0);
+    &:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: white;
+        
+        svg {
+            transform: scale(1.1);
+            opacity: 1;
+        }
+    }
+
+    &.active {
+        background: linear-gradient(90deg, rgba(233, 108, 46, 0.2) 0%, transparent 100%);
+        color: white; // Changed from var(--secondary) for better contrast on dark
+        font-weight: 700;
+        
+        svg {
+            color: var(--secondary);
+            opacity: 1;
+            filter: drop-shadow(0 0 10px rgba(233, 108, 46, 0.5));
+        }
+
+        &::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 24px;
+            background: var(--secondary);
+            border-radius: 0 4px 4px 0;
+            box-shadow: 0 0 20px var(--secondary);
+        }
     }
 }
 
-.nav-item:hover {
-    background-color: var(--sidebar-hover);
-    color: white;
-}
-
-.nav-item.active {
-    background-color: rgba(79, 70, 229, 0.1);
-    color: var(--primary);
-    position: relative;
-}
-
-.nav-item.active::before {
-    content: '';
-    position: absolute;
-    left: -0.75rem;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 4px;
-    height: 20px;
-    background-color: var(--primary);
-    border-radius: 0 4px 4px 0;
+@media (max-width: 1024px) {
+    .sidebar {
+        width: 80px;
+        .nav-name, .nav-section-title, .user-info, .user-role { display: none; }
+        .sidebar-logo { padding: 1.5rem 0.5rem; }
+        .nav-item { justify-content: center; padding: 1rem; }
+    }
 }
 
 .nav-icon {
@@ -157,6 +231,7 @@
     justify-content: center;
     font-weight: 600;
     font-size: 0.875rem;
+    color: white;
 }
 
 .user-info {

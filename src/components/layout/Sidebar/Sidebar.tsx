@@ -4,7 +4,7 @@ import { useAuth } from '@/app/providers/AuthProvider';
 import { useContactStore } from '@/stores/contactStore';
 import logo from '@/assets/LOGO-KATOS (2).png';
 
-const Sidebar = () => {
+const Sidebar = ({ isCollapsed }: { isCollapsed: boolean }) => {
     const { user, logout } = useAuth();
     const { followUps } = useContactStore();
     const navigate = useNavigate();
@@ -149,7 +149,7 @@ const Sidebar = () => {
     })).filter(section => section.items.length > 0);
 
     return (
-        <aside className="sidebar">
+        <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
             <div className="sidebar-logo">
                 <img src={logo} alt="Katos CRM" className="logo-img" />
             </div>

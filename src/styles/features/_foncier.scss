@@ -1,42 +1,19 @@
+@use '../abstracts/variables' as *;
+@use '../abstracts/mixins' as *;
+
 /* Foncier Module - Premium Styles */
 
 .real-estate-page {
     animation: fadeIn 0.5s ease-out;
-    padding-bottom: 2rem;
-
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-        margin-bottom: 2rem;
-
-        h1 {
-            font-size: var(--text-4xl);
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 0.25rem;
-
-        }
-
-        .subtitle {
-            color: var(--text-muted);
-            font-weight: 500;
-        }
-    }
+    padding-bottom: $space-8;
 }
 
 .filters-bar {
-    background: var(--bg-card);
+    @include premium-card(false, $space-5);
     backdrop-filter: blur(10px);
-    border: 1px solid var(--border-color);
-    padding: 1.25rem;
-    border-radius: var(--radius-lg);
     display: flex;
-    gap: 1.5rem;
-    box-shadow: var(--shadow-sm);
-    margin-bottom: 2rem;
+    gap: $space-6;
+    margin-bottom: $space-8;
 
     .search-input {
         position: relative;
@@ -45,23 +22,24 @@
         background: var(--bg-app);
         border: 1px solid var(--border-color);
         border-radius: var(--radius-md);
-        padding: 0 1rem;
-        transition: all 0.2s;
+        padding: 0 $space-4;
+        transition: all $trans-fast;
+        flex: 1;
 
         &:focus-within {
             border-color: var(--secondary);
-            box-shadow: 0 0 0 3px rgba(233, 108, 46, 0.1);
+            box-shadow: 0 0 0 3px rgba($clr-accent, 0.1);
         }
 
         svg {
             color: var(--text-muted);
-            margin-right: 0.75rem;
+            margin-right: $space-3;
         }
 
         input {
             border: none;
             outline: none;
-            padding: 0.75rem 0;
+            padding: $space-3 0;
             width: 100%;
             font-size: var(--text-sm);
             color: var(--text-main);
@@ -73,9 +51,9 @@
 /* Land Details Styles */
 .property-details-page {
     .status-pill {
-        padding: 0.35rem 1rem;
+        padding: $space-1 $space-4;
         border-radius: var(--radius-full);
-        font-size: 0.813rem;
+        font-size: $text-xs;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.05em;
@@ -97,26 +75,29 @@
     }
 
     .info-card {
+        @include premium-card(false);
+        margin-bottom: $space-6;
+
         h3 {
-            font-size: 1.125rem;
+            font-size: $text-base;
             font-weight: 700;
-            margin-bottom: 1.5rem;
+            margin-bottom: $space-6;
             color: var(--text-main);
-            border-bottom: 2px solid var(--border-color);
-            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: $space-3;
         }
     }
 
     .lots-table {
         width: 100%;
         border-collapse: separate;
-        border-spacing: 0 0.5rem;
-        margin-top: -0.5rem;
+        border-spacing: 0 $space-2;
+        margin-top: -$space-2;
 
         th {
             text-align: left;
-            padding: 1rem;
-            font-size: 0.75rem;
+            padding: $space-4;
+            font-size: $text-xs;
             text-transform: uppercase;
             letter-spacing: 0.05em;
             color: var(--text-muted);
@@ -125,16 +106,17 @@
 
         tbody tr {
             background: var(--bg-app);
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: all $trans-base;
 
             &:hover {
-                transform: scale(1.01);
+                transform: scale(1.005);
                 box-shadow: var(--shadow-sm);
                 background: var(--bg-card);
+                z-index: 1;
             }
 
             td {
-                padding: 1rem;
+                padding: $space-4;
                 border: 1px solid var(--border-color);
                 border-width: 1px 0;
 
@@ -142,6 +124,8 @@
                     border-left-width: 1px;
                     border-top-left-radius: var(--radius-md);
                     border-bottom-left-radius: var(--radius-md);
+                    font-weight: 800;
+                    color: var(--primary);
                 }
 
                 &:last-child {
@@ -151,19 +135,17 @@
                 }
             }
         }
-
-        .lot-number {
-            font-weight: 800;
-            color: var(--primary);
-        }
     }
 
     .doc-item {
         border-radius: var(--radius-md);
         background: var(--bg-app);
         border: 1px solid var(--border-color);
-        padding: 1rem;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        padding: $space-4;
+        transition: all $trans-base;
+        display: flex;
+        align-items: center;
+        gap: $space-3;
 
         &:hover {
             border-color: var(--primary);

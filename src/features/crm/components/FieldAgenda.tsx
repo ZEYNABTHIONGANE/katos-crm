@@ -111,43 +111,39 @@ const FieldAgenda = () => {
     }
 
     return (
-        <div className="field-agenda p-6 min-h-screen">
-            <div className="max-w-7xl mx-auto">
-                <div className="page-header d-flex-between mb-8">
-                    <div>
-                        <h1 className="text-2xl font-extrabold text-katos-blue flex items-center gap-3">
-                            <div className="p-2 bg-orange-100 rounded-lg">
-                                <User className="text-katos-orange" size={22} />
-                            </div>
-                            Agenda de disponibilité
-                        </h1>
-                        <p className="text-gray-500 mt-2 text-base">Gérez vos créneaux de disponibilité pour les visites clients.</p>
-                    </div>
-                    <div className="flex gap-4 items-center">
-                        <div className="flex items-center gap-3 bg-white border border-gray-200 shadow-sm rounded-xl p-2">
-                            <button
-                                onClick={() => { const d = new Date(viewDate); d.setDate(d.getDate() - 7); setViewDate(d); }}
-                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600"
-                            >
-                                <ChevronLeft size={20} />
-                            </button>
-                            <span className="font-bold px-4 text-katos-blue text-sm md:text-base">
-                                Semaine du {weekDays[0].toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}
-                            </span>
-                            <button
-                                onClick={() => { const d = new Date(viewDate); d.setDate(d.getDate() + 7); setViewDate(d); }}
-                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600"
-                            >
-                                <ChevronRight size={20} />
-                            </button>
-                        </div>
-                        <button className="btn-primary shadow-lg hover:shadow-xl transition-all scale-105" onClick={() => setShowAddModal(true)}>
-                            <Plus size={20} /> Ouvrir un créneau
+        <div className="field-agenda">
+            <div className="page-header d-flex-between">
+                <div>
+                    <h1>Agenda de Disponibilité</h1>
+                    <p className="subtitle">Gérez vos créneaux de disponibilité pour les visites clients.</p>
+                </div>
+                <div className="d-flex gap-2 items-center">
+                    <div className="card-premium" style={{ padding: '0.35rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <button
+                            onClick={() => { const d = new Date(viewDate); d.setDate(d.getDate() - 7); setViewDate(d); }}
+                            className="btn-ghost"
+                            style={{ padding: '0.4rem', borderRadius: 'var(--radius-md)' }}
+                        >
+                            <ChevronLeft size={18} />
+                        </button>
+                        <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-main)', padding: '0 0.5rem', whiteSpace: 'nowrap' }}>
+                            Semaine du {weekDays[0].toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}
+                        </span>
+                        <button
+                            onClick={() => { const d = new Date(viewDate); d.setDate(d.getDate() + 7); setViewDate(d); }}
+                            className="btn-ghost"
+                            style={{ padding: '0.4rem', borderRadius: 'var(--radius-md)' }}
+                        >
+                            <ChevronRight size={18} />
                         </button>
                     </div>
+                    <button className="btn-primary" onClick={() => setShowAddModal(true)}>
+                        <Plus size={18} /> Ouvrir un créneau
+                    </button>
                 </div>
+            </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
+            <div className="agenda-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1.25rem' }}>
                     {weekDays.map(day => {
                         const dateStr = day.toISOString().split('T')[0];
                         const daySlots = slots.filter(s => s.date === dateStr);
@@ -214,9 +210,9 @@ const FieldAgenda = () => {
                             </div>
                         );
                     })}
-                </div>
+            </div>
 
-                <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="Ouvrir un créneau de disponibilité" size="md">
+            <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="Ouvrir un créneau de disponibilité" size="md">
                     <div className="modal-body">
                         <div className="form-grid">
                             <div className="form-group">
@@ -280,33 +276,6 @@ const FieldAgenda = () => {
                         </div>
                     </div>
                 </Modal>
-            </div>
-
-            <style>{`
-                .btn-primary { 
-                    background: linear-gradient(135deg, var(--primary), #4F46E5); 
-                    color: white; 
-                    padding: 10px 24px; 
-                    border-radius: 12px; 
-                    font-weight: 800; 
-                    display: flex; 
-                    align-items: center; 
-                    gap: 10px; 
-                    border: none;
-                    box-shadow: 0 4px 15px rgba(43, 46, 131, 0.2);
-                }
-                .btn-primary:active { transform: scale(0.98); }
-                .field-agenda { background: #fdfdfd; min-height: 100vh; }
-                .text-katos-blue { color: #2B2E83; }
-                .text-katos-orange { color: #E96C2E; }
-                .bg-katos-orange { background-color: #E96C2E; }
-                .card-premium {
-                    background: white;
-                    border: 1px solid #f1f1f1;
-                    border-radius: 20px;
-                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
-                }
-            `}</style>
         </div>
     );
 };

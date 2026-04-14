@@ -363,29 +363,22 @@ const Agents = () => {
                     <p className="subtitle">Suivi des performances et activités de l'équipe commerciale</p>
                 </div>
                 
-                <div className="d-flex gap-2">
+                <div className="header-actions">
                     {(user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') && (
                         <>
                             <button className="btn-primary" onClick={handleOpenCreateModal}>
                                 <Plus size={18} /> Nouveau Collaborateur
                             </button>
                             <button className="btn-secondary" onClick={() => setShowImportModal(true)}>
-                                <Upload size={18} /> Importer
+                                <Upload size={18} /> <span>Importer des agents</span>
                             </button>
                         </>
                     )}
-                    <div className="header-search card-premium" style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '10px', 
-                        padding: '8px 16px',
-                        width: '260px'
-                    }}>
+                    <div className="search-box">
                         <Search size={18} className="text-muted" />
                         <input 
                             type="text" 
                             placeholder="Rechercher un agent..." 
-                            style={{ background: 'none', border: 'none', color: 'var(--text-main)', width: '100%', outline: 'none' }}
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />

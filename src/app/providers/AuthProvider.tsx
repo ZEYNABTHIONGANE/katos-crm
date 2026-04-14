@@ -32,19 +32,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Obtenir la session initiale
-        const initAuth = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) {
-                await fetchProfile(session.user);
-            }
-            setLoading(false);
-        };
+        let isMounted = true;
 
-        initAuth();
-
-        // Écouter les changements d'état
+        // Écouter les changements d'état (inclut la session initiale en Supabase v2)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            if (!isMounted) return;
+
             if (session?.user) {
                 await fetchProfile(session.user);
             } else {
@@ -54,6 +47,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
 
         return () => {
+            isMounted = false;
             subscription.unsubscribe();
         };
     }, []);
