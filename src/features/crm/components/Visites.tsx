@@ -5,6 +5,8 @@ import { useContactStore } from '@/stores/contactStore';
 import { useToast } from '@/app/providers/ToastProvider';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { fetchAvailableSlots, bookFieldSlot } from '../api/fieldApi';
+import { fetchCommercials } from '../api/contactApi';
+import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
 import type { FieldSlot } from '../api/fieldApi';
 
 const typeConfig: Record<string, { label: string; color: string; bg: string }> = {
@@ -35,7 +37,15 @@ const Visites = () => {
         if (user?.role === 'commercial') {
             setForm(f => ({ ...f, agent: user.name }));
         }
+
+        const load = async () => {
+            const data = await fetchCommercials();
+            setCommercials(data);
+        };
+        load();
     }, [user]);
+
+    const [commercials, setCommercials] = useState<any[]>([]);
 
     // Charger les créneaux disponibles quand Date ou Type change
     useEffect(() => {
@@ -54,21 +64,17 @@ const Visites = () => {
     const filtered = visits.filter(v => {
         const contact = contacts.find(c => c.id === v.contactId);
 
-        // Filtrage par Rôle et Service (NOUVELLES RÈGLES)
-        if (user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') {
-            // Accès total
-        } else {
-            const userSvc = user?.service === 'gestion' ? 'gestion_immobiliere' : user?.service;
-
-            if (user?.role === 'manager') {
-                // Un manager ne voit que les visites des prospects de son service
-                if (contact?.service !== userSvc) return false;
-            } else if (user?.role === 'commercial') {
-                // Un commercial voit TOUTES les visites qui lui sont assignées (tous services confondus)
-                if (v.agent !== user.name) return false;
-            } else if (user?.role === 'assistante') {
+        // ─── Filtrage hiérarchique ───
+        const supervisedNames = getSupervisedAgentNames(user, commercials);
+        
+        if (supervisedNames !== null) {
+            if (user?.role === 'assistante') {
                 const isCreator = contact?.createdBy ? contact.createdBy === user.name : !contact?.assignedAgent;
                 if (!isCreator) return false;
+            } else {
+                // RC, Manager, Commercial
+                const lowerSupervised = supervisedNames.map(n => n?.trim().toLowerCase());
+                if (!lowerSupervised.includes((v.agent || '').trim().toLowerCase())) return false;
             }
         }
 
@@ -133,9 +139,11 @@ const Visites = () => {
                     <h1>Visites & Chantiers</h1>
                     <p className="subtitle">Planning des visites terrains, chantiers et rendez-vous clients</p>
                 </div>
-                <button className="btn-primary" onClick={() => setShowModal(true)}>
-                    <Plus size={18} /> Planifier une visite
-                </button>
+                {user?.role !== 'resp_commercial' && (
+                    <button className="btn-primary" onClick={() => setShowModal(true)}>
+                        <Plus size={18} /> Planifier une visite
+                    </button>
+                )}
             </div>
 
             <div className="visites-stats">
@@ -234,7 +242,7 @@ const Visites = () => {
                                             </div>
                                         )}
                                     </div>
-                                    {visite.statut !== 'completed' && (
+                                    {visite.statut !== 'completed' && user?.role !== 'resp_commercial' && (
                                         <button className="btn-mark-done" onClick={() => {
                                             moveVisitStatut(visite.id, 'completed');
                                             showToast('Visite marquée comme réalisée');

@@ -16,12 +16,18 @@ export interface FieldSlot {
  * Récupère les créneaux d'un agent spécifique sur une période
  */
 export const fetchAgentSlots = async (agentId: string, startDate: string, endDate: string): Promise<FieldSlot[]> => {
-    const { data, error } = await supabase
+    let query = supabase
         .from('field_slots')
         .select('*')
-        .eq('agent_id', agentId)
         .gte('date', startDate)
-        .lte('date', endDate)
+        .lte('date', endDate);
+    
+    // Si agentId est fourni, on filtre par agent, sinon on prend tout (vue globale)
+    if (agentId) {
+        query = query.eq('agent_id', agentId);
+    }
+
+    const { data, error } = await query
         .order('date', { ascending: true })
         .order('start_time', { ascending: true });
 
@@ -122,11 +128,39 @@ export const bookFieldSlot = async (slotId: string, contactId: number) => {
  * Annule (supprime) un créneau non réservé ou libère un créneau réservé
  */
 export const cancelFieldSlot = async (slotId: string) => {
+    // 1. Récupérer les infos du créneau avant suppression pour notifier le commercial si besoin
+    const { data: slotData } = await supabase
+        .from('field_slots')
+        .select('*, contacts(name, assigned_agent)')
+        .eq('id', slotId)
+        .single();
+
+    if (slotData && slotData.is_booked && slotData.booked_for) {
+        // Notifier le commercial assigné au contact
+        const commercialName = (slotData.contacts as any)?.assigned_agent;
+        if (commercialName) {
+            // Rechercher le profil du commercial pour avoir son ID
+            const { data: profData } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('name', commercialName)
+                .single();
+
+            if (profData) {
+                await supabase.from('notifications').insert([{
+                    type: 'warning',
+                    title: 'Rendez-vous terrain ANNULÉ',
+                    message: `Le technicien ${slotData.agent_name} a annulé sa disponibilité pour la visite du client ${(slotData.contacts as any)?.name}. Veuillez replanifier.`,
+                    assigned_to: profData.id
+                }]);
+            }
+        }
+    }
+
     const { error } = await supabase
         .from('field_slots')
         .delete()
-        .eq('id', slotId)
-        .eq('is_booked', false); // Protection : on ne supprime pas un créneau déjà réservé via l'agenda simple
+        .eq('id', slotId);
 
     if (error) {
         console.error('[fieldApi] cancelFieldSlot error:', error);

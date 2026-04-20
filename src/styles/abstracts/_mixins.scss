@@ -21,8 +21,8 @@
 // 2. Glassmorphism
 @mixin glass($opacity: 0.1, $blur: 10px) {
   background: rgba(255, 255, 255, $opacity);
-  backdrop-filter: blur($blur);
   -webkit-backdrop-filter: blur($blur);
+  backdrop-filter: blur($blur);
   border: 1px solid rgba(255, 255, 255, $opacity * 2);
 }
 
@@ -54,6 +54,7 @@
 @mixin line-clamp($lines: 2) {
   display: -webkit-box;
   -webkit-line-clamp: $lines;
+  line-clamp: $lines;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }

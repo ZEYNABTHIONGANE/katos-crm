@@ -9,7 +9,10 @@ import {
 } from 'recharts';
 import { Users, User, ArrowUpRight, ArrowDownRight, Star, LayoutDashboard, TrendingUp, Plus, Phone, Mail, Clock, Home } from 'lucide-react';
 import { fetchCommercials } from '../api/contactApi';
+import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
+import { SALE_STATUSES } from '../utils/crmConstants';
 import { useEffect } from 'react';
+import ComplianceDashboard from './ComplianceDashboard';
 
 const SERVICE_LABELS: Record<string, string> = {
     foncier: 'Foncier',
@@ -37,6 +40,10 @@ const Dashboard = () => {
     const { contacts, interactions, visits } = useContactStore();
     const navigate = useNavigate();
 
+    if (user?.role === 'conformite') {
+        return <ComplianceDashboard />;
+    }
+
     const [agentFilter, setAgentFilter] = useState('all');
     const [commercials, setCommercials] = useState<any[]>([]);
 
@@ -49,39 +56,34 @@ const Dashboard = () => {
     }, []);
 
     const agents = useMemo(() => {
-        const set = new Set<string>();
-        contacts.forEach(c => { if (c.assignedAgent) set.add(c.assignedAgent); });
-        return Array.from(set).sort();
-    }, [contacts]);
+        const supervisedNames = getSupervisedAgentNames(user, commercials);
+        if (supervisedNames === null) {
+            const set = new Set<string>();
+            contacts.forEach(c => { if (c.assignedAgent) set.add(c.assignedAgent); });
+            return Array.from(set).sort();
+        }
+        // Pour les RC/Managers, on ne montre que les agents qu'ils supervisent
+        return supervisedNames.filter(name => name !== user?.name).sort();
+    }, [contacts, user, commercials]);
 
     // ─── Calcul des Données Dynamiques ───
     const statsData = useMemo(() => {
         // Filtrage initial selon le rôle
         let filteredContacts = contacts;
         
-        if (user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') {
-            filteredContacts = contacts;
-        } else if (user?.role === 'resp_commercial') {
-            // Un responsable commercial voit les prospects de ses managers et de leurs agents
-            const supervisedManagers = commercials.filter(comm => comm.parent_id === user.id);
-            const supervisedManagerIds = supervisedManagers.map(m => m.id);
-            const supervisedAgents = commercials.filter(comm => 
-                comm.parent_id === user.id || 
-                (comm.parent_id && supervisedManagerIds.includes(comm.parent_id))
-            );
-            const supervisedNames = supervisedAgents.map(a => a.name);
-            filteredContacts = contacts.filter(c => supervisedNames.includes(c.assignedAgent || ''));
-        } else if (user?.role === 'manager') {
-            // Un manager voit les prospects des agents de son groupe
-            const groupAgents = commercials.filter(comm => comm.parent_id === user.id);
-            const groupAgentNames = [user.name, ...groupAgents.map(a => a.name)];
-            filteredContacts = contacts.filter(c => groupAgentNames.includes(c.assignedAgent || ''));
-        } else if (user?.role === 'commercial') {
-            filteredContacts = contacts.filter(c => 
-                (c.assignedAgent || '').toLowerCase() === (user?.name || '').toLowerCase()
-            );
+        // ─── Filtrage hiérarchique ───
+        const supervisedNames = getSupervisedAgentNames(user, commercials);
+        
+        if (supervisedNames === null) {
+            filteredContacts = contacts; // Accès total
         } else if (user?.role === 'assistante') {
             filteredContacts = contacts.filter(c => c.createdBy === user?.name || !c.assignedAgent);
+        } else {
+            // RC, Manager, Commercial, etc.
+            const lowerSupervised = supervisedNames.map(n => n?.toLowerCase());
+            filteredContacts = contacts.filter(c => 
+                lowerSupervised.includes((c.assignedAgent || '').toLowerCase())
+            );
         }
 
         // Apply Smart Filters (Agent & Date)
@@ -89,12 +91,9 @@ const Dashboard = () => {
             filteredContacts = filteredContacts.filter(c => c.assignedAgent === agentFilter);
         }
 
-        // Définition des groupes de statuts
-        const SALE_STATUSES = [
-            'Client', 'Projet Livré', 'Contrat', 'Paiement', 
-            'Transfert de dossier technique', 'Transfert dossier tech', 
-            'Suivi Chantier', 'Livraison Client', 'Fidélisation', 'Réservation'
-        ];
+        // Statuts de vente (centralisés dans crmConstants.ts)
+        // NOTE: SALE_STATUSES importé depuis crmConstants - cohérent avec la page Agents
+        const SALE_STATUSES_LOCAL = SALE_STATUSES;
         
         const PROSPECT_STATUSES = [
             'Prospect', 'Qualification', 'En Qualification', 
@@ -116,16 +115,17 @@ const Dashboard = () => {
             { name: 'Clients & Liv.', value: filteredContacts.filter(c => ['Suivi Chantier', 'Livraison Client', 'Projet Livré', 'Fidélisation', 'Transfert de dossier technique', 'Transfert dossier tech'].includes(c.status)).length, fill: '#10B981' },
         ];
 
-        // Top Agents (Ventes totales par agent)
+        // Top Agents : Total contacts (prospects + ventes) pour cohérence avec la page Agents
         const agentMap: Record<string, { name: string, deals: number, prospects: number }> = {};
         filteredContacts.forEach(c => {
-            const agent = c.assignedAgent || 'Non assigné';
-            if (!agentMap[agent]) agentMap[agent] = { name: agent, deals: 0, prospects: 0 };
-            if (SALE_STATUSES.includes(c.status)) {
-                agentMap[agent].deals++;
-            } else {
-                agentMap[agent].prospects++;
+            const rawAgent = c.assignedAgent || 'Non assigné';
+            const agentKey = rawAgent.trim().toLowerCase();
+            if (!agentMap[agentKey]) agentMap[agentKey] = { name: rawAgent, deals: 0, prospects: 0 };
+            if (SALE_STATUSES_LOCAL.includes(c.status)) {
+                agentMap[agentKey].deals++;
             }
+            // prospects = total contacts (all statuses) — cohérent avec la page Gestion Agents
+            agentMap[agentKey].prospects++;
         });
 
         const topAgents = Object.values(agentMap)
@@ -140,13 +140,27 @@ const Dashboard = () => {
             gestion_immobiliere: { name: 'Gestion Immo', deals: 0 }
         };
 
-        contacts.forEach(c => {
-            if (c.service && (SALE_STATUSES.includes(c.status))) {
+        filteredContacts.forEach(c => {
+            if (c.service && (SALE_STATUSES_LOCAL.includes(c.status))) {
                 serviceMap[c.service].deals++;
             }
         });
 
         const servicePerformance = Object.values(serviceMap).sort((a, b) => b.deals - a.deals);
+
+        // Performance des Responsables (Exclusivement pour DC/Admin)
+        const responsablePerformance = (user?.role === 'admin' || user?.role === 'dir_commercial') ? (() => {
+            const rcs = commercials.filter(p => p.role === 'resp_commercial');
+            return rcs.map(rc => {
+                const teamNames = getSupervisedAgentNames(rc, commercials) || [];
+                const lowerTeam = teamNames.map(n => n.toLowerCase());
+                const teamSales = contacts.filter(c => 
+                    SALE_STATUSES_LOCAL.includes(c.status) && 
+                    lowerTeam.includes((c.assignedAgent || '').toLowerCase())
+                ).length;
+                return { name: rc.name, deals: teamSales };
+            }).sort((a, b) => b.deals - a.deals);
+        })() : [];
 
         return {
             prospectsCount: prospects.length,
@@ -155,6 +169,7 @@ const Dashboard = () => {
             distribution,
             topAgents,
             servicePerformance,
+            responsablePerformance,
             assistanteTotalAssigned: contacts.filter(c => {
                 const isCreator = c.createdBy ? c.createdBy === user?.name : !c.assignedAgent;
                 return isCreator && c.assignedAgent;
@@ -217,11 +232,11 @@ const Dashboard = () => {
             })(),
 
             agentPerformance: Object.values(agentMap)
-                .filter(a => a.name !== 'Non assigné')
+                .filter(a => a.name.trim().toLowerCase() !== 'non assigné')
                 .map(agent => {
-                    const agentNameLower = (agent.name || '').toLowerCase();
-                    const agentInteractions = interactions.filter(i => (i.agent || '').toLowerCase() === agentNameLower && (i.type === 'rdv' || i.type === 'visite_terrain'));
-                    const agentVisits = visits.filter(v => (v.agent || '').toLowerCase() === agentNameLower && v.statut === 'completed');
+                    const agentNameLower = (agent.name || '').trim().toLowerCase();
+                    const agentInteractions = interactions.filter(i => (i.agent || '').trim().toLowerCase() === agentNameLower && (i.type === 'rdv' || i.type === 'visite_terrain'));
+                    const agentVisits = visits.filter(v => (v.agent || '').trim().toLowerCase() === agentNameLower && v.statut === 'completed');
                     const totalTouchpoints = agentInteractions.length + agentVisits.length;
                     const conversionRate = totalTouchpoints > 0 ? Math.round((agent.deals / totalTouchpoints) * 100) : 0;
                     return { ...agent, touchpoints: totalTouchpoints, conversionRate };
@@ -546,7 +561,7 @@ const Dashboard = () => {
 
             <div className="charts-row mt-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '2rem' }}>
                 {/* Performance Détaillée des Commerciaux (Transformation) */}
-                {(user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') && (
+                {['admin', 'dir_commercial', 'superviseur', 'resp_commercial'].includes(user?.role || '') && (
                     <div className="chart-card card-premium">
                         <div className="chart-header">
                             <h3>Performance & Transformation</h3>
@@ -572,7 +587,7 @@ const Dashboard = () => {
                 )}
 
                 {/* Performance par Produit (Volume & Classement) */}
-                {(user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') && (
+                {['admin', 'dir_commercial', 'superviseur', 'resp_commercial'].includes(user?.role || '') && (
                     <div className="chart-card card-premium">
                         <div className="chart-header">
                             <div>
@@ -598,7 +613,7 @@ const Dashboard = () => {
                 )}
 
                 {/* Origine des Leads */}
-                {(user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') && (
+                {['admin', 'dir_commercial', 'superviseur', 'resp_commercial'].includes(user?.role || '') && (
                     <div className="chart-card card-premium">
                         <div className="chart-header">
                             <h3>Canaux d'Acquisition</h3>
@@ -652,11 +667,34 @@ const Dashboard = () => {
                     </div>
                 )}
 
-                {/* Performance Managers / Services (DC / Admin) */}
-                {(user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') && (
+                {/* Performance Managers / Responsables (DC / Admin) */}
+                {(user?.role === 'admin' || user?.role === 'dir_commercial') && (
                     <div className="chart-card card-premium">
                         <div className="chart-header">
-                            <h3>Performance des Managers</h3>
+                            <h3>Performance des Responsables</h3>
+                        </div>
+                        <div className="agents-list">
+                            {statsData.responsablePerformance.map((rc, i) => (
+                                <div key={i} className="agent-row">
+                                    <div className="agent-rank" style={{ background: 'var(--primary)', color: 'white' }}>{i + 1}</div>
+                                    <div className="agent-info">
+                                        <span className="agent-name-sm">{rc.name}</span>
+                                        <span className="agent-stats">Équipe : {rc.deals} ventes</span>
+                                    </div>
+                                    <div className="agent-rating" style={{ background: '#059669', color: 'white', padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700 }}>
+                                        {rc.deals} ventes
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Performance Services (Superviseur) */}
+                {user?.role === 'superviseur' && (
+                    <div className="chart-card card-premium">
+                        <div className="chart-header">
+                            <h3>Performance par Groupe</h3>
                         </div>
                         <div className="agents-list">
                             {statsData.servicePerformance.map((svc, i) => (
@@ -664,7 +702,7 @@ const Dashboard = () => {
                                     <div className="agent-rank" style={{ background: 'var(--primary)', color: 'white' }}>{i + 1}</div>
                                     <div className="agent-info">
                                         <span className="agent-name-sm">Groupe {svc.name}</span>
-                                        <span className="agent-stats">{svc.deals} ventes réalisées</span>
+                                        <span className="agent-stats">{svc.deals} ventes</span>
                                     </div>
                                     <div className="agent-rating" style={{ background: '#059669', color: 'white', padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700 }}>
                                         {svc.deals} ventes

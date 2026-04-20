@@ -177,6 +177,7 @@
     top: 1rem;
     left: 1rem;
     background: rgba(15, 23, 42, 0.6);
+    -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
     color: white;
     padding: 0.25rem 0.75rem;
@@ -382,6 +383,7 @@
     line-height: 1.1;
     background: linear-gradient(135deg, #ffffff, rgba(255, 255, 255, 0.8));
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
     letter-spacing: -0.04em;
 }
@@ -574,6 +576,7 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
     border: 1px solid rgba(255, 255, 255, 0.2);
     transition: all $trans-base;
@@ -625,6 +628,7 @@
     padding: 3px 10px;
     border-radius: $radius-full;
     background: rgba(255, 255, 255, 0.15);
+    -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     align-self: flex-start; /* Prevent it from stretching */
@@ -1980,10 +1984,10 @@
 }
 
 .kcard-advance-btn:hover {
-    background: currentColor;
-    color: white !important;
+    background: rgba(0, 0, 0, 0.07);
     transform: translateX(2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+    filter: brightness(0.88);
 }
 
 /* ---- RÃ©sumÃ© rapide ---- */

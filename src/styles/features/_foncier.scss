@@ -10,6 +10,7 @@
 
 .filters-bar {
     @include premium-card(false, $space-5);
+    -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
     display: flex;
     gap: $space-6;

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Modal from '@/components/ui/Modal';
+import UploadZone from '@/components/ui/UploadZone';
 import type { Villa } from '../types/land';
 
 interface VillaFormProps {
@@ -103,6 +104,25 @@ const VillaForm: React.FC<VillaFormProps> = ({ isOpen, onClose, onSave, onDelete
                         value={form.price}
                         onChange={e => setForm({ ...form, price: Number(e.target.value) })}
                         required
+                    />
+                </div>
+
+                <div className="form-group col-2">
+                    <label className="form-label">Description détaillée</label>
+                    <textarea
+                        className="form-textarea"
+                        rows={3}
+                        value={form.description}
+                        onChange={e => setForm({ ...form, description: e.target.value })}
+                        placeholder="Détails du modèle (nombre de chambres, finitions...)"
+                    />
+                </div>
+
+                <div className="form-group col-2">
+                    <UploadZone 
+                        label="Image de présentation du modèle"
+                        value={form.image_url}
+                        onChange={(url) => setForm({ ...form, image_url: url })}
                     />
                 </div>
 

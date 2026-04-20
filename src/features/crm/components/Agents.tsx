@@ -6,7 +6,8 @@ import { manageAgentAccount, fetchPotentialManagers, deleteAgentAccount, type Ag
 import { useContactStore } from '@/stores/contactStore';
 import Modal from '@/components/ui/Modal';
 import { useToast } from '@/app/providers/ToastProvider';
-import { Edit2, Plus, UserPlus, Shield, Briefcase, Lock, User, Trash2 } from 'lucide-react';
+import { Edit2, Plus, Shield, Briefcase, Lock, User, Trash2 } from 'lucide-react';
+import { SALE_STATUSES } from '../utils/crmConstants';
 
 const getAgentColor = (name: string) => {
     const colors = [
@@ -21,11 +22,7 @@ const getAgentColor = (name: string) => {
     return colors[Math.abs(hash) % colors.length];
 };
 
-const SERVICE_LABELS: Record<string, string> = {
-    foncier: 'Foncier',
-    construction: 'Construction',
-    gestion: 'Gestion Immobilière',
-};
+
 
 const Agents = () => {
     const { user } = useAuth();
@@ -34,7 +31,7 @@ const Agents = () => {
     const [agents, setAgents] = useState<{ id: string, name: string, service: string, email?: string, phone?: string, role?: string, parent_id?: string, group_name?: string }[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterRole, setFilterRole] = useState<'all' | 'resp_commercial' | 'manager' | 'commercial' | 'superviseur'>('all');
+    const [filterRole, setFilterRole] = useState<'all' | 'resp_commercial' | 'commercial' | 'conformite' | 'technicien_terrain' | 'technicien_chantier'>('all');
 
     // Import state
     const [showImportModal, setShowImportModal] = useState(false);
@@ -53,7 +50,7 @@ const Agents = () => {
         email: '',
         password: '',
         role: 'commercial',
-        service: 'foncier',
+        service: null,
         parent_id: '',
         group_name: '',
         phone: ''
@@ -65,31 +62,21 @@ const Agents = () => {
             await fetchData();
         }
         
-        const isDirector = ['admin', 'dir_commercial', 'superviseur'].includes(user?.role || '');
+        const isDirector = ['admin', 'dir_commercial', 'conformite'].includes(user?.role || '');
         const isRC = user?.role === 'resp_commercial';
-        const isManager = user?.role === 'manager';
         
         let roles: string[] = ['commercial'];
-        if (isDirector || isRC) {
-            roles = ['commercial', 'manager', 'resp_commercial', 'superviseur'];
-        } else if (isManager) {
-            roles = ['commercial', 'manager'];
+        if (isDirector) {
+            roles = ['commercial', 'resp_commercial', 'conformite', 'assistante', 'dir_commercial', 'admin', 'technicien_terrain', 'technicien_chantier'];
+        } else if (isRC) {
+            roles = ['commercial', 'resp_commercial'];
         }
         
-        // Fetch all (or by service if we still want that, but hierarchy is the priority here)
-        const data = await fetchCommercials(undefined, roles) as any[];
+        const rolesToFetch = isDirector ? undefined : roles;
+        const data = await fetchCommercials(undefined, rolesToFetch) as any[];
         
         let filteredData = data;
         if (isRC) {
-            // RC voit ses managers et les agents de ses managers
-            const supervisedManagers = data.filter(comm => comm.parent_id === user.id && comm.role === 'manager');
-            const supervisedManagerIds = supervisedManagers.map(m => m.id);
-            filteredData = data.filter(comm => 
-                comm.parent_id === user.id || 
-                (comm.parent_id && supervisedManagerIds.includes(comm.parent_id))
-            );
-        } else if (isManager) {
-            // Manager voit ses commerciaux
             filteredData = data.filter(comm => comm.parent_id === user.id || comm.id === user.id);
         }
         
@@ -130,13 +117,16 @@ const Agents = () => {
                 else if (rawRole.includes('sup')) role = 'superviseur';
                 else if (rawRole.includes('admin')) role = 'admin';
                 else if (rawRole.includes('assist')) role = 'assistante';
+                else if (rawRole.includes('conf') || rawRole.includes('liti')) role = 'conformite';
+                else if (rawRole.includes('terrain')) role = 'technicien_terrain';
+                else if (rawRole.includes('chantier')) role = 'technicien_chantier';
+                else if (rawRole.includes('tech')) role = 'technicien_terrain' as any;
 
                 return {
                     name: item.nom || item.name || '',
                     email: item.email || item.courriel || '',
                     phone: item.telephone || item.phone || item.tel || '',
                     role,
-                    service: svc || undefined,
                 };
             }).filter(p => p.name);
 
@@ -175,7 +165,7 @@ const Agents = () => {
             email: '',
             password: '',
             role: 'commercial',
-            service: 'foncier',
+            service: null,
             parent_id: '',
             group_name: '',
             phone: ''
@@ -202,15 +192,75 @@ const Agents = () => {
 
     const handleFormSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        // Validation basique
+        if (!isEditing && (!formData.password || formData.password.length < 6)) {
+            showToast('Le mot de passe doit faire au moins 6 caractères', 'error');
+            return;
+        }
+        if (isEditing && formData.password && formData.password.length < 6) {
+            showToast('Le nouveau mot de passe doit faire au moins 6 caractères', 'error');
+            return;
+        }
+
         setIsSubmitting(true);
         try {
             const action = isEditing ? 'update' : 'create';
-            await manageAgentAccount(action, formData);
-            showToast(isEditing ? 'Agent mis à jour avec succès' : 'Agent créé avec succès');
+            
+            // Nettoyage des données pour éviter l'erreur UUID "" (doit être null)
+            const submissionData = {
+                ...formData,
+                parent_id: formData.parent_id === '' ? null : formData.parent_id,
+                service: (formData.service as any) === '' ? null : formData.service
+            };
+
+            try {
+                // Optimisation : Si on modifie et que l'email/password ne change pas, on fait un update direct
+                const originalAgent = agents.find(a => a.id === selectedAgentId);
+                const emailChanged = isEditing && originalAgent && formData.email !== originalAgent.email;
+                const hasPassword = !!formData.password;
+
+                if (isEditing && !emailChanged && !hasPassword) {
+                    const { fallbackUpdateProfile } = await import('../api/usersApi');
+                    await fallbackUpdateProfile(submissionData);
+                    showToast('Profil mis à jour avec succès');
+                    setShowAgentModal(false);
+                    await loadAgents();
+                    return;
+                }
+
+                // Sinon, méthode normale via Edge Function
+                await manageAgentAccount(action, submissionData);
+                showToast(isEditing ? 'Agent mis à jour avec succès' : 'Agent créé avec succès');
+            } catch (functionErr: any) {
+                console.warn("Échec Edge Function, tentative fallback...", functionErr);
+                
+                // Si c'est une création, on tente le fallback client-side
+                if (!isEditing) {
+                    try {
+                        await import('../api/usersApi').then(m => m.fallbackCreateAgent(submissionData));
+                        showToast('Agent créé via méthode de secours');
+                    } catch (fallbackErr: any) {
+                        throw new Error(`Échec total : ${functionErr.message}. Fallback : ${fallbackErr.message}`);
+                    }
+                } else {
+                    // Pour update, on tente la mise à jour directe du profil (RLS Admin permet ça)
+                    try {
+                        const { fallbackUpdateProfile } = await import('../api/usersApi');
+                        await fallbackUpdateProfile(submissionData);
+                        showToast('Profil mis à jour directement (mode secours)');
+                        setShowAgentModal(false);
+                        await loadAgents();
+                    } catch (fallbackErr: any) {
+                        throw new Error(`Échec total : ${functionErr.message}. Fallback : ${fallbackErr.message}`);
+                    }
+                }
+            }
+
             setShowAgentModal(false);
             await loadAgents();
         } catch (err: any) {
-            console.error(err);
+            console.error("Erreur complète lors de la gestion de l'agent:", err);
             showToast(err.message || 'Erreur lors de l\'opération', 'error');
         } finally {
             setIsSubmitting(false);
@@ -251,14 +301,13 @@ const Agents = () => {
 
     // Calcul des statistiques pour chaque agent
     const agentsWithStats = useMemo(() => {
-        const salesStatuses = ['Contrat', 'Paiement', 'Livraison Client', 'Fidélisation'];
+        // Uses shared SALE_STATUSES from crmConstants for consistency with Dashboard
         
         const filteredAgents = agents.filter(a => {
             const search = searchTerm.toLowerCase();
             const matchesSearch = (
                 a.name.toLowerCase().includes(search) ||
-                (a.email?.toLowerCase().includes(search)) ||
-                (a.service?.toLowerCase().includes(search))
+                (a.email?.toLowerCase().includes(search))
             );
             
             const matchesRole = filterRole === 'all' || a.role === filterRole;
@@ -267,52 +316,34 @@ const Agents = () => {
         });
 
         const withStats = filteredAgents.map(agent => {
-            const isManager = agent.role === 'manager';
             const isResp = agent.role === 'resp_commercial';
-            const isSupervisorRole = ['manager', 'resp_commercial', 'superviseur'].includes(agent.role || '');
+            const isSupervisorRole = agent.role === 'resp_commercial';
             
+            const normAgentName = (agent.name || '').trim().toLowerCase();
+
             // Pour un superviseur, on compte son équipe. Pour un commercial, on compte ses attributions.
             const agentContacts = contacts.filter(c => {
+                const assigned = (c.assignedAgent || '').trim().toLowerCase();
                 if (isResp) {
-                    // RC voit ses managers et leurs agents
-                    const supervisedManagers = agents.filter(comm => comm.parent_id === agent.id);
-                    const supervisedManagerIds = supervisedManagers.map(m => m.id);
-                    const supervisedAgents = agents.filter(comm => 
-                        comm.parent_id === agent.id || 
-                        (comm.parent_id && supervisedManagerIds.includes(comm.parent_id))
-                    );
-                    const supervisedNames = [agent.name, ...supervisedAgents.map(a => a.name)];
-                    return supervisedNames.includes(c.assignedAgent || '');
+                    // RC voit les clients de son équipe (ceux rattachés à lui-même ou à ses agents)
+                    const supervisedAgents = agents.filter(comm => comm.parent_id === agent.id);
+                    const supervisedNames = [agent.name, ...supervisedAgents.map(a => a.name)].map(n => n.trim().toLowerCase());
+                    return supervisedNames.includes(assigned);
                 }
-                if (isManager) {
-                    // Manager voit ses agents
-                    const groupAgents = agents.filter(comm => comm.parent_id === agent.id);
-                    const groupAgentNames = [agent.name, ...groupAgents.map(a => a.name)];
-                    return groupAgentNames.includes(c.assignedAgent || '');
-                }
-                return c.assignedAgent === agent.name;
+                return assigned === normAgentName;
             });
 
             const agentInteractions = interactions.filter(i => {
+                const iAgent = (i.agent || '').trim().toLowerCase();
                 if (isResp) {
-                    const supervisedManagers = agents.filter(comm => comm.parent_id === agent.id);
-                    const supervisedManagerIds = supervisedManagers.map(m => m.id);
-                    const supervisedAgents = agents.filter(comm => 
-                        comm.parent_id === agent.id || 
-                        (comm.parent_id && supervisedManagerIds.includes(comm.parent_id))
-                    );
-                    const supervisedNames = [agent.name, ...supervisedAgents.map(a => a.name)];
-                    return supervisedNames.includes(i.agent || '');
+                    const supervisedAgents = agents.filter(comm => comm.parent_id === agent.id);
+                    const supervisedNames = [agent.name, ...supervisedAgents.map(a => a.name)].map(n => n.trim().toLowerCase());
+                    return supervisedNames.includes(iAgent);
                 }
-                if (isManager) {
-                    const groupAgents = agents.filter(comm => comm.parent_id === agent.id);
-                    const groupAgentNames = [agent.name, ...groupAgents.map(a => a.name)];
-                    return groupAgentNames.includes(i.agent || '');
-                }
-                return i.agent === agent.name;
+                return iAgent === normAgentName;
             });
 
-            const agentSales = agentContacts.filter(c => salesStatuses.includes(c.status));
+            const agentSales = agentContacts.filter(c => SALE_STATUSES.includes(c.status));
             
             const prospectsCount = agentContacts.length;
             const salesCount = agentSales.length;
@@ -364,7 +395,7 @@ const Agents = () => {
                 </div>
                 
                 <div className="header-actions">
-                    {(user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') && (
+                    {user?.role === 'admin' && (
                         <>
                             <button className="btn-primary" onClick={handleOpenCreateModal}>
                                 <Plus size={18} /> Nouveau Collaborateur
@@ -393,8 +424,9 @@ const Agents = () => {
                         {[
                             { k: 'all', l: 'Tous les collaborateurs' },
                             { k: 'resp_commercial', l: 'Responsables Com.' },
-                            { k: 'manager', l: 'Managers' },
-                            { k: 'superviseur', l: 'Superviseurs' },
+                            { k: 'conformite', l: 'Conformité' },
+                            { k: 'technicien_terrain', l: 'Tech. Terrain' },
+                            { k: 'technicien_chantier', l: 'Tech. Chantier' },
                             { k: 'commercial', l: 'Commerciaux' },
                         ].map(f => (
                             <button
@@ -469,7 +501,13 @@ const Agents = () => {
                                     <div>
                                         <h3>{agent.name}</h3>
                                         <p className="agent-role-tag">
-                                            {agent.role === 'resp_commercial' ? 'Responsable Commercial' : agent.role === 'superviseur' ? 'Superviseur' : agent.role === 'manager' ? 'Manager' : 'Commercial'} • {SERVICE_LABELS[agent.service as keyof typeof SERVICE_LABELS] || agent.service}
+                                            {agent.role === 'resp_commercial' ? 'Responsable Commercial' : 
+                                             agent.role === 'conformite' ? 'Agent Conformité' :
+                                             agent.role === 'assistante' ? 'Assistante' : 
+                                             agent.role === 'dir_commercial' ? 'Directeur Commercial' : 
+                                             agent.role === 'technicien_terrain' ? 'Technicien Terrain' :
+                                             agent.role === 'technicien_chantier' ? 'Technicien Chantier' :
+                                             agent.role === 'admin' ? 'Administrateur' : 'Commercial'}
                                             {agent.group_name && ` • ${agent.group_name}`}
                                         </p>
                                     </div>
@@ -478,7 +516,7 @@ const Agents = () => {
                                     <Star size={14} fill="currentColor" />
                                     {agent.stats.performance}%
                                 </div>
-                                {(user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') && (
+                                {user?.role === 'admin' && (
                                     <button className="btn-icon-sm" onClick={() => handleOpenEditModal(agent)} title="Modifier l'agent">
                                         <Edit2 size={14} />
                                     </button>
@@ -552,7 +590,6 @@ const Agents = () => {
                                         <th>Nom</th>
                                         <th>Email / Téléphone</th>
                                         <th>Rôle</th>
-                                        <th>Service</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -564,7 +601,6 @@ const Agents = () => {
                                                 <div>{row.phone}</div>
                                             </td>
                                             <td><span className="badge badge-primary">{row.role}</span></td>
-                                            <td>{row.service ? SERVICE_LABELS[row.service as keyof typeof SERVICE_LABELS] || row.service : '—'}</td>
                                         </tr>
                                     ))}
                                     {importData.length > 5 && (
@@ -642,8 +678,11 @@ const Agents = () => {
                                     <option value="manager">Manager</option>
                                     <option value="resp_commercial">Responsable Commercial</option>
                                     <option value="superviseur">Superviseur</option>
+                                    <option value="conformite">Agent Conformité</option>
                                     <option value="dir_commercial">Directeur Commercial</option>
                                     <option value="assistante">Assistante</option>
+                                    <option value="technicien_terrain">Technicien Terrain</option>
+                                    <option value="technicien_chantier">Technicien Chantier</option>
                                     {user?.role === 'admin' && <option value="admin">Administrateur</option>}
                                 </select>
                             </div>
@@ -664,31 +703,20 @@ const Agents = () => {
                     </div>
 
                     <div className="form-section">
-                        <h4><Briefcase size={18} /> Affectation</h4>
+                        <h4><Briefcase size={18} /> Hiérarchie et Équipe</h4>
                         <div className="form-grid">
-                            <div className="form-group">
-                                <label>Service</label>
-                                <select 
-                                    value={formData.service || ''} 
-                                    onChange={e => setFormData({...formData, service: e.target.value as any})}
-                                >
-                                    <option value="foncier">Foncier</option>
-                                    <option value="construction">Construction</option>
-                                    <option value="gestion">Gestion Immobilière</option>
-                                </select>
-                            </div>
-                            <div className="form-group">
-                                <label>Supérieur hiérarchique (Facultatif)</label>
-                                <select 
-                                    value={formData.parent_id || ''} 
-                                    onChange={e => setFormData({...formData, parent_id: e.target.value})}
-                                >
-                                    <option value="">Aucun</option>
-                                    {potentialManagers.map(m => (
-                                        <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
-                                    ))}
-                                </select>
-                            </div>
+                        <div className="form-group">
+                            <label>Supérieur hiérarchique (Facultatif)</label>
+                            <select 
+                                value={formData.parent_id || ''} 
+                                onChange={e => setFormData({...formData, parent_id: e.target.value})}
+                            >
+                                <option value="">Aucun</option>
+                                {potentialManagers.map(m => (
+                                    <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
+                                ))}
+                            </select>
+                        </div>
                         </div>
                         <div className="form-group">
                             <label>Nom du groupe / équipe (Facultatif)</label>

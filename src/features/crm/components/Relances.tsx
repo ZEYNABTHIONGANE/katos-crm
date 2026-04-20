@@ -1,6 +1,6 @@
  import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardCheck, Clock, AlertTriangle, CheckCircle2, ArrowRight, Calendar, Phone, ChevronDown, Search, X, Edit2, Trash2 } from 'lucide-react';
+import { ClipboardCheck, Clock, AlertTriangle, CheckCircle2, ArrowRight, Calendar, Phone, ChevronDown, Search, X, Edit2, Trash2, Mail, FileText, MapPin } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import { useContactStore } from '@/stores/contactStore';
 import type { FollowUp } from '@/stores/contactStore';
@@ -13,7 +13,7 @@ const todayStr = fmt(today);
 
 const Relances = () => {
     const { 
-        contacts, followUps, visits, 
+        contacts, followUps, visits, interactions,
         updateFollowUp, updateVisit, deleteFollowUp, deleteVisit, moveVisitStatut 
     } = useContactStore();
     const { user } = useAuth();
@@ -30,7 +30,7 @@ const Relances = () => {
     }, [user, navigate, showToast]);
 
     const [filter, setFilter] = useState<string>('all');
-    const [typeFilter, setTypeFilter] = useState<'all' | 'follow_up' | 'visit'>('all');
+    const [typeFilter, setTypeFilter] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [showReportModal, setShowReportModal] = useState<null | { id: string, category: 'follow_up' | 'visit', interactionId?: string }>(null);
     const [showEditModal, setShowEditModal] = useState<any | null>(null);
@@ -57,11 +57,27 @@ const Relances = () => {
             return 'upcoming';
         };
 
-        const tasks = followUps.map(f => ({ 
-            ...f, 
-            statut: getDynamicStatut(f.dateRelance, f.statut),
-            category: 'follow_up' as const 
-        }));
+        const tasks = followUps.map(f => {
+            // Identifier le type d'interaction parente si possible
+            let type = 'note';
+            if (f.interactionId) {
+                const parent = interactions.find(i => i.id === f.interactionId);
+                if (parent) {
+                    type = parent.type === 'visite_terrain' || parent.type === 'visite_chantier' ? 'visite' : parent.type;
+                }
+            } else if (f.note.toLowerCase().includes('appel')) {
+                type = 'call';
+            } else if (f.note.toLowerCase().includes('rdv') || f.note.toLowerCase().includes('rendez-vous')) {
+                type = 'rdv';
+            }
+
+            return { 
+                ...f, 
+                type,
+                statut: getDynamicStatut(f.dateRelance, f.statut),
+                category: 'follow_up' as const 
+            };
+        });
 
         const upcomingVisits = visits
             .filter(v => v.statut !== 'completed' && v.statut !== 'cancelled')
@@ -71,6 +87,7 @@ const Relances = () => {
                 agent: v.agent,
                 dateRelance: v.date,
                 note: `[${v.type.toUpperCase()}] ${v.title}`,
+                type: v.type === 'bureau' ? 'rdv' : 'visite',
                 statut: getDynamicStatut(v.date, v.statut),
                 priorite: 'normale' as const,
                 category: 'visit' as const,
@@ -85,6 +102,7 @@ const Relances = () => {
                 agent: v.agent,
                 dateRelance: v.date,
                 note: `[${v.type.toUpperCase()}] ${v.title}`,
+                type: v.type === 'bureau' ? 'rdv' : 'visite',
                 statut: 'done' as const,
                 priorite: 'normale' as const,
                 category: 'visit' as const,
@@ -92,7 +110,7 @@ const Relances = () => {
             }));
 
         return [...tasks, ...upcomingVisits, ...completedVisits];
-    }, [followUps, visits]);
+    }, [followUps, visits, interactions]);
 
     const filteredRelances = useMemo(() => {
         const query = searchQuery.toLowerCase().trim();
@@ -101,15 +119,17 @@ const Relances = () => {
                 const contact = contacts.find(c => c.id === r.contactId);
                 
                 // "Mes Tâches" is strictly personal for everyone
-                if (r.agent !== user?.name) return false;
+                const agentNorm = (r.agent || '').trim().toLowerCase();
+                const userNameNorm = (user?.name || '').trim().toLowerCase();
+                if (agentNorm !== userNameNorm) return false;
 
                 // Filtre par statut (via les cartes de stats)
                 const matchesStatus = filter === 'all' || r.statut === filter;
                 if (!matchesStatus) return false;
 
-                // Filtre par catégorie (nouveau)
-                const matchesCategory = typeFilter === 'all' || r.category === typeFilter;
-                if (!matchesCategory) return false;
+                // Filtre par catégorie/type (unifié)
+                const matchesType = typeFilter === 'all' || (r as any).type === typeFilter;
+                if (!matchesType) return false;
 
                 if (!query) return true;
 
@@ -192,8 +212,13 @@ const Relances = () => {
     };
 
     const count = (s: string) => {
-        if (s === 'retard') return allActions.filter(r => r.statut === 'retard' || (r.statut !== 'done' && r.dateRelance < todayStr)).length;
-        return allActions.filter(r => r.statut === s).length;
+        const userNameNorm = (user?.name || '').trim().toLowerCase();
+        const myActions = allActions.filter(r => (r.agent || '').trim().toLowerCase() === userNameNorm);
+        
+        if (s === 'retard') {
+            return myActions.filter(r => r.statut === 'retard' || (r.statut !== 'done' && r.dateRelance < todayStr)).length;
+        }
+        return myActions.filter(r => r.statut === s).length;
     };
 
     const getUrgencyLabel = (r: FollowUp) => {
@@ -242,15 +267,23 @@ const Relances = () => {
                 </div>
             </div>
 
-            {/* Filtres & Recherche */}
             <div className="relances-controls">
                 <div className="relances-filters">
                     {[
-                        { k: 'all', l: 'Tous les types' },
-                        { k: 'follow_up', l: 'Rappels / Notes' },
-                        { k: 'visit', l: 'Visites & RDV' },
+                        { k: 'all', l: 'Toutes les tâches', icon: <ClipboardCheck size={16} /> },
+                        { k: 'call', l: 'Appels', icon: <Phone size={16} /> },
+                        { k: 'visite', l: 'Visites', icon: <MapPin size={16} /> },
+                        { k: 'rdv', l: 'Rendez-vous', icon: <Calendar size={16} /> },
+                        { k: 'email', l: 'Emails', icon: <Mail size={16} /> },
+                        { k: 'note', l: 'Notes / Rappels', icon: <FileText size={16} /> },
                     ].map(f => (
-                        <button key={f.k} className={`filter-btn ${typeFilter === f.k ? 'active' : ''}`} onClick={() => setTypeFilter(f.k as any)}>{f.l}</button>
+                        <button 
+                            key={f.k} 
+                            className={`filter-btn ${typeFilter === f.k ? 'active' : ''}`} 
+                            onClick={() => setTypeFilter(f.k)}
+                        >
+                            {f.icon} {f.l}
+                        </button>
                     ))}
                 </div>
 
@@ -300,6 +333,13 @@ const Relances = () => {
                                 <p className="relance-note">{r.note}</p>
                                 <div className="relance-meta">
                                     <span className="date-main-badge"><Calendar size={13} /> {new Date(r.dateRelance).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+                                    <span className="type-action-badge">
+                                        {(r as any).type === 'call' && <><Phone size={12} /> Appel</>}
+                                        {(r as any).type === 'visite' && <><MapPin size={12} /> Visite</>}
+                                        {(r as any).type === 'rdv' && <><Calendar size={12} /> RDV</>}
+                                        {(r as any).type === 'email' && <><Mail size={12} /> Email</>}
+                                        {(r as any).type === 'note' && <><FileText size={12} /> Rappel</>}
+                                    </span>
                                     <span>Agent : {r.agent || 'Non assigné'}</span>
                                     {getPrioriteLabel(r.priorite)}
                                 </div>
@@ -432,6 +472,46 @@ const relancesStyles = `
     background: rgba(239, 68, 68, 0.1);
     color: #ef4444;
     border-color: rgba(239, 68, 68, 0.2);
+}
+.relances-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem !important;
+}
+.filter-btn {
+    padding: 0.5rem 1rem;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #4b5563;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.filter-btn:hover {
+    background: #f9fafb;
+    border-color: #d1d5db;
+}
+.filter-btn.active {
+    background: #f3f4ff;
+    border-color: #2b2e83;
+    color: #2b2e83;
+}
+.type-action-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #f3f4f6;
+    color: #4b5563;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
 }
 `;
 

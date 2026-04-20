@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { 
     Search, Filter, FileText, Download, Trash2, 
-    User, HardHat, ExternalLink
+    User, HardHat, ExternalLink, ShieldAlert
 } from 'lucide-react';
 import { useContactStore } from '@/stores/contactStore';
 import type { DocumentType } from '../types/documents';
@@ -25,9 +25,31 @@ const TYPE_COLORS: Record<DocumentType, string> = {
     autre: '#64748b'
 };
 
+import { useAuth } from '@/app/providers/AuthProvider';
+
 const DocumentsPage = () => {
     const { documents, contacts, constructionProjects, deleteDocument } = useContactStore();
+    const { user } = useAuth();
     const { showToast } = useToast();
+    
+    // Sécurité Rôle : Seul admin, dir_commercial et conformite
+    const hasAccess = useMemo(() => {
+        return ['admin', 'dir_commercial', 'conformite'].includes(user?.role || '');
+    }, [user]);
+
+    if (!hasAccess) {
+        return (
+            <div className="p-20 text-center card-premium m-20">
+                <h2 className="text-danger flex items-center justify-center gap-2 mb-4">
+                    <ShieldAlert size={24} /> Accès Refusé
+                </h2>
+                <p className="text-muted">Vous n'avez pas les permissions nécessaires pour accéder à la gestion documentaire complète.</p>
+                <div className="mt-6">
+                    <button className="btn-primary" onClick={() => window.history.back()}>Retour</button>
+                </div>
+            </div>
+        );
+    }
     
     const [searchTerm, setSearchTerm] = useState('');
     const [typeFilter, setTypeFilter] = useState<'all' | DocumentType>('all');

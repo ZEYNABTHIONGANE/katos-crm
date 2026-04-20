@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/app/providers/AuthProvider';
 import { NotifProvider } from '@/app/providers/NotifProvider';
 import { ToastProvider } from '@/app/providers/ToastProvider';
+import { ChatProvider } from '@/app/providers/ChatProvider';
 import Layout from '@/components/layout/DashboardLayout/DashboardLayout';
 import Login from '@/features/auth/components/LoginPage';
 import Dashboard from '@/features/crm/components/DashboardPage';
@@ -20,6 +21,8 @@ import GestionList from '@/features/crm/components/GestionList';
 import DocumentsPage from '@/features/crm/components/DocumentsPage';
 import FieldAgenda from '@/features/crm/components/FieldAgenda';
 import FAQ from '@/features/crm/components/FAQ';
+import Messages from '@/features/crm/components/Messages';
+import ComplianceDashboard from '@/features/crm/components/ComplianceDashboard';
 
 
 import { ProtectedRoute, RoleGuard } from '@/router';
@@ -30,7 +33,8 @@ function App() {
     <QueryProvider>
       <AuthProvider>
         <NotifProvider>
-          <ToastProvider>
+          <ChatProvider>
+            <ToastProvider>
             <BrowserRouter>
               <Routes>
                 {/* Route publique */}
@@ -43,17 +47,19 @@ function App() {
                   <Route path="prospects/:id" element={<ContactDetail />} />
                   <Route path="pipeline" element={<Pipeline />} />
                   <Route path="relances" element={<RoleGuard allowedRoles={['commercial']}><Relances /></RoleGuard>} />
-                  <Route path="agents" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'superviseur', 'manager']}><Agents /></RoleGuard>} />
-                  <Route path="rapports" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'superviseur', 'manager']}><Rapports /></RoleGuard>} />
+                  <Route path="agents" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial']}><Agents /></RoleGuard>} />
+                  <Route path="rapports" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial']}><Rapports /></RoleGuard>} />
                   <Route path="foncier" element={<LandList />} />
                   <Route path="foncier/:id" element={<LandDetails />} />
                   <Route path="construction" element={<ConstructionList />} />
                   <Route path="gestion" element={<GestionList />} />
                   <Route path="visites" element={<Visites />} />
-                  <Route path="agenda-terrain" element={<FieldAgenda />} />
-                  <Route path="documents" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'superviseur']}><DocumentsPage /></RoleGuard>} />
-                  <Route path="historique" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'superviseur', 'manager']}><Historique /></RoleGuard>} />
+                    <Route path="agenda-terrain" element={<RoleGuard allowedRoles={['admin', 'technicien_terrain', 'technicien_chantier', 'commercial', 'dir_commercial', 'resp_commercial']}><FieldAgenda /></RoleGuard>} />
+                  <Route path="documents" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial', 'conformite']}><DocumentsPage /></RoleGuard>} />
+                  <Route path="historique" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial']}><Historique /></RoleGuard>} />
                   <Route path="faq" element={<FAQ />} />
+                  <Route path="messages" element={<Messages />} />
+                  <Route path="compliance" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'conformite']}><ComplianceDashboard showStats={false} /></RoleGuard>} />
                 </Route>
 
                 {/* Fallback */}
@@ -61,7 +67,8 @@ function App() {
               </Routes>
             </BrowserRouter>
           </ToastProvider>
-        </NotifProvider>
+        </ChatProvider>
+      </NotifProvider>
       </AuthProvider>
     </QueryProvider>
   );

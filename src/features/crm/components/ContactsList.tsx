@@ -9,6 +9,7 @@ import { useContactStore, type CrmContact, calculateLeadScore } from '@/stores/c
 import { useToast } from '@/app/providers/ToastProvider';
 import { useNotifications } from '@/app/providers/NotifProvider';
 import { fetchCommercials } from '../api/contactApi';
+import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
 
 const SOURCE_OPTIONS = [
     'Site web', 'Facebook', 'Instagram', 'TikTok', 'LinkedIn', 
@@ -281,44 +282,20 @@ const ContactsList = () => {
 
         if (!matchesSearch || !matchesFilter) return false;
 
-        // Filtrage par Rôle et Hiérarchie (NOUVELLES RÈGLES)
-        if (user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') {
-            return true; // Admin et Dir Commercial voient TOUT
-        }
+        // ─── Filtrage hiérarchique ───
+        const supervisedNames = getSupervisedAgentNames(user, commercials);
         
-        if (user?.role === 'resp_commercial') {
-            // Un responsable commercial voit les prospects de ses managers et de leurs agents
-            const supervisedManagers = commercials.filter(comm => comm.parent_id === user.id);
-            const supervisedManagerIds = supervisedManagers.map(m => m.id);
-            const supervisedAgents = commercials.filter(comm => 
-                comm.parent_id === user.id || 
-                (comm.parent_id && supervisedManagerIds.includes(comm.parent_id))
-            );
-            const supervisedNames = supervisedAgents.map(a => a.name);
-            return supervisedNames.includes(c.assignedAgent || '');
-        }
-
-        if (user?.role === 'manager') {
-            // Un manager voit les prospects des agents de son groupe
-            const groupAgents = commercials.filter(comm => comm.parent_id === user.id);
-            const groupAgentNames = [user.name, ...groupAgents.map(a => a.name)];
-            return groupAgentNames.includes(c.assignedAgent || '');
-        }
-
-        if (user?.role === 'commercial') {
-            // Un commercial voit ses propres prospects
-            return c.assignedAgent === user.name;
+        if (supervisedNames === null) {
+            return true; // Accès total
         }
 
         if (user?.role === 'assistante') {
-            // L'assistante voit ses propres créations ou les prospects non assignés
-            if (c.createdBy) {
-                return c.createdBy === user.name;
-            }
-            return !c.assignedAgent;
+            return c.createdBy === user.name || !c.assignedAgent;
         }
 
-        return true;
+        // Pour tous les autres rôles (RC, Manager, Commercial)
+        const lowerSupervised = supervisedNames.map(n => n?.trim().toLowerCase());
+        return lowerSupervised.includes((c.assignedAgent || '').trim().toLowerCase());
     });
 
     const getStatusBadge = (status: string) => {
@@ -566,9 +543,13 @@ const ContactsList = () => {
                                         {openMenu === contact.id && (
                                             <div className="action-dropdown">
                                                 <button onClick={() => { navigate(`/prospects/${contact.id}`); setOpenMenu(null); }}><Eye size={14} /> Voir</button>
-                                                <button onClick={() => { navigate(`/prospects/${contact.id}?action=interaction`); setOpenMenu(null); }}><MessageSquare size={14} /> Interaction</button>
-                                                <button onClick={() => openEdit(contact)}><Edit2 size={14} /> Modifier</button>
-                                                {user?.role !== 'commercial' && (
+                                                {user?.role !== 'resp_commercial' && (
+                                                    <button onClick={() => { navigate(`/prospects/${contact.id}?action=interaction`); setOpenMenu(null); }}><MessageSquare size={14} /> Interaction</button>
+                                                )}
+                                                {['admin', 'dir_commercial', 'commercial'].includes(user?.role || '') && (
+                                                    <button onClick={() => openEdit(contact)}><Edit2 size={14} /> Modifier</button>
+                                                )}
+                                                {['admin', 'dir_commercial'].includes(user?.role || '') && (
                                                     <button className="danger" onClick={() => { setShowDeleteConfirm(contact); setOpenMenu(null); }}><Trash2 size={14} /> Supprimer</button>
                                                 )}
                                             </div>
@@ -644,7 +625,7 @@ const ContactsList = () => {
                             Prospect Réactif (+10 pts)
                         </label>
                     </div>
-                    {(user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur' || user?.role === 'manager') && (
+                    {(user?.role === 'admin' || user?.role === 'dir_commercial') && (
                         <div className="form-group">
                             <label className="form-label">Commercial affecté</label>
                             <select 

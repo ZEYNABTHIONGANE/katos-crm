@@ -44,34 +44,21 @@ export const villaApi = {
         
         try {
             console.log('[villaApi] Inserting into villas table...');
-            const { error: insertError } = await supabase
+            const { data, error: insertError } = await supabase
                 .from('villas')
-                .insert([dbVilla]);
+                .insert([dbVilla])
+                .select()
+                .single();
             
             if (insertError) {
                 console.error('[villaApi] Supabase insert error:', insertError);
                 throw insertError;
             }
             
-            console.log('[villaApi] Insert success. Fetching result...');
-            
-            // On récupère la villa créée (pour l'ID) par son titre
-            const { data, error: fetchError } = await supabase
-                .from('villas')
-                .select('*')
-                .eq('title', dbVilla.title)
-                .order('created_at', { ascending: false })
-                .limit(1);
-
-            if (fetchError || !data || data.length === 0) {
-                console.warn('[villaApi] Could not fetch created villa, using temp ID');
-                return { ...dbVilla, id: 'temp-' + Date.now() } as any;
-            }
-
-            console.log('[villaApi] Created villa fetched:', data[0].id);
+            console.log('[villaApi] Insert success:', data?.id);
             return {
-                ...data[0],
-                assignedAgent: data[0].assigned_agent
+                ...(data || {}),
+                assignedAgent: data?.assigned_agent
             } as Villa;
 
         } catch (err: any) {

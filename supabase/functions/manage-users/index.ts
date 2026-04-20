@@ -26,7 +26,8 @@ serve(async (req: Request) => {
     const { action, userData } = await req.json()
 
     if (action === 'create') {
-      // 1. Créer l'utilisateur dans Auth
+      let userId: string;
+
       const { data: authUser, error: authError } = await supabaseClient.auth.admin.createUser({
         email: userData.email,
         password: userData.password,
@@ -34,13 +35,27 @@ serve(async (req: Request) => {
         user_metadata: { name: userData.name }
       })
       
-      if (authError) throw authError
+      if (authError) {
+        // Si l'utilisateur existe déjà, on essaye de le récupérer
+        if (authError.message.includes('already registered')) {
+          const { data: listData, error: listError } = await supabaseClient.auth.admin.listUsers();
+          if (listError) throw listError;
+          
+          const existingUser = listData.users.find((u: any) => u.email === userData.email);
+          if (!existingUser) throw new Error("Utilisateur introuvable malgré l'erreur 'already registered'");
+          userId = existingUser.id;
+        } else {
+          throw authError;
+        }
+      } else {
+        userId = authUser.user.id;
+      }
 
-      // 2. Créer/Mettre à jour le profil dans Public
+      // 2. Créer/Mettre à jour le profil dans Public (UPSERT)
       const { error: profileError } = await supabaseClient
         .from('profiles')
         .upsert({
-          id: authUser.user.id,
+          id: userId,
           name: userData.name,
           email: userData.email,
           phone: userData.phone || null,

@@ -48,7 +48,7 @@ const DocumentManager: React.FC<DocumentManagerProps> = ({ contactId, projectId 
         size: '0.5 MB'
     });
 
-    if (user?.role !== 'admin' && user?.role !== 'dir_commercial' && user?.role !== 'superviseur') {
+    if (user?.role !== 'admin' && user?.role !== 'dir_commercial' && user?.role !== 'conformite') {
         return null;
     }
 

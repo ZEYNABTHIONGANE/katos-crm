@@ -4,10 +4,13 @@ import { useNavigate } from 'react-router-dom';
 import {
     MoreVertical, FileText, MessageSquare, Bookmark, FileSignature, CreditCard, Folder, Wrench,
     Circle, Clock, CheckCircle2, Star, Link as LinkIcon, Megaphone, User,
-    Search, X, ArrowRight, Trash2, Calendar
+    Search, ArrowRight, Trash2, Calendar
 } from 'lucide-react';
 import { useContactStore, STATUS_TO_COLUMN, type CrmContact } from '@/stores/contactStore';
 import { useToast } from '@/app/providers/ToastProvider';
+import { fetchCommercials } from '../api/contactApi';
+import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
+import { useEffect } from 'react';
 
 // ---------- Types ----------
 const COLUMN_META: Record<string, { title: string; color: string; icon: React.ReactNode }> = {
@@ -73,8 +76,8 @@ const KanbanCard = ({
     return (
         <div
             className="kanban-card"
-            style={{ 
-                cursor: 'pointer', 
+            style={{
+                cursor: 'pointer',
                 padding: '0.6rem',
                 borderRadius: '8px',
                 marginBottom: '0.5rem'
@@ -96,7 +99,7 @@ const KanbanCard = ({
                     {menuOpen && (
                         <div className="kcard-dropdown">
                             {/* ... menu items ... */}
-                            {nextCol && (
+                            {nextCol && ['commercial', 'admin', 'dir_commercial'].includes(userRole || '') && (
                                 <button onClick={() => { onMove(contact.id, nextCol); setMenuOpen(false); }}>
                                     <ArrowRight size={13} /> Avancer l'étape
                                 </button>
@@ -104,7 +107,7 @@ const KanbanCard = ({
                             <button onClick={() => { navigate(`/prospects/${contact.id}`); setMenuOpen(false); }}>
                                 <FileText size={13} /> Voir la fiche
                             </button>
-                            {!['commercial', 'superviseur'].includes(userRole || '') && (
+                            {['admin', 'dir_commercial'].includes(userRole || '') && (
                                 <button className="danger" onClick={() => { onDelete(contact.id); setMenuOpen(false); }}>
                                     <Trash2 size={13} /> Supprimer
                                 </button>
@@ -116,12 +119,12 @@ const KanbanCard = ({
 
             <div className="kcard-meta" style={{ gap: '4px', flexWrap: 'wrap', marginBottom: '4px' }}>
                 {svc && (
-                    <span className="kcard-tag" style={{ 
+                    <span className="kcard-tag" style={{
                         fontSize: '0.65rem',
                         padding: '1px 6px',
-                        color: svc.color, 
-                        borderColor: svc.color + '33', 
-                        background: svc.color + '0a' 
+                        color: svc.color,
+                        borderColor: svc.color + '33',
+                        background: svc.color + '0a'
                     }}>
                         {svc.label}
                     </span>
@@ -148,11 +151,11 @@ const KanbanCard = ({
                 <span className="kcard-since" style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
                     #{contact.id} · {contact.phone}
                 </span>
-                {nextCol && (
+                {nextCol && ['commercial', 'admin', 'dir_commercial'].includes(userRole || '') && (
                     <button
                         className="kcard-advance-btn"
-                        style={{ 
-                            borderColor: colColor, 
+                        style={{
+                            borderColor: colColor,
                             color: colColor,
                             padding: '2px 8px',
                             fontSize: '0.65rem'
@@ -174,43 +177,49 @@ const Pipeline = () => {
     const { showToast } = useToast();
 
     const [search, setSearch] = useState('');
+    const [commercials, setCommercials] = useState<any[]>([]);
+
+    useEffect(() => {
+        const load = async () => {
+            const data = await fetchCommercials();
+            setCommercials(data);
+        };
+        load();
+    }, []);
 
 
 
     // Group contacts into columns based on their status
     const columns = useMemo(() => {
+        // Obtenir la liste des agents supervisés
+        const supervisedNames = getSupervisedAgentNames(user, commercials);
+        const lowerSupervised = supervisedNames ? supervisedNames.map(n => n?.trim().toLowerCase()) : null;
+
         return columnOrder.reduce((acc, colId) => {
             const statusForCol = COLUMN_TO_STATUS[colId];
             let filteredContacts = contacts.filter(c => STATUS_TO_COLUMN[c.status] === colId || c.status === statusForCol);
 
-            // Un commercial voit TOUS ses propres contacts (tous services confondus)
-            if (user?.role === 'commercial') {
-                filteredContacts = filteredContacts.filter(c => c.assignedAgent === user.name);
-            }
-            
-            // Un superviseur voit TOUT (identique à admin/dir_commercial)
-            if (user?.role === 'superviseur') {
-                // Pas de filtrage supplémentaire
+            // Filtrage hiérarchique
+            if (lowerSupervised !== null) {
+                if (user?.role === 'assistante') {
+                    filteredContacts = filteredContacts.filter(c => c.createdBy === user?.name || !c.assignedAgent);
+                } else {
+                    filteredContacts = filteredContacts.filter(c =>
+                        lowerSupervised.includes((c.assignedAgent || '').trim().toLowerCase())
+                    );
+                }
             }
 
-            // Restriction pour les managers : ne voir que les contacts de son service
+            // Filtre supplémentaire optionnel pour les managers (si on veut encore restreindre par service)
             if (user?.role === 'manager') {
                 const userService = user.service === 'gestion' ? 'gestion_immobiliere' : user.service;
                 filteredContacts = filteredContacts.filter(c => !c.service || c.service === userService);
             }
 
-            // Restriction pour l'assistante : voir ses propres prospects (ceux qu'elle a créés)
-            if (user?.role === 'assistante') {
-                filteredContacts = filteredContacts.filter(c => {
-                    if (c.createdBy) return c.createdBy === user.name;
-                    return !c.assignedAgent; // Fallback pour les anciens contacts
-                });
-            }
-
             acc[colId] = filteredContacts;
             return acc;
         }, {} as Record<string, CrmContact[]>);
-    }, [contacts, user]);
+    }, [contacts, user, commercials]);
 
     // Apply search filter
     const filteredColumns = useMemo(() => {
@@ -229,16 +238,19 @@ const Pipeline = () => {
         }, {} as Record<string, CrmContact[]>);
     }, [columns, search]);
 
-    const totalCards = contacts.length;
     const filteredTotal = Object.values(filteredColumns).reduce((s, arr) => s + arr.length, 0);
 
 
 
-    const moveCard = (id: number, toColId: string) => {
+    const moveCard = async (id: number, toColId: string) => {
         const newStatus = COLUMN_TO_STATUS[toColId];
         if (newStatus) {
-            moveContactStatus(id, newStatus);
-            showToast(`Statut mis à jour : ${newStatus}`);
+            const success = await moveContactStatus(id, newStatus);
+            if (success === false) {
+                showToast(`Erreur lors de la mise à jour (Base de données)`, 'error');
+            } else {
+                showToast(`Statut mis à jour : ${newStatus}`);
+            }
         }
     };
 
@@ -253,10 +265,10 @@ const Pipeline = () => {
                 <div className="d-flex gap-2">
                     <div className="search-box">
                         <Search size={18} className="text-muted" />
-                        <input 
-                            type="text" 
-                            placeholder="Rechercher..." 
-                            value={search} 
+                        <input
+                            type="text"
+                            placeholder="Rechercher..."
+                            value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
                     </div>

@@ -5,6 +5,9 @@ import { useNavigate } from 'react-router-dom';
 import { useContactStore, type InteractionType } from '@/stores/contactStore';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { useToast } from '@/app/providers/ToastProvider';
+import { fetchCommercials } from '../api/contactApi';
+import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
+import { useEffect } from 'react';
 import Modal from '@/components/ui/Modal';
 
 const INTERACTION_CONFIG: Record<InteractionType, { icon: ReactElement; label: string; color: string; bg: string }> = {
@@ -26,6 +29,15 @@ const Historique = () => {
     const [agentFilter, setAgentFilter] = useState('all');
     const [search, setSearch] = useState('');
     const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [commercials, setCommercials] = useState<any[]>([]);
+
+    useEffect(() => {
+        const load = async () => {
+            const data = await fetchCommercials();
+            setCommercials(data);
+        };
+        load();
+    }, []);
 
     const [editingInteraction, setEditingInteraction] = useState<any | null>(null);
     const [editForm, setEditForm] = useState({ title: '', description: '', date: '', heure: '', type: 'call' as InteractionType });
@@ -114,21 +126,17 @@ const Historique = () => {
         return unifiedHistory.filter(h => {
             const contact = contacts.find(c => c.id === h.contactId);
             
-            // Filtrage par Rôle et Service (NOUVELLES RÈGLES)
-            if (user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') {
-                // Accès total
-            } else {
-                const userSvc = user?.service === 'gestion' ? 'gestion_immobiliere' : user?.service;
-                
-                if (user?.role === 'manager') {
-                    // Un manager ne voit que l'historique des prospects de son service
-                    if (contact?.service !== userSvc) return false;
-                } else if (user?.role === 'commercial') {
-                    // Un commercial voit TOUTE l'historique des prospects qui lui sont assignés (tous services confondus)
-                    if (h.agent !== user.name) return false;
-                } else if (user?.role === 'assistante') {
+            // ─── Filtrage hiérarchique ───
+            const supervisedNames = getSupervisedAgentNames(user, commercials);
+            
+            if (supervisedNames !== null) {
+                if (user?.role === 'assistante') {
                     const isCreator = contact?.createdBy ? contact.createdBy === user.name : !contact?.assignedAgent;
                     if (!isCreator) return false;
+                } else {
+                    // RC, Manager, Commercial
+                    const lowerSupervised = supervisedNames.map(n => n?.trim().toLowerCase());
+                    if (!lowerSupervised.includes((h.agent || '').trim().toLowerCase())) return false;
                 }
             }
 
@@ -248,7 +256,7 @@ const Historique = () => {
                                                 <button className="btn-outline btn-sm" onClick={() => navigate(`/prospects/${item.contactId}`)}>
                                                     <User size={13} /> Voir fiche contact
                                                 </button>
-                                                {!item.is_visit && (user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur' || user?.name === item.agent) && (
+                                                {!item.is_visit && user?.role !== 'resp_commercial' && (user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur' || user?.name === item.agent) && (
                                                     <button className="btn-outline btn-sm" onClick={() => handleEdit(item)}>
                                                         <Edit2 size={13} /> Modifier
                                                     </button>

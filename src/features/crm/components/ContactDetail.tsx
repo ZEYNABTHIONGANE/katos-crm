@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
     ArrowLeft, Phone, Mail, MapPin, Calendar, Clock, Edit2, CheckCircle2, Plus,
-    Megaphone, User, Folder, MessageSquare, ClipboardList, HardHat, ChevronDown,
+    Megaphone, User, Folder, MessageSquare, ClipboardList, HardHat,
     Trash2
 } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
@@ -12,6 +12,11 @@ import { useToast } from '@/app/providers/ToastProvider';
 import { useAuth } from '@/app/providers/AuthProvider';
 
 import { fetchCommercials } from '../api/contactApi';
+import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
+import { supabase } from '@/lib/supabaseClient';
+import { signalComplianceIssue } from '../api/complianceApi';
+import { fetchAvailableSlots, bookFieldSlot, type FieldSlot } from '../api/fieldApi';
+import { ShieldAlert, AlertTriangle } from 'lucide-react';
 
 const SOURCE_OPTIONS = ['Site web', 'Facebook', 'LinkedIn', 'Instagram', 'TikTok', 'Prospection', 'Recommandation', 'Autre'];
 // const AGENTS = ['Abdou Sarr', 'Omar Diallo', 'Katos Admin'];
@@ -39,6 +44,17 @@ const ContactDetail = () => {
     const { user } = useAuth();
     const { showToast } = useToast();
 
+    const [commercials, setCommercials] = useState<{ id: string, name: string, service: string }[]>([]);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [showInteractionModal, setShowInteractionModal] = useState(false);
+    const [editingInteraction, setEditingInteraction] = useState<string | null>(null);
+    const [editingVisit, setEditingVisit] = useState<number | null>(null);
+    const [activeTab, setActiveTab] = useState<'history' | 'documents'>('history');
+    const [isSubmittingInteraction, setIsSubmittingInteraction] = useState(false);
+    const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+    const [activeDispute, setActiveDispute] = useState<any>(null);
+    const [showComplianceModal, setShowComplianceModal] = useState(false);
+
     // Debugging logs
     console.log('[ContactDetail] Rendering for ID:', id);
     console.log('[ContactDetail] Contacts in store:', contacts.length);
@@ -53,17 +69,28 @@ const ContactDetail = () => {
     useEffect(() => {
         if (!contact || !user) return;
 
+        // Si le rôle nécessite la liste des commerciaux pour la vérification hiérarchique, 
+        // on attend que celle-ci soit chargée avant de décider du blocage.
+        const needsCommercials = ['resp_commercial', 'manager'].includes(user.role || '');
+        if (needsCommercials && commercials.length === 0) return;
+
         let hasAccess = true;
 
-        if (user.role === 'admin' || user.role === 'dir_commercial' || user.role === 'superviseur') {
+        if (['admin', 'dir_commercial', 'superviseur', 'conformite'].includes(user.role || '')) {
             hasAccess = true;
         } else {
             const userSvc = user.service === 'gestion' ? 'gestion_immobiliere' : user.service;
+            const assignedNorm = (contact.assignedAgent || '').trim().toLowerCase();
+            const userNameNorm = (user.name || '').trim().toLowerCase();
 
             if (user.role === 'manager') {
                 hasAccess = contact.service === userSvc;
+            } else if (user.role === 'resp_commercial') {
+                const supervised = getSupervisedAgentNames(user, commercials);
+                const supervisedNorm = supervised ? supervised.map(n => n?.trim().toLowerCase()) : [];
+                hasAccess = supervisedNorm.includes(assignedNorm);
             } else if (user.role === 'commercial') {
-                hasAccess = contact.assignedAgent === user.name;
+                hasAccess = assignedNorm === userNameNorm;
             } else if (user.role === 'assistante') {
                 hasAccess = contact.createdBy ? contact.createdBy === user.name : !contact.assignedAgent;
             }
@@ -73,16 +100,15 @@ const ContactDetail = () => {
             showToast("Vous n'avez pas accès à ce dossier", 'error');
             navigate('/prospects');
         }
-    }, [user, contact, showToast, navigate]);
-
-    const [showEditModal, setShowEditModal] = useState(false);
-    const [showInteractionModal, setShowInteractionModal] = useState(false);
-    const [editingInteraction, setEditingInteraction] = useState<string | null>(null);
-    const [editingVisit, setEditingVisit] = useState<number | null>(null);
-    const [activeTab, setActiveTab] = useState<'history' | 'documents'>('history');
-    const [commercials, setCommercials] = useState<{ id: string, name: string, service: string }[]>([]);
-    const [isSubmittingInteraction, setIsSubmittingInteraction] = useState(false);
-    const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+    }, [user, contact, commercials, showToast, navigate]);
+    const [complianceDescription, setComplianceDescription] = useState('');
+    const [compliancePriority, setCompliancePriority] = useState<'basse' | 'normale' | 'haute'>('normale');
+    const [isSubmittingCompliance, setIsSubmittingCompliance] = useState(false);
+    
+    // Technician availability
+    const [availableSlots, setAvailableSlots] = useState<FieldSlot[]>([]);
+    const [selectedSlotId, setSelectedSlotId] = useState<string>('');
+    const [isLoadingSlots, setIsLoadingSlots] = useState(false);
     
     useEffect(() => {
         if (searchParams.get('action') === 'interaction') {
@@ -91,12 +117,28 @@ const ContactDetail = () => {
     }, [searchParams]);
 
     useEffect(() => {
-        const loadCommercials = async () => {
+        const loadCommonData = async () => {
             const data = await fetchCommercials();
             setCommercials(data);
+            
+            if (id) {
+                const { data } = await supabase
+                    .from('compliance_issues')
+                    .select('*')
+                    .eq('contact_id', Number(id))
+                    .neq('status', 'resolu')
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+                
+                if (data && data.length > 0) {
+                    setActiveDispute(data[0]);
+                } else {
+                    setActiveDispute(null);
+                }
+            }
         };
-        loadCommercials();
-    }, []);
+        loadCommonData();
+    }, [id]);
 
     const [editForm, setEditForm] = useState<any>(null);
 
@@ -119,6 +161,23 @@ const ContactDetail = () => {
         followUpNote: '',
         followUpPriority: 'normale' as 'haute' | 'normale' | 'basse'
     });
+
+    // Fetch available slots when date or type changes
+    useEffect(() => {
+        const loadSlots = async () => {
+            if (['visite_terrain', 'visite_chantier'].includes(interactionForm.type)) {
+                setIsLoadingSlots(true);
+                const type = interactionForm.type === 'visite_chantier' ? 'chantier' : 'terrain';
+                const slots = await fetchAvailableSlots(interactionForm.date, type);
+                setAvailableSlots(slots);
+                setIsLoadingSlots(false);
+            } else {
+                setAvailableSlots([]);
+                setSelectedSlotId('');
+            }
+        };
+        loadSlots();
+    }, [interactionForm.date, interactionForm.type]);
 
     // Filter interactions from store for this contact
     const contactInteractions = useMemo(() => {
@@ -228,6 +287,14 @@ const ContactDetail = () => {
             
             setIsSubmittingEdit(true);
             try {
+                // Blocage si litige actif et tentative de passage à un statut final
+                const BLOCKING_STATUSES = ['Livraison Client', 'Projet Livré', 'Fidélisation'];
+                if (activeDispute && BLOCKING_STATUSES.includes(editForm.status)) {
+                    showToast("Action bloquée : Un litige est en cours sur ce dossier.", 'error');
+                    setIsSubmittingEdit(false);
+                    return;
+                }
+
                 // Ensure values are booleans
                 const finalUpdates = {
                     ...editForm,
@@ -235,9 +302,13 @@ const ContactDetail = () => {
                     isReactive: !!editForm.isReactive
                 };
                 console.log('[DEBUG saveEdit] FINAL UPDATES TO STORE:', finalUpdates);
-                await updateContact(contact.id, finalUpdates as any);
-                showToast('Informations du contact mises à jour');
-                setShowEditModal(false);
+                const success = await updateContact(contact.id, finalUpdates as any);
+                if (success === false) {
+                    showToast('Erreur de sauvegarde (Base de données)', 'error');
+                } else {
+                    showToast('Informations du contact mises à jour');
+                    setShowEditModal(false);
+                }
             } catch (err) {
                 showToast('Erreur lors de la mise à jour', 'error');
             } finally {
@@ -255,6 +326,17 @@ const ContactDetail = () => {
             setIsSubmittingInteraction(false);
             return;
         }
+
+        // Validation disponibilité techniciens
+        if (['visite_terrain', 'visite_chantier'].includes(interactionForm.type) && !selectedSlotId && !editingInteraction && !editingVisit) {
+            showToast('Veuillez sélectionner un créneau de disponibilité technicien', 'error');
+            setIsSubmittingInteraction(false);
+            return;
+        }
+
+        const selectedSlot = availableSlots.find(s => s.id === selectedSlotId);
+        const technicianName = selectedSlot ? selectedSlot.agentName : interactionForm.technician;
+        const finalHeure = selectedSlot ? selectedSlot.startTime.substring(0, 5) : interactionForm.heure;
 
         try {
             const interactionData = {
@@ -276,10 +358,10 @@ const ContactDetail = () => {
                 await updateVisit(editingVisit, {
                     title: interactionForm.title,
                     date: interactionForm.date,
-                    heure: interactionForm.heure,
+                    heure: finalHeure,
                     lieu: interactionForm.lieu,
                     notes: interactionForm.description,
-                    technician: interactionForm.technician
+                    technician: technicianName
                 });
                 setEditingVisit(null);
             } else if (editingInteraction) {
@@ -299,7 +381,7 @@ const ContactDetail = () => {
                 console.log('[UI] saveInteraction - Creating follow-up');
                 await addFollowUp({
                     contactId: contact.id,
-                    agent: contact.assignedAgent || 'Katos Admin',
+                    agent: (contact.assignedAgent || 'Katos Admin').trim(),
                     dateRelance: interactionForm.followUpDate,
                     note: interactionForm.followUpNote || `Relance suite à: ${interactionForm.title}`,
                     statut: 'upcoming',
@@ -315,14 +397,19 @@ const ContactDetail = () => {
                     title: interactionForm.title,
                     contactId: contact.id,
                     date: interactionForm.date,
-                    heure: interactionForm.heure,
+                    heure: finalHeure,
                     lieu: interactionForm.lieu || '',
                     type: interactionForm.type === 'visite_chantier' ? 'chantier' : interactionForm.type === 'visite_terrain' ? 'terrain' : 'bureau',
                     statut: 'upcoming',
-                    agent: contact.assignedAgent || 'Katos Admin',
-                    technician: interactionForm.technician || '',
+                    agent: (contact.assignedAgent || 'Katos Admin').trim(),
+                    technician: technicianName || '',
                     notes: interactionForm.description || ''
                 });
+                
+                // Réserver le créneau en base
+                if (selectedSlotId) {
+                    await bookFieldSlot(selectedSlotId, contact.id);
+                }
                 console.log('[UI] saveInteraction - addVisit COMPLETED');
             }
 
@@ -431,14 +518,51 @@ const ContactDetail = () => {
                     </div>
                 </div>
                 <div className="header-actions">
-                    <button className="btn-outline" onClick={() => { setEditForm(contact); setShowEditModal(true); }}>
-                        <Edit2 size={16} /> Modifier
-                    </button>
-                    <button className="btn-primary" onClick={() => setShowInteractionModal(true)}>
-                        <Plus size={16} /> Ajouter une interaction
-                    </button>
+                    {['admin', 'dir_commercial', 'commercial'].includes(user?.role || '') && (
+                        <button className="btn-outline" onClick={() => { setEditForm(contact); setShowEditModal(true); }}>
+                            <Edit2 size={16} /> Modifier
+                        </button>
+                    )}
+                    {user?.role !== 'resp_commercial' && (
+                        <button className="btn-primary" onClick={() => setShowInteractionModal(true)}>
+                            <Plus size={16} /> Ajouter une interaction
+                        </button>
+                    )}
+                    {(user?.role === 'commercial' || user?.role === 'assistante' || user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'manager') && (
+                        <button 
+                            className={`btn-outline ${activeDispute ? 'text-danger border-danger' : ''}`} 
+                            onClick={() => setShowComplianceModal(true)}
+                            title="Signaler un litige ou un problème de conformité"
+                        >
+                            <ShieldAlert size={16} /> {activeDispute ? 'Litige Actif' : 'Signaler Litige'}
+                        </button>
+                    )}
                 </div>
             </div>
+
+            {activeDispute && (
+                <div className={`alert-banner-v2 ${activeDispute.status === 'besoin_admin' ? 'banner-critical' : 'banner-warning'} mb-6`}>
+                    <div className="flex items-center gap-4">
+                        <div className="banner-icon">
+                            {activeDispute.status === 'besoin_admin' ? <ShieldAlert size={24} /> : <AlertTriangle size={24} />}
+                        </div>
+                        <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="font-bold text-sm uppercase tracking-wider">Dossier sous surveillance</span>
+                                <span className={`badge-status-${activeDispute.status}`}>
+                                    {activeDispute.status === 'nouveau' && 'Attente de prise en charge'}
+                                    {activeDispute.status === 'en_cours' && 'Correction en cours par Conformité'}
+                                    {activeDispute.status === 'besoin_admin' && 'Intervention Direction Requise'}
+                                </span>
+                            </div>
+                            <p className="text-sm opacity-90">
+                                Un litige de priorité <strong>{activeDispute.priority}</strong> est en cours. 
+                                Les actions de clôture de vente sont suspendues.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="detail-grid">
                 <div className="grid-left">
@@ -486,13 +610,15 @@ const ContactDetail = () => {
                     <div className="info-card card-premium mt-15">
                         <div className="d-flex-between" style={{ marginBottom: '1rem' }}>
                             <h3 style={{ margin: 0, borderBottom: 'none', paddingBottom: 0 }}>Notes Internes</h3>
-                            <button
-                                className="btn-outline"
-                                style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}
-                                onClick={() => { setEditForm({ ...contact }); setShowEditModal(true); }}
-                            >
-                                <Edit2 size={12} /> Modifier
-                            </button>
+                            {user?.role === 'admin' && (
+                                <button
+                                    className="btn-outline"
+                                    style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}
+                                    onClick={() => { setEditForm({ ...contact }); setShowEditModal(true); }}
+                                >
+                                    <Edit2 size={12} /> Modifier
+                                </button>
+                            )}
                         </div>
                         <p className="notes-text">{contact.notes || <em style={{ color: 'var(--text-muted)' }}>Aucune note pour ce contact.</em>}</p>
                     </div>
@@ -509,23 +635,27 @@ const ContactDetail = () => {
                                 <ClipboardList size={16} />
                                 Historique des interactions
                             </button>
-                            <button 
-                                className={`tab ${activeTab === 'documents' ? 'active' : ''}`}
-                                onClick={() => setActiveTab('documents')}
-                                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-                            >
-                                <Folder size={16} />
-                                Documents & Contrats
-                            </button>
+                            {['admin', 'dir_commercial', 'conformite'].includes(user?.role || '') && (
+                                <button 
+                                    className={`tab ${activeTab === 'documents' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('documents')}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                                >
+                                    <Folder size={16} />
+                                    Documents & Contrats
+                                </button>
+                            )}
                         </div>
                         <div className="tab-content">
                             {activeTab === 'history' ? (
                                 <div className="timeline">
                                     <div className="d-flex-between mb-sm">
                                         <h4 className="section-title">Timeline des échanges</h4>
-                                        <button className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem' }} onClick={() => setShowInteractionModal(true)}>
-                                            <Plus size={13} /> Ajouter
-                                        </button>
+                                        {user?.role !== 'resp_commercial' && (
+                                            <button className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem' }} onClick={() => setShowInteractionModal(true)}>
+                                                <Plus size={13} /> Ajouter
+                                            </button>
+                                        )}
                                     </div>
                                     
                                     {unifiedHistory.length === 0 ? (
@@ -575,10 +705,12 @@ const ContactDetail = () => {
 
                                                         <div className="d-flex-between mt-10">
                                                             <div className="d-flex gap-sm">
-                                                                <button className="btn-ghost btn-xs" onClick={() => handleEditItem(item)}>
-                                                                    <Edit2 size={12} /> Modifier
-                                                                </button>
-                                                                {isReschedulable && (
+                                                                {user?.role !== 'resp_commercial' && (
+                                                                    <button className="btn-ghost btn-xs" onClick={() => handleEditItem(item)}>
+                                                                        <Edit2 size={12} /> Modifier
+                                                                    </button>
+                                                                )}
+                                                                {isReschedulable && user?.role !== 'resp_commercial' && (
                                                                     <button 
                                                                         className="btn-ghost btn-xs text-primary" 
                                                                         onClick={() => handleEditItem(item)}
@@ -587,12 +719,14 @@ const ContactDetail = () => {
                                                                     </button>
                                                                 )}
                                                             </div>
-                                                            <button 
-                                                                className="btn-ghost btn-xs text-danger"
-                                                                onClick={() => handleDeleteItem(item)}
-                                                            >
-                                                                <Trash2 size={12} />
-                                                            </button>
+                                                            {user?.role !== 'resp_commercial' && (
+                                                                <button 
+                                                                    className="btn-ghost btn-xs text-danger"
+                                                                    onClick={() => handleDeleteItem(item)}
+                                                                >
+                                                                    <Trash2 size={12} />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -643,10 +777,18 @@ const ContactDetail = () => {
                     </div>
                     <div className="form-group">
                         <label className="form-label">Commercial affecté</label>
-                        <select className="form-select" value={editForm.assignedAgent || ''} onChange={e => setEditForm({ ...editForm, assignedAgent: e.target.value })}>
+                        <select 
+                            className="form-select" 
+                            disabled={!['admin', 'dir_commercial'].includes(user?.role || '')}
+                            value={editForm.assignedAgent || ''} 
+                            onChange={e => setEditForm({ ...editForm, assignedAgent: e.target.value })}
+                        >
                             <option value="">— Non assigné —</option>
                             {availableAgents.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
                         </select>
+                        {!['admin', 'dir_commercial'].includes(user?.role || '') && (
+                            <p className="text-xs text-muted mt-1">Seul l'admin ou le dir. commercial peut réaffecter un dossier.</p>
+                        )}
                     </div>
                     <div className="form-group"><label className="form-label">Adresse</label><input className="form-input" value={editForm.address || ''} onChange={e => setEditForm({ ...editForm, address: e.target.value })} placeholder="Ex: 12 avenue Senghor" /></div>
                     <div className="form-group"><label className="form-label">Pays</label><input className="form-input" value={editForm.country || ''} onChange={e => setEditForm({ ...editForm, country: e.target.value })} placeholder="Ex: Sénégal" /></div>
@@ -731,10 +873,40 @@ const ContactDetail = () => {
                                 <label className="form-label">Lieu</label>
                                 <input className="form-input" value={interactionForm.lieu} onChange={e => setInteractionForm({ ...interactionForm, lieu: e.target.value })} placeholder="Adresse ou lieu précis" />
                             </div>
-                            <div className="form-group col-2">
-                                <label className="form-label">Technicien / Expert accompagnateur (Optionnel)</label>
-                                <input className="form-input" value={interactionForm.technician} onChange={e => setInteractionForm({ ...interactionForm, technician: e.target.value })} placeholder="Ex: Samba Tall (Technicien)" />
-                            </div>
+                            
+                            {['visite_terrain', 'visite_chantier'].includes(interactionForm.type) && !editingInteraction && !editingVisit && (
+                                <div className="form-group col-2">
+                                    <label className="form-label" style={{ color: 'var(--katos-orange)', fontWeight: 800 }}>
+                                        Disponibilité Techniciens Terrain *
+                                    </label>
+                                    <select 
+                                        className="form-select bg-orange-50 border-orange-200"
+                                        value={selectedSlotId}
+                                        onChange={e => setSelectedSlotId(e.target.value)}
+                                        disabled={isLoadingSlots}
+                                    >
+                                        <option value="">— Sélectionner un créneau —</option>
+                                        {availableSlots.map(slot => (
+                                            <option key={slot.id} value={slot.id}>
+                                                {slot.agentName} : {slot.startTime.substring(0, 5)} - {slot.endTime.substring(0, 5)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {availableSlots.length === 0 && !isLoadingSlots && (
+                                        <p className="text-[10px] text-red-500 font-bold mt-1">
+                                            ⚠️ Aucun technicien disponible pour cette date ({interactionForm.date}).
+                                        </p>
+                                    )}
+                                    {isLoadingSlots && <p className="text-[10px] text-muted italic mt-1">Recherche des disponibilités...</p>}
+                                </div>
+                            )}
+
+                            {interactionForm.type === 'rdv' && (
+                                <div className="form-group col-2">
+                                    <label className="form-label">Technicien / Expert accompagnateur (Optionnel)</label>
+                                    <input className="form-input" value={interactionForm.technician} onChange={e => setInteractionForm({ ...interactionForm, technician: e.target.value })} placeholder="Ex: Samba Tall (Technicien)" />
+                                </div>
+                            )}
                         </>
                     )}
 
@@ -801,7 +973,75 @@ const ContactDetail = () => {
                 </div>
             </Modal>
 
-            {/* Les relances sont désormais gérées directement dans la modale d'interaction */}
+            {/* ---- Modale Signaler Litige ---- */}
+            <Modal 
+                isOpen={showComplianceModal} 
+                onClose={() => setShowComplianceModal(false)} 
+                title="Signaler un problème de Conformité / Litige" 
+                size="md"
+            >
+                <div className="p-4">
+                    <p className="text-sm text-muted mb-4">
+                        Utilisez ce formulaire pour alerter l'équipe de Conformité. Décrivez précisément le problème (documents manquants, erreur de contrat, contestation client, etc.).
+                    </p>
+                    <div className="form-group mb-4">
+                        <label className="form-label">Niveau de Priorité</label>
+                        <select 
+                            className="form-select" 
+                            value={compliancePriority} 
+                            onChange={e => setCompliancePriority(e.target.value as any)}
+                        >
+                            <option value="basse">🟢 Basse (Vérification simple)</option>
+                            <option value="normale">🟡 Normale (Dossier standard)</option>
+                            <option value="haute">🔴 Haute (Urgence critique)</option>
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Description du problème *</label>
+                        <textarea 
+                            className="form-textarea" 
+                            rows={4} 
+                            placeholder="Détaillez le litige ici..."
+                            value={complianceDescription}
+                            onChange={e => setComplianceDescription(e.target.value)}
+                        />
+                    </div>
+                    <div className="form-actions mt-15">
+                        <button className="btn-secondary" onClick={() => setShowComplianceModal(false)}>Annuler</button>
+                        <button 
+                            className="btn-danger" 
+                            disabled={isSubmittingCompliance || !complianceDescription.trim()}
+                            onClick={async () => {
+                                if (!user) return;
+                                setIsSubmittingCompliance(true);
+                                try {
+                                    await signalComplianceIssue({
+                                        contactId: Number(id),
+                                        signaledBy: user.id,
+                                        description: complianceDescription,
+                                        priority: compliancePriority,
+                                        contactName: contact.name
+                                    });
+                                    // Update local state to show the banner
+                                    setActiveDispute({
+                                        status: 'nouveau',
+                                        priority: compliancePriority
+                                    });
+                                    showToast('Litige signalé avec succès à l\'équipe de conformité.');
+                                    setShowComplianceModal(false);
+                                    setComplianceDescription('');
+                                } catch (err) {
+                                    showToast('Erreur lors du signalement.', 'error');
+                                } finally {
+                                    setIsSubmittingCompliance(false);
+                                }
+                            }}
+                        >
+                            {isSubmittingCompliance ? 'Signalement...' : 'Envoyer le signalement'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 };

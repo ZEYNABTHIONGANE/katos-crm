@@ -197,12 +197,17 @@ export const updateContactApi = async (id: number, updates: Partial<CrmContact>)
     
     console.log('[updateContactApi] Payload:', finalDbUpdates);
     
-    const { data: updatedData } = await supabase
+    const { data: updatedData, error } = await supabase
         .from('contacts')
         .update(finalDbUpdates)
         .eq('id', id)
         .select()
         .single();
+
+    if (error) {
+        console.error('[updateContactApi] Supabase Error:', error.message, error.details);
+        return false;
+    }
 
     // Notification: Vente ou Location réussie
     if (finalDbUpdates.status === 'Contrat' || finalDbUpdates.status === 'Client') {
@@ -369,6 +374,25 @@ export const createInteractionApi = async (interaction: Omit<Interaction, 'id'>)
         const saved = data[0];
         console.log('[API] createInteractionApi SUCCESS:', saved);
         
+        // Notification hiérarchie si c'est un agent
+        if (['rdv', 'visite_terrain', 'visite_chantier'].includes(saved.type)) {
+            let typeLabel = 'Rendez-vous';
+            if (saved.type === 'visite_terrain') typeLabel = 'Visite de terrain';
+            else if (saved.type === 'visite_chantier') typeLabel = 'Visite de chantier';
+
+            // Récupérer le nom du prospect pour un message plus clair
+            const { data: contact } = await supabase
+                .from('contacts')
+                .select('name')
+                .eq('id', saved.contact_id)
+                .single();
+
+            const prospectName = contact?.name || 'un prospect';
+            const message = `L'agent ${saved.agent} a fixé un nouveau ${typeLabel} avec ${prospectName} pour le ${saved.date} à ${saved.heure}.`;
+            
+            await notifyHierarchy(saved.agent, `Nouveau RDV fixé : ${saved.title}`, message, 'immobilier');
+        }
+
         return {
             id: saved.id,
             contactId: saved.contact_id,
@@ -387,6 +411,53 @@ export const createInteractionApi = async (interaction: Omit<Interaction, 'id'>)
         return null;
     }
 }
+
+// -- Hierarchy Notifications Helper --
+const notifyHierarchy = async (agentName: string, title: string, message: string, service?: string) => {
+    try {
+        // 1. Trouver le profil de l'agent
+        const { data: agentProfile } = await supabase
+            .from('profiles')
+            .select('id, role, parent_id')
+            .eq('name', agentName)
+            .single();
+
+        if (!agentProfile || agentProfile.role !== 'commercial') return;
+
+        // 2. Identifier les destinataires (Directeur Commercial + Manager)
+        const recipients = new Set<string>();
+
+        // Ajouter le manager direct
+        if (agentProfile.parent_id) {
+            recipients.add(agentProfile.parent_id);
+        }
+
+        // Ajouter tous les Directeurs Commerciaux
+        const { data: directors } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('role', 'dir_commercial');
+
+        if (directors) {
+            directors.forEach(d => recipients.add(d.id));
+        }
+
+        // 3. Envoyer les notifications
+        if (recipients.size > 0) {
+            const notifications = Array.from(recipients).map(uid => ({
+                type: 'rdv' as const,
+                title,
+                message,
+                assigned_to: uid,
+                service: service === 'gestion' ? 'gestion_immobiliere' : (service || 'immobilier')
+            }));
+
+            await supabase.from('notifications').insert(notifications);
+        }
+    } catch (err) {
+        console.error('[notifyHierarchy] Error:', err);
+    }
+};
 
 // -- Visits API --
 export const fetchVisits = async (contactId?: number): Promise<Visit[]> => {
@@ -442,8 +513,7 @@ export const createVisitApi = async (visit: Omit<Visit, 'id'>): Promise<Visit | 
         const saved = data[0];
         console.log('[API] createVisitApi SUCCESS:', saved);
         
-        // Notification: Nouveau RDV/Visite
-        // On cherche le commercial assigné pour le notifier
+        // 1. Notification à l'agent lui-même (existant)
         const { data: profile } = await supabase
             .from('profiles')
             .select('id')
@@ -462,6 +532,18 @@ export const createVisitApi = async (visit: Omit<Visit, 'id'>): Promise<Visit | 
             assigned_to: profile?.id,
             service: 'immobilier'
         }]);
+
+        // 2. Notification hiérarchie
+        const { data: contact } = await supabase
+            .from('contacts')
+            .select('name')
+            .eq('id', saved.contact_id)
+            .single();
+
+        const prospectName = contact?.name || 'un prospect';
+        const hierMsg = `L'agent ${saved.agent} a fixé une nouvelle ${typeLabel} avec ${prospectName} pour le ${saved.date} à ${saved.heure}.`;
+        
+        await notifyHierarchy(saved.agent, `Nouvelle planification : ${saved.title}`, hierMsg, 'immobilier');
 
         return {
             id: saved.id,
@@ -575,15 +657,17 @@ export const deleteFollowUpApi = async (id: string): Promise<boolean> => {
     return true;
 }
 
-export const fetchCommercials = async (service?: string, roles: string | string[] = ['commercial', 'manager', 'dir_commercial', 'superviseur']) => {
+export const fetchCommercials = async (service?: string, roles?: string | string[]) => {
     let query = supabase
         .from('profiles')
         .select('id, name, service, email, phone, role, parent_id, group_name');
     
-    if (Array.isArray(roles)) {
-        query = query.in('role', roles);
-    } else {
-        query = query.eq('role', roles);
+    if (roles) {
+        if (Array.isArray(roles)) {
+            query = query.in('role', roles);
+        } else {
+            query = query.eq('role', roles);
+        }
     }
     
     if (service) {
@@ -602,7 +686,7 @@ export type ProfileRow = {
     name: string;
     email?: string;
     phone?: string;
-    role: 'commercial' | 'manager' | 'resp_commercial' | 'dir_commercial' | 'superviseur' | 'admin' | 'assistante';
+    role: 'commercial' | 'manager' | 'resp_commercial' | 'dir_commercial' | 'superviseur' | 'admin' | 'assistante' | 'conformite' | 'technicien_terrain' | 'technicien_chantier';
     service?: string;
     parent_id?: string;
     group_name?: string;

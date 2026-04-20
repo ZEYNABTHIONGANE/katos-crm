@@ -4,6 +4,7 @@ import type { CrmDocument } from '../features/crm/types/documents';
 import type { ConstructionProject } from '../features/crm/types/land';
 import * as api from '../features/crm/api/contactApi';
 import * as projectApi from '../features/crm/api/projectApi';
+import { checkActiveDispute } from '../features/crm/api/complianceApi';
 
 // ─── Status → Column map ─────────────────────────────────────────────
 export const STATUS_TO_COLUMN: Record<string, string> = {
@@ -103,7 +104,7 @@ interface ContactStore {
     addInteractionsBulk: (interactions: Omit<Interaction, 'id'>[]) => Promise<number>;
     updateContact: (id: number, updates: Partial<CrmContact>) => Promise<boolean>;
     deleteContact: (id: number) => Promise<void>;
-    moveContactStatus: (id: number, newStatus: string) => Promise<void>;
+    moveContactStatus: (id: number, newStatus: string) => Promise<boolean>;
 
     addFollowUp: (f: Omit<FollowUp, 'id'>) => Promise<void>;
     updateFollowUp: (id: string, updates: Partial<FollowUp>) => Promise<void>;
@@ -203,9 +204,21 @@ export const useContactStore = create<ContactStore>()((set, get) => ({
     updateContact: async (id, updates) => {
         const { contacts } = get();
         const contact = contacts.find(c => c.id === id);
+        if (!contact) return false;
+
+        const previousContact = { ...contact };
+
+        // Blocage si litige actif et passage à statut final
+        if (updates.status && ['Livraison Client', 'Projet Livré'].includes(updates.status)) {
+            const hasDispute = await checkActiveDispute(id);
+            if (hasDispute) {
+                console.warn(`[STORE] Update blocked for contact ${id}: Active compliance dispute.`);
+                return false;
+            }
+        }
 
         // Auto-set convertedAt if status moves to a sale status for the first time
-        if (contact && updates.status && !contact.convertedAt) {
+        if (updates.status && !contact.convertedAt) {
             const SALE_STATUSES = ['Client', 'Projet Livré', 'Contrat', 'Paiement', 'Transfert de dossier technique', 'Transfert dossier tech', 'Suivi Chantier', 'Livraison Client', 'Réservation', 'Fidélisation'];
             if (SALE_STATUSES.includes(updates.status)) {
                 updates.convertedAt = new Date().toISOString();
@@ -214,8 +227,21 @@ export const useContactStore = create<ContactStore>()((set, get) => ({
 
         // Optimistic update
         set((state) => ({ contacts: state.contacts.map(c => c.id === id ? { ...c, ...updates } : c) }));
-        const success = await api.updateContactApi(id, updates);
-        return success !== false;
+        
+        try {
+            const success = await api.updateContactApi(id, updates);
+            if (success === false) {
+                // Rollback if API fails
+                set((state) => ({ contacts: state.contacts.map(c => c.id === id ? previousContact : c) }));
+                return false;
+            }
+            return true;
+        } catch (err) {
+            console.error('[STORE] Update Error:', err);
+            // Rollback on crash
+            set((state) => ({ contacts: state.contacts.map(c => c.id === id ? previousContact : c) }));
+            return false;
+        }
     },
 
     deleteContact: async (id) => {
@@ -226,10 +252,22 @@ export const useContactStore = create<ContactStore>()((set, get) => ({
     moveContactStatus: async (id, newStatus) => {
         const { contacts } = get();
         const contact = contacts.find(c => c.id === id);
+        if (!contact) return false;
+
+        const previousContact = { ...contact };
         const updates: Partial<CrmContact> = { status: newStatus };
 
+        // Blocage si litige actif et passage à statut final
+        if (['Livraison Client', 'Projet Livré'].includes(newStatus)) {
+            const hasDispute = await checkActiveDispute(id);
+            if (hasDispute) {
+                console.warn(`[STORE] Move status blocked for contact ${id}: Active compliance dispute.`);
+                return false; 
+            }
+        }
+
         // Auto-set convertedAt if status moves to a sale status for the first time
-        if (contact && !contact.convertedAt) {
+        if (!contact.convertedAt) {
             const SALE_STATUSES = ['Client', 'Projet Livré', 'Contrat', 'Paiement', 'Transfert de dossier technique', 'Transfert dossier tech', 'Suivi Chantier', 'Livraison Client'];
             if (SALE_STATUSES.includes(newStatus)) {
                 updates.convertedAt = new Date().toISOString();
@@ -237,7 +275,20 @@ export const useContactStore = create<ContactStore>()((set, get) => ({
         }
 
         set((state) => ({ contacts: state.contacts.map(c => c.id === id ? { ...c, ...updates } : c) }));
-        await api.updateContactApi(id, updates);
+        
+        try {
+            const success = await api.updateContactApi(id, updates);
+            if (success === false) {
+                // Rollback
+                set((state) => ({ contacts: state.contacts.map(c => c.id === id ? previousContact : c) }));
+                return false;
+            }
+            return true;
+        } catch (err) {
+            console.error('[STORE] moveStatus Error:', err);
+            set((state) => ({ contacts: state.contacts.map(c => c.id === id ? previousContact : c) }));
+            return false;
+        }
     },
 
     addFollowUp: async (f) => {

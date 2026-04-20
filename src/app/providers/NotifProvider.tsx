@@ -39,7 +39,7 @@ export const NotifProvider = ({ children }: { children: ReactNode }) => {
         const date = new Date(dateStr);
         const now = new Date();
         const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / 60000);
-        
+
         if (diffInMinutes < 1) return "À l'instant";
         if (diffInMinutes < 60) return `Il y a ${diffInMinutes} min`;
         if (diffInMinutes < 1440) return `Il y a ${Math.floor(diffInMinutes / 60)}h`;
@@ -54,7 +54,7 @@ export const NotifProvider = ({ children }: { children: ReactNode }) => {
             .from('notification_reads')
             .select('notification_id')
             .eq('user_id', user.id);
-        
+
         const readSet = new Set(reads?.map(r => r.notification_id) || []);
         setReadIds(readSet);
 
@@ -74,8 +74,11 @@ export const NotifProvider = ({ children }: { children: ReactNode }) => {
             // Voit uniquement ce qui lui est assigné
             query = query.eq('assigned_to', user.id);
         } else if (user.role === 'assistante') {
-            // L'assistante peut voir les infos générales (null service/assigned)
-            query = query.or('service.is.null,assigned_to.is.null');
+            // L'assistante peut voir les infos générales (null service/assigned), mais pas les litiges
+            query = query.or('service.is.null,assigned_to.is.null').neq('service', 'conformite');
+        } else if (user.role === 'conformite') {
+            // Voit les litiges + ce qui lui est assigné
+            query = query.or(`service.eq.conformite,assigned_to.eq.${user.id}`);
         }
 
         const { data, error } = await query.order('created_at', { ascending: false }).limit(50);
@@ -109,110 +112,102 @@ export const NotifProvider = ({ children }: { children: ReactNode }) => {
         const checkScheduledReminders = async () => {
             if (user.role !== 'commercial') return;
 
+            const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
             const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
-            // 1. Récupérer les visites de demain pour cet agent
-            const { data: tomorVisits } = await supabase
-                .from('visits')
-                .select(`
-                    id, 
-                    title, 
-                    date, 
-                    heure, 
-                    lieu, 
-                    type,
-                    contact_id
-                `)
-                .eq('agent', user.name)
-                .eq('date', tomorrowStr)
-                .eq('statut', 'upcoming');
+            const datesToCheck = [
+                { date: todayStr, label: "Aujourd'hui", prefix: "Aujourd'hui" },
+                { date: tomorrowStr, label: "Demain", prefix: "Rappel J-1" }
+            ];
 
-            if (!tomorVisits || tomorVisits.length === 0) return;
+            for (const d of datesToCheck) {
+                // 1. Récupérer les visites pour cet agent à cette date
+                const { data: visits } = await supabase
+                    .from('visits')
+                    .select('id, title, date, heure, lieu, type, contact_id')
+                    .eq('agent', user.name)
+                    .eq('date', d.date)
+                    .neq('statut', 'completed')
+                    .neq('statut', 'cancelled');
 
-            // 2. Pour chaque visite, vérifier si un rappel a déjà été envoyé
-            for (const v of tomorVisits) {
-                const reminderTitle = `Rappel J-1 : ${v.title}`;
-                
-                const { data: existing } = await supabase
-                    .from('notifications')
-                    .select('id')
-                    .eq('assigned_to', user.id)
-                    .eq('title', reminderTitle)
-                    .limit(1);
+                if (visits && visits.length > 0) {
+                    for (const v of visits) {
+                        const reminderTitle = `${d.prefix} : ${v.title}`;
 
-                if (existing && existing.length > 0) continue;
+                        const { data: existing } = await supabase
+                            .from('notifications')
+                            .select('id')
+                            .eq('assigned_to', user.id)
+                            .eq('title', reminderTitle)
+                            .limit(1);
 
-                // Récupérer le nom du prospect
-                const { data: contact } = await supabase
-                    .from('contacts')
-                    .select('name')
-                    .eq('id', v.contact_id)
-                    .single();
+                        if (existing && existing.length > 0) continue;
 
-                const prospectName = contact?.name || 'Prospect Inconnu';
-                
-                // Déterminer le libellé selon le type
-                let typeLabel = 'visite';
-                if (v.type === 'terrain') typeLabel = 'visite de terrain';
-                else if (v.type === 'chantier') typeLabel = 'visite de chantier';
-                else if (v.type === 'bureau') typeLabel = 'rendez-vous au bureau';
+                        const { data: contact } = await supabase
+                            .from('contacts')
+                            .select('name')
+                            .eq('id', v.contact_id)
+                            .single();
 
-                const message = `Demain à ${v.heure}, vous avez une ${typeLabel} avec ${prospectName} à ${v.lieu || 'Lieu non spécifié'}.`;
+                        const prospectName = contact?.name || 'Prospect Inconnu';
+                        let typeLabel = 'visite';
+                        if (v.type === 'terrain') typeLabel = 'visite de terrain';
+                        else if (v.type === 'chantier') typeLabel = 'visite de chantier';
+                        else if (v.type === 'bureau') typeLabel = 'rendez-vous au bureau';
 
-                await supabase.from('notifications').insert([{
-                    type: 'rdv',
-                    title: reminderTitle,
-                    message,
-                    assigned_to: user.id,
-                    service: user.service
-                }]);
-            }
+                        const message = `${d.label} à ${v.heure}, vous avez une ${typeLabel} avec ${prospectName} à ${v.lieu || 'Lieu non spécifié'}.`;
 
-            // 2. Récupérer les relances (follow-ups) de demain pour cet agent
-            const { data: tomorFollowups } = await supabase
-                .from('follow_ups')
-                .select(`
-                    id, 
-                    note, 
-                    date_relance, 
-                    contact_id
-                `)
-                .eq('agent', user.name)
-                .eq('date_relance', tomorrowStr)
-                .neq('statut', 'done');
+                        await supabase.from('notifications').insert([{
+                            type: 'rdv',
+                            title: reminderTitle,
+                            message,
+                            assigned_to: user.id,
+                            service: user.service
+                        }]);
+                    }
+                }
 
-            if (tomorFollowups && tomorFollowups.length > 0) {
-                for (const f of tomorFollowups) {
-                    const reminderTitle = `Rappel Tâche : ${f.note?.substring(0, 30) || 'Action de suivi'}...`;
-                    
-                    const { data: existing } = await supabase
-                        .from('notifications')
-                        .select('id')
-                        .eq('assigned_to', user.id)
-                        .eq('title', reminderTitle)
-                        .limit(1);
+                // 2. Récupérer les relances (follow-ups) pour cet agent à cette date
+                const { data: followups } = await supabase
+                    .from('follow_ups')
+                    .select('id, note, date_relance, contact_id')
+                    .eq('agent', user.name)
+                    .eq('date_relance', d.date)
+                    .neq('statut', 'done');
 
-                    if (existing && existing.length > 0) continue;
+                if (followups && followups.length > 0) {
+                    for (const f of followups) {
+                        const reminderTitle = `${d.prefix} Tâche : ${f.note?.substring(0, 30) || 'Action de suivi'}...`;
 
-                    // Récupérer le nom du prospect
-                    const { data: contact } = await supabase
-                        .from('contacts')
-                        .select('name')
-                        .eq('id', f.contact_id)
-                        .single();
+                        const { data: existing } = await supabase
+                            .from('notifications')
+                            .select('id')
+                            .eq('assigned_to', user.id)
+                            .eq('title', reminderTitle)
+                            .limit(1);
 
-                    const prospectName = contact?.name || 'Prospect Inconnu';
-                    const message = `Demain, vous devez effectuer une action de suivi pour ${prospectName} : "${f.note}".`;
+                        if (existing && existing.length > 0) continue;
 
-                    await supabase.from('notifications').insert([{
-                        type: 'tache',
-                        title: reminderTitle,
-                        message,
-                        assigned_to: user.id,
-                        service: user.service
-                    }]);
+                        const { data: contact } = await supabase
+                            .from('contacts')
+                            .select('name')
+                            .eq('id', f.contact_id)
+                            .single();
+
+                        const prospectName = contact?.name || 'Prospect Inconnu';
+                        const message = `${d.label}, vous devez effectuer une action de suivi pour ${prospectName} : "${f.note}".`;
+
+                        await supabase.from('notifications').insert([{
+                            type: 'tache',
+                            title: reminderTitle,
+                            message,
+                            assigned_to: user.id,
+                            service: user.service
+                        }]);
+                    }
                 }
             }
         };
@@ -225,12 +220,14 @@ export const NotifProvider = ({ children }: { children: ReactNode }) => {
             .channel('public:notifications')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
                 const newNotif = payload.new;
-                
+
                 // Vérifier si cette notification doit être affichée pour l'utilisateur actuel
                 let shouldAdd = false;
                 if (user.role === 'admin') shouldAdd = true;
                 else if (user.role === 'manager' && newNotif.service === (user.service === 'gestion' ? 'gestion_immobiliere' : user.service)) shouldAdd = true;
                 else if (user.role === 'commercial' && newNotif.assigned_to === user.id) shouldAdd = true;
+                else if (user.role === 'conformite' && (newNotif.service === 'conformite' || newNotif.assigned_to === user.id)) shouldAdd = true;
+                else if (user.role === 'assistante' && !newNotif.service && !newNotif.assigned_to) shouldAdd = true;
 
                 if (shouldAdd) {
                     setNotifications(prev => [{
@@ -255,11 +252,11 @@ export const NotifProvider = ({ children }: { children: ReactNode }) => {
 
     const markAsRead = async (id: string) => {
         if (!user) return;
-        
+
         const { error } = await supabase
             .from('notification_reads')
             .insert([{ user_id: user.id, notification_id: id }]);
-        
+
         if (!error || error.code === '23505') { // 23505 = already exists
             setReadIds(prev => new Set([...prev, id]));
             setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
@@ -268,14 +265,14 @@ export const NotifProvider = ({ children }: { children: ReactNode }) => {
 
     const markAllAsRead = async () => {
         if (!user || notifications.length === 0) return;
-        
+
         const unreadNotifs = notifications.filter(n => !readIds.has(n.id));
         if (unreadNotifs.length === 0) return;
 
         const reads = unreadNotifs.map(n => ({ user_id: user.id, notification_id: n.id }));
-        
+
         const { error } = await supabase.from('notification_reads').insert(reads);
-        
+
         if (!error) {
             const newIds = new Set([...readIds, ...unreadNotifs.map(n => n.id)]);
             setReadIds(newIds);

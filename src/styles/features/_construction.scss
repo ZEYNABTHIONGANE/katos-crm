@@ -95,6 +95,7 @@
             @include flex-between;
             align-items: flex-start;
             background: rgba(255, 255, 255, 0.02);
+            -webkit-backdrop-filter: blur(10px);
             backdrop-filter: blur(10px);
 
             h3 {
@@ -216,6 +217,7 @@
             background: rgba(var(--danger), 0.1);
             border: 1px solid rgba(var(--danger), 0.2);
             border-radius: $radius-md;
+            -webkit-backdrop-filter: blur(4px);
             backdrop-filter: blur(4px);
 
             .alert-title {

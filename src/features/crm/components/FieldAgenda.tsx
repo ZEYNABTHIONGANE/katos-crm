@@ -35,7 +35,10 @@ const FieldAgenda = () => {
         const end = new Date(viewDate);
         end.setDate(end.getDate() + 14);
 
-        const data = await fetchAgentSlots(user.id, start.toISOString().split('T')[0], end.toISOString().split('T')[0]);
+        // Si c'est un technicien, on filtre par son ID. Sinon (admin/commercial), on voit tout.
+        const isTech = user.role === 'technicien_terrain' || user.role === 'technicien_chantier';
+        const agentIdParam = isTech ? user.id : undefined;
+        const data = await fetchAgentSlots(agentIdParam as string, start.toISOString().split('T')[0], end.toISOString().split('T')[0]);
         setSlots(data);
     };
 
@@ -86,13 +89,15 @@ const FieldAgenda = () => {
     };
 
     const handleDeleteSlot = async (id: string, isBooked: boolean) => {
-        if (isBooked) {
-            showToast('Ce créneau est déjà réservé et ne peut être supprimé ici.', 'error');
-            return;
-        }
+        const confirmMsg = isBooked 
+            ? "Ce créneau est déjà réservé. Supprimer ce créneau ANNULERA le rendez-vous et enverra une notification au commercial. Confirmer ?"
+            : "Voulez-vous supprimer ce créneau de disponibilité ?";
+            
+        if (!window.confirm(confirmMsg)) return;
+
         const success = await cancelFieldSlot(id);
         if (success) {
-            showToast('Disponibilité retirée');
+            showToast(isBooked ? 'Rendez-vous annulé et créneau supprimé' : 'Disponibilité retirée');
             loadSlots();
         }
     };
@@ -114,8 +119,12 @@ const FieldAgenda = () => {
         <div className="field-agenda">
             <div className="page-header d-flex-between">
                 <div>
-                    <h1>Agenda de Disponibilité</h1>
-                    <p className="subtitle">Gérez vos créneaux de disponibilité pour les visites clients.</p>
+                    <h1>{user?.role?.startsWith('technicien') ? 'Mon Agenda' : 'Agenda des Techniciens'}</h1>
+                    <p className="subtitle">
+                        {user?.role?.startsWith('technicien') 
+                            ? 'Gérez vos créneaux de disponibilité pour les visites clients.' 
+                            : 'Consultez les disponibilités de tous les techniciens terrain.'}
+                    </p>
                 </div>
                 <div className="d-flex gap-2 items-center">
                     <div className="card-premium" style={{ padding: '0.35rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -137,7 +146,7 @@ const FieldAgenda = () => {
                             <ChevronRight size={18} />
                         </button>
                     </div>
-                    <button className="btn-primary" onClick={() => setShowAddModal(true)}>
+                    <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: (user?.role && user.role.startsWith('technicien')) || user?.role === 'admin' ? 'flex' : 'none' }}>
                         <Plus size={18} /> Ouvrir un créneau
                     </button>
                 </div>
@@ -172,7 +181,7 @@ const FieldAgenda = () => {
                                                 <span className="font-extrabold text-sm tracking-tight text-katos-blue">
                                                     {slot.startTime.substring(0, 5)} - {slot.endTime.substring(0, 5)}
                                                 </span>
-                                                {!slot.isBooked && (
+                                                {(user?.role === 'admin' || user?.id === slot.agentId) && (
                                                     <button
                                                         onClick={() => handleDeleteSlot(slot.id, slot.isBooked)}
                                                         className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 p-1.5 bg-white rounded-full shadow-sm transition-all"
@@ -182,6 +191,12 @@ const FieldAgenda = () => {
                                                     </button>
                                                 )}
                                             </div>
+                                            {user?.role && !user.role.startsWith('technicien') && (
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <User size={12} className="text-muted" />
+                                                    <span className="text-[10px] font-bold text-katos-blue truncate">{slot.agentName}</span>
+                                                </div>
+                                            )}
                                             <div className="flex items-center gap-2 mb-3">
                                                 <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${slot.visitType === 'terrain' ? 'bg-orange-100 text-katos-orange' : 'bg-blue-100 text-katos-blue'}`}>
                                                     {slot.visitType === 'terrain' ? 'Terrain' : 'Chantier'}

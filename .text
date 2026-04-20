@@ -1,0 +1,235 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.construction_projects (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  contact_id integer,
+  villa_model_id uuid,
+  progress integer DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
+  technician_name text,
+  team_planning text,
+  delivery_date date,
+  photos ARRAY DEFAULT '{}'::text[],
+  technical_issues ARRAY DEFAULT '{}'::text[],
+  status text DEFAULT 'en_cours'::text CHECK (status = ANY (ARRAY['en_cours'::text, 'termine'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT construction_projects_pkey PRIMARY KEY (id),
+  CONSTRAINT construction_projects_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES public.contacts(id),
+  CONSTRAINT construction_projects_villa_model_id_fkey FOREIGN KEY (villa_model_id) REFERENCES public.villas(id)
+);
+CREATE TABLE public.contacts (
+  id bigint NOT NULL DEFAULT nextval('contacts_id_seq'::regclass),
+  name text NOT NULL,
+  company text,
+  email text,
+  phone text,
+  status text NOT NULL DEFAULT 'Prospect'::text,
+  address text,
+  country text,
+  source text,
+  service text,
+  propertyid text,
+  propertytitle text,
+  lastaction text,
+  budget text,
+  notes text,
+  assignedagent text,
+  created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  created_by text,
+  budget_confirmed boolean DEFAULT false,
+  is_reactive boolean DEFAULT false,
+  converted_at timestamp with time zone,
+  CONSTRAINT contacts_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.crm_documents (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  contact_id integer,
+  project_id uuid,
+  name text NOT NULL,
+  type text NOT NULL,
+  file_url text NOT NULL,
+  version integer DEFAULT 1,
+  metadata jsonb DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT crm_documents_pkey PRIMARY KEY (id),
+  CONSTRAINT crm_documents_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES public.contacts(id),
+  CONSTRAINT crm_documents_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.construction_projects(id)
+);
+CREATE TABLE public.faq_entries (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  question text NOT NULL,
+  answer text NOT NULL,
+  category text NOT NULL CHECK (category = ANY (ARRAY['admin'::text, 'finance'::text, 'technique'::text, 'client'::text, 'general'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT faq_entries_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.faq_requests (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  sender_id uuid NOT NULL,
+  sender_name text NOT NULL,
+  receiver_id uuid NOT NULL,
+  subject text,
+  message text NOT NULL,
+  reply text,
+  status text DEFAULT 'pending'::text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT faq_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT faq_requests_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES public.profiles(id),
+  CONSTRAINT faq_requests_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.field_slots (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  agent_id uuid,
+  agent_name text NOT NULL,
+  date date NOT NULL,
+  start_time time without time zone NOT NULL,
+  end_time time without time zone NOT NULL,
+  is_booked boolean DEFAULT false,
+  booked_for integer,
+  visit_type text CHECK (visit_type = ANY (ARRAY['terrain'::text, 'chantier'::text])),
+  CONSTRAINT field_slots_pkey PRIMARY KEY (id),
+  CONSTRAINT field_slots_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES public.profiles(id),
+  CONSTRAINT field_slots_booked_for_fkey FOREIGN KEY (booked_for) REFERENCES public.contacts(id)
+);
+CREATE TABLE public.follow_ups (
+  id text NOT NULL DEFAULT (gen_random_uuid())::text,
+  contact_id bigint,
+  agent text NOT NULL,
+  date_relance text NOT NULL,
+  note text,
+  statut text NOT NULL DEFAULT 'upcoming'::text,
+  priorite text NOT NULL DEFAULT 'normale'::text,
+  interaction_id text,
+  created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT follow_ups_pkey PRIMARY KEY (id),
+  CONSTRAINT follow_ups_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES public.contacts(id),
+  CONSTRAINT follow_ups_interaction_id_fkey FOREIGN KEY (interaction_id) REFERENCES public.interactions(id)
+);
+CREATE TABLE public.immobilier_biens (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  description text,
+  price bigint NOT NULL,
+  surface numeric,
+  location text NOT NULL,
+  bien_type text NOT NULL CHECK (bien_type = ANY (ARRAY['location'::text, 'achat'::text])),
+  status text NOT NULL DEFAULT 'disponible'::text,
+  image_url text,
+  assigned_agent text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  owner_name text,
+  CONSTRAINT immobilier_biens_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.interactions (
+  id text NOT NULL DEFAULT (gen_random_uuid())::text,
+  contact_id bigint,
+  type text NOT NULL,
+  title text NOT NULL,
+  description text,
+  date text NOT NULL,
+  heure text NOT NULL,
+  agent text NOT NULL,
+  lieu text,
+  issue text,
+  executionstatus text NOT NULL DEFAULT 'fait'::text,
+  technician text,
+  created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT interactions_pkey PRIMARY KEY (id),
+  CONSTRAINT interactions_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES public.contacts(id)
+);
+CREATE TABLE public.lands (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  description text,
+  price numeric NOT NULL,
+  status text NOT NULL CHECK (status = ANY (ARRAY['disponible'::text, 'vendu'::text, 'reserve'::text])),
+  location text NOT NULL,
+  surface numeric NOT NULL,
+  owner_name text DEFAULT 'Katos'::text,
+  image_url text,
+  reference text UNIQUE,
+  legal_nature text,
+  assigned_agent text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT lands_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.lots (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  land_id uuid,
+  lot_number text NOT NULL,
+  surface numeric NOT NULL,
+  price numeric NOT NULL,
+  status text NOT NULL CHECK (status = ANY (ARRAY['disponible'::text, 'vendu'::text, 'reserve'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT lots_pkey PRIMARY KEY (id),
+  CONSTRAINT lots_land_id_fkey FOREIGN KEY (land_id) REFERENCES public.lands(id)
+);
+CREATE TABLE public.notification_reads (
+  user_id uuid NOT NULL,
+  notification_id uuid NOT NULL,
+  read_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT notification_reads_pkey PRIMARY KEY (user_id, notification_id),
+  CONSTRAINT notification_reads_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT notification_reads_notification_id_fkey FOREIGN KEY (notification_id) REFERENCES public.notifications(id)
+);
+CREATE TABLE public.notifications (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  type text NOT NULL,
+  title text NOT NULL,
+  message text NOT NULL,
+  service text,
+  assigned_to uuid,
+  created_by_name text DEFAULT 'Système'::text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT notifications_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.profiles (
+  id uuid NOT NULL,
+  name text,
+  role text CHECK (role = ANY (ARRAY['admin'::text, 'dir_commercial'::text, 'superviseur'::text, 'resp_commercial'::text, 'manager'::text, 'commercial'::text, 'assistante'::text])),
+  avatar_url text,
+  service text CHECK (service = ANY (ARRAY['foncier'::text, 'construction'::text, 'gestion'::text])),
+  email text,
+  phone text,
+  parent_id uuid,
+  group_name text,
+  CONSTRAINT profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id),
+  CONSTRAINT profiles_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.villas (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  description text,
+  type text NOT NULL,
+  surface numeric NOT NULL,
+  price numeric NOT NULL,
+  status text NOT NULL CHECK (status = ANY (ARRAY['disponible'::text, 'vendu'::text, 'reserve'::text])),
+  location text NOT NULL,
+  image_url text,
+  assigned_agent text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT villas_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.visits (
+  id bigint NOT NULL DEFAULT nextval('visits_id_seq'::regclass),
+  title text NOT NULL,
+  contact_id bigint,
+  date text NOT NULL,
+  heure text NOT NULL,
+  lieu text NOT NULL,
+  type text NOT NULL,
+  statut text NOT NULL DEFAULT 'upcoming'::text,
+  agent text NOT NULL,
+  technician text,
+  notes text,
+  created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT visits_pkey PRIMARY KEY (id),
+  CONSTRAINT visits_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES public.contacts(id)
+);
