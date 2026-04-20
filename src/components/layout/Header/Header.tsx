@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Bell, Menu } from 'lucide-react';
+import { Bell, Menu } from 'lucide-react';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { useNotifications } from '@/app/providers/NotifProvider';
 import NotifPanel from '@/components/ui/NotifPanel';
