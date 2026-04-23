@@ -175,7 +175,8 @@ export const updateContactApi = async (id: number, updates: Partial<CrmContact>)
         lastAction: 'lastaction',
         budgetConfirmed: 'budget_confirmed',
         isReactive: 'is_reactive',
-        convertedAt: 'converted_at'
+        convertedAt: 'converted_at',
+        refusalReason: 'refusal_reason'
     };
     
     // 1. Build a CLEAN snake_case object
@@ -184,7 +185,7 @@ export const updateContactApi = async (id: number, updates: Partial<CrmContact>)
         'name', 'company', 'email', 'phone', 'status', 'address', 'country', 
         'source', 'service', 'budget', 'notes', 
         'assignedagent', 'propertyid', 'propertytitle', 'lastaction', 
-        'budget_confirmed', 'is_reactive', 'converted_at'
+        'budget_confirmed', 'is_reactive', 'converted_at', 'refusal_reason'
     ];
 
     for (const [key, value] of Object.entries(updates)) {

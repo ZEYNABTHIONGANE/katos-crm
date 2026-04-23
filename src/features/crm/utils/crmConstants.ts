@@ -29,7 +29,7 @@ export const PIPELINE_STATUSES = [
 ];
 
 /** Tous les statuts du cycle de vente complet */
-export const ALL_STATUSES = [...PIPELINE_STATUSES, ...SALE_STATUSES];
+export const ALL_STATUSES = [...PIPELINE_STATUSES, ...SALE_STATUSES, 'Pas intéressé'];
 
 /**
  * Compte les contacts assignés à un agent donné (tous statuts confondus)

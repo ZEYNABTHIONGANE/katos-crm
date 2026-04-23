@@ -23,6 +23,7 @@ import FieldAgenda from '@/features/crm/components/FieldAgenda';
 import FAQ from '@/features/crm/components/FAQ';
 import Messages from '@/features/crm/components/Messages';
 import ComplianceDashboard from '@/features/crm/components/ComplianceDashboard';
+import SuiviCommercial from '@/features/crm/components/SuiviCommercial';
 
 
 import { ProtectedRoute, RoleGuard } from '@/router';
@@ -48,6 +49,7 @@ function App() {
                   <Route path="pipeline" element={<Pipeline />} />
                   <Route path="relances" element={<RoleGuard allowedRoles={['commercial']}><Relances /></RoleGuard>} />
                   <Route path="agents" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial']}><Agents /></RoleGuard>} />
+                  <Route path="suivi-commercial" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial', 'superviseur']}><SuiviCommercial /></RoleGuard>} />
                   <Route path="rapports" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial']}><Rapports /></RoleGuard>} />
                   <Route path="foncier" element={<LandList />} />
                   <Route path="foncier/:id" element={<LandDetails />} />

@@ -1,5 +1,6 @@
 import { fetchContacts, fetchVisits, fetchCommercials } from './contactApi';
 import type { CrmContact } from '@/stores/contactStore';
+import { SALE_STATUSES, PIPELINE_STATUSES } from '../utils/crmConstants';
 
 export interface RapportData {
     periodStats: {
@@ -27,12 +28,6 @@ export interface RapportData {
     }[];
     rawContacts: CrmContact[];
 }
-
-const SALE_STATUSES = [
-    'Client', 'Projet Livré', 'Contrat', 'Paiement', 
-    'Transfert de dossier technique', 'Transfert dossier tech', 
-    'Suivi Chantier', 'Livraison Client', 'Réservation', 'Fidélisation'
-];
 
 const COLORS = ['#2B2E83', '#E96C2E', '#10B981', '#6366F1', '#F59E0B', '#8B5CF6'];
 
@@ -82,21 +77,34 @@ export const getRapportData = async (period: string): Promise<RapportData> => {
     const conversionRate = newProspects > 0 ? Math.round((closedSales / newProspects) * 100) : 0;
 
     // 4. Agent Performance
-    const agentPerf = agents.map(agent => {
-        const agentContacts = filteredContacts.filter(c => c.assignedAgent === agent.name);
-        const agentSales = agentContacts.filter(c => SALE_STATUSES.includes(c.status)).length;
-        const conversion = agentContacts.length > 0 
-            ? Math.round((agentSales / agentContacts.length) * 100) 
-            : 0;
-        
-        return {
-            agent: agent.name,
-            prospects: agentContacts.length,
-            sales: agentSales,
-            conversion: `${conversion}%`
-        };
-    }).filter(a => a.prospects > 0 || a.sales > 0) // Only show active agents in period
-      .sort((a, b) => b.sales - a.sales);
+    // - Uniquement les agents avec rôle 'commercial'
+    // - Comparaison insensible à la casse pour éviter les non-correspondances
+    const agentPerf = agents
+        .filter(agent => agent.role === 'commercial') // Exclure RC, admins, techniciens…
+        .map(agent => {
+            const agentNameLower = (agent.name || '').trim().toLowerCase();
+            const agentContacts = filteredContacts.filter(c =>
+                (c.assignedAgent || '').trim().toLowerCase() === agentNameLower
+            );
+            
+            // On compte uniquement les prospects actifs (en pipeline) pour cohérence avec le Dashboard
+            const activeProspectsCount = agentContacts.filter(c => PIPELINE_STATUSES.includes(c.status)).length;
+            const agentSales = agentContacts.filter(c => SALE_STATUSES.includes(c.status)).length;
+            
+            // Le taux de conversion est calculé sur le volume total de contacts de l'agent
+            const conversion = agentContacts.length > 0
+                ? Math.round((agentSales / agentContacts.length) * 100)
+                : 0;
+
+            return {
+                agent: agent.name,
+                prospects: activeProspectsCount,
+                sales: agentSales,
+                conversion: `${conversion}%`
+            };
+        })
+        .filter(a => a.prospects > 0 || a.sales > 0) // Uniquement agents actifs sur la période
+        .sort((a, b) => b.sales - a.sales);
 
     // 5. Origin Analysis
     const originsMap = new Map<string, number>();

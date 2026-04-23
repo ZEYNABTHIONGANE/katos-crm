@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 import {
     Send, MessageSquare, Star, Search,
     Smile, Plus, Inbox, SendHorizonal, Trash2,
-    RefreshCw, ArrowLeft, ChevronLeft, MoreHorizontal
+    RefreshCw, ArrowLeft, ChevronLeft
 } from 'lucide-react';
 import { useToast } from '@/app/providers/ToastProvider';
 import AgentSelectorModal from './AgentSelectorModal.tsx';
@@ -34,9 +34,16 @@ const Messages = () => {
     const [isSending, setIsSending] = useState(false);
     const [showNewChatModal, setShowNewChatModal] = useState(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [isMobileView, setIsMobileView] = useState(window.innerWidth < 1024);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const commonEmojis = ['😊', '👍', '🙏', '🔥', '🎉', '🚀', '✅', '❤️', '🤔', '🤝'];
+
+    useEffect(() => {
+        const handleResize = () => setIsMobileView(window.innerWidth < 1024);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     /* ──────────────── Init ──────────────── */
     useEffect(() => {
@@ -47,13 +54,13 @@ const Messages = () => {
         if (user) loadGroups();
     }, [folder]);
 
-    /* ──────────────── Temps réel sur la conversation ouverte ──────────────── */
+    /* ──────────────── Temps réel ──────────────── */
     useEffect(() => {
         if (!selectedGroup) return;
         loadMessages(selectedGroup.id);
         if (user) chatApi.markGroupAsRead(selectedGroup.id, user.id).then(() => {
             loadGroups();
-            refreshUnreadCount(); // Met à jour le badge de la sidebar immédiatement
+            refreshUnreadCount();
         });
 
         const channel = supabase
@@ -62,15 +69,33 @@ const Messages = () => {
                 event: 'INSERT', schema: 'public', table: 'chat_messages',
                 filter: `group_id=eq.${selectedGroup.id}`
             }, async (payload) => {
-                const { data: profile } = await supabase.from('profiles')
-                    .select('name, role').eq('id', payload.new.sender_id).single();
-                setMessages(prev => [...prev, {
-                    ...(payload.new as ChatMessage),
-                    sender_name: profile?.name || 'Inconnu',
-                    sender_role: profile?.role || 'Agent',
-                }]);
-                // Marquer automatiquement comme lu car la conversation est ouverte
-                if (user && payload.new.sender_id !== user.id) {
+                const newMsg = payload.new as ChatMessage;
+                
+                setMessages(prev => {
+                    if (prev.some(m => m.id === newMsg.id)) return prev;
+
+                    if (user && newMsg.sender_id === user.id) {
+                        const filtered = prev.filter(m => !m.id.toString().startsWith('temp-'));
+                        return [...filtered, {
+                            ...newMsg,
+                            sender_name: user.name || 'Moi',
+                            sender_role: user.role || 'Agent'
+                        }];
+                    }
+
+                    return [...prev, { ...newMsg, sender_name: '...' }];
+                });
+
+                if (user && newMsg.sender_id !== user.id) {
+                    const { data: profile } = await supabase.from('profiles')
+                        .select('name, role').eq('id', newMsg.sender_id).single();
+                    
+                    setMessages(prev => prev.map(m => 
+                        m.id === newMsg.id 
+                        ? { ...m, sender_name: profile?.name || 'Inconnu', sender_role: profile?.role || 'Agent' }
+                        : m
+                    ));
+
                     chatApi.markGroupAsRead(selectedGroup.id, user.id).then(() => {
                         loadGroups();
                         refreshUnreadCount();
@@ -86,10 +111,11 @@ const Messages = () => {
 
     useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-    /* ──────────────── Fonctions ──────────────── */
     const initChat = async () => {
         try {
             setIsLoading(true);
+            // Nettoyer les doublons existants puis s'assurer que le canal existe
+            await chatApi.deduplicatePublicChannels();
             await chatApi.ensureDefaultGroups();
             await loadGroups();
         } catch (err) {
@@ -107,7 +133,6 @@ const Messages = () => {
             chatApi.fetchGroupsForFolder(user.id, 'trash'),
             chatApi.fetchGroupsForFolder(user.id, 'important'),
         ]);
-        // Compter les non-lus dans inbox
         const unreadTotal = inbox.reduce((acc, g) => acc + (g.unread_count || 0), 0);
         setFolderCounts({ 
             inbox: unreadTotal, 
@@ -130,12 +155,33 @@ const Messages = () => {
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newMessage.trim() || !selectedGroup || !user || isSending) return;
+
+        const content = newMessage.trim();
+        const tempId = 'temp-' + Date.now();
+
+        const optimisticMsg: ChatMessage = {
+            id: tempId,
+            group_id: selectedGroup.id,
+            sender_id: user.id,
+            content: content,
+            created_at: new Date().toISOString(),
+            sender_name: user.name || 'Moi',
+            sender_role: user.role || 'Agent'
+        };
+
+        setMessages(prev => [...prev, optimisticMsg]);
+        setNewMessage('');
+        
+        const textarea = (e.target as any).querySelector('textarea');
+        if (textarea) textarea.style.height = '44px';
+
         try {
             setIsSending(true);
-            await chatApi.sendMessage(selectedGroup.id, user.id, newMessage);
-            setNewMessage('');
-            loadGroups();
+            await chatApi.sendMessage(selectedGroup.id, user.id, content);
+            loadGroups(); 
         } catch (err: any) {
+            setMessages(prev => prev.filter(m => m.id !== tempId));
+            setNewMessage(content);
             showToast(err.message || 'Échec de l\'envoi', 'error');
         } finally {
             setIsSending(false);
@@ -160,10 +206,14 @@ const Messages = () => {
     const handleTrash = async (group: ChatGroup, e: React.MouseEvent) => {
         e.stopPropagation();
         if (!user) return;
-        await chatApi.moveThreadToTrash(group.id, user.id);
-        showToast('Discussion déplacée dans la corbeille', 'success');
-        if (selectedGroup?.id === group.id) setSelectedGroup(null);
-        loadGroups();
+        try {
+            await chatApi.moveThreadToTrash(group.id, user.id);
+            showToast('Discussion déplacée dans la corbeille', 'success');
+            if (selectedGroup?.id === group.id) setSelectedGroup(null);
+            await loadGroups();
+        } catch (err: any) {
+            showToast(err.message || 'Impossible de déplacer vers la corbeille', 'error');
+        }
     };
 
     const handleRestore = async (group: ChatGroup, e: React.MouseEvent) => {
@@ -171,6 +221,16 @@ const Messages = () => {
         if (!user) return;
         await chatApi.restoreThreadFromTrash(group.id, user.id);
         showToast('Discussion restaurée', 'success');
+        loadGroups();
+    };
+
+    const handlePermanentDelete = async (group: ChatGroup, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!user) return;
+        if (!window.confirm('Supprimer définitivement cette discussion ? Cette action est irréversible.')) return;
+        await chatApi.permanentlyDeleteThread(group.id, user.id);
+        showToast('Discussion supprimée définitivement', 'success');
+        if (selectedGroup?.id === group.id) setSelectedGroup(null);
         loadGroups();
     };
 
@@ -182,13 +242,8 @@ const Messages = () => {
         loadGroups();
     };
 
-    /* ──────────────── Helpers UI ──────────────── */
-
-    const getGroupTitle = (group: ChatGroup) =>
-        group.display_name || group.name || 'Discussion';
-
-    const getInitial = (title: string) =>
-        title.replace(/[#🔒]/g, '').trim().charAt(0).toUpperCase() || '?';
+    const getGroupTitle = (group: ChatGroup) => group.display_name || group.name || 'Discussion';
+    const getInitial = (title: string) => title.replace(/[#🔒]/g, '').trim().charAt(0).toUpperCase() || '?';
 
     const formatTime = (dateStr?: string) => {
         if (!dateStr) return '';
@@ -216,7 +271,7 @@ const Messages = () => {
     }
 
     return (
-        <div className="mailbox-container app-fade-in">
+        <div className={`mailbox-container app-fade-in ${selectedGroup ? 'has-selection' : ''} ${isMobileView ? 'mobile-mode' : ''}`}>
             {/* ── Colonne 1 : Dossiers ── */}
             <aside className="mailbox-sidebar">
                 <div className="mailbox-sidebar-header">
@@ -237,9 +292,7 @@ const Messages = () => {
                         >
                             <span className="folder-icon">{f.icon}</span>
                             <span className="folder-label">{f.label}</span>
-                            {f.count > 0 && (
-                                <span className="folder-badge">{f.count}</span>
-                            )}
+                            {f.count > 0 && <span className="folder-badge">{f.count}</span>}
                         </button>
                     ))}
                 </nav>
@@ -271,153 +324,118 @@ const Messages = () => {
                     />
                 </div>
 
-                {groups.length === 0 ? (
-                    <div className="mailbox-empty">
-                        <MessageSquare size={40} opacity={0.2} />
-                        <p>
-                            {folder === 'inbox' && 'Aucun message reçu'}
-                            {folder === 'important' && 'Aucun message important'}
-                            {folder === 'sent' && 'Aucun message envoyé'}
-                            {folder === 'trash' && 'La corbeille est vide'}
-                        </p>
-                    </div>
-                ) : (
-                    <div className="mailbox-thread-list">
-                        {groups.filter(g => {
-                            if (!searchTerm) return true;
-                            const title = getGroupTitle(g).toLowerCase();
-                            const lastMsg = (g.last_message || '').toLowerCase();
-                            return title.includes(searchTerm.toLowerCase()) || lastMsg.includes(searchTerm.toLowerCase());
-                        }).map(group => {
-                            const title = getGroupTitle(group);
-                            const isSelected = selectedGroup?.id === group.id;
-                            const hasUnread = (group.unread_count || 0) > 0;
-                            return (
-                                <div
-                                    key={group.id}
-                                    className={`mailbox-thread ${isSelected ? 'active' : ''} ${hasUnread ? 'unread' : ''}`}
-                                    onClick={() => setSelectedGroup(group)}
-                                >
-                                    <div className="thread-avatar-lg">
-                                        {group.type === 'public' ? '#' : getInitial(title)}
+                <div className="mailbox-thread-list">
+                    {groups.filter(g => {
+                        if (!searchTerm) return true;
+                        const title = getGroupTitle(g).toLowerCase();
+                        const lastMsg = (g.last_message || '').toLowerCase();
+                        return title.includes(searchTerm.toLowerCase()) || lastMsg.includes(searchTerm.toLowerCase());
+                    }).map(group => {
+                        const title = getGroupTitle(group);
+                        const isSelected = selectedGroup?.id === group.id;
+                        const hasUnread = (group.unread_count || 0) > 0;
+                        return (
+                            <div
+                                key={group.id}
+                                className={`mailbox-thread ${isSelected ? 'active' : ''} ${hasUnread ? 'unread' : ''}`}
+                                onClick={() => setSelectedGroup(group)}
+                            >
+                                <div className="thread-avatar-lg">
+                                    {group.type === 'public' ? '#' : getInitial(title)}
+                                </div>
+                                <div className="thread-body">
+                                    <div className="thread-top">
+                                        <span className="thread-title">{title}</span>
+                                        <span className="thread-date">{formatTime(group.last_message_at)}</span>
                                     </div>
-                                    <div className="thread-body">
-                                        <div className="thread-top">
-                                            <span className="thread-title">{title}</span>
-                                            <span className="thread-date">{formatTime(group.last_message_at)}</span>
-                                        </div>
-                                        <div className="thread-bottom">
-                                            <span className="thread-preview">
-                                                {group.last_sender ? <strong>{group.last_sender.split(' ')[0]}: </strong> : ''}
-                                                {group.last_message || 'Nouvelle discussion'}
-                                            </span>
-                                            <div className="thread-meta">
-                                                {hasUnread && (
-                                                    <span className="unread-dot">{group.unread_count}</span>
-                                                )}
-
-                                                <button 
-                                                    className={`thread-star-btn ${group.is_important ? 'active' : ''}`}
-                                                    onClick={e => handleToggleStar(group, e)}
-                                                    title={group.is_important ? "Retirer des favoris" : "Marquer comme important"}
-                                                >
-                                                    <Star size={14} fill={group.is_important ? "currentColor" : "none"} />
+                                    <div className="thread-bottom">
+                                        <span className="thread-preview">
+                                            {group.last_sender ? <strong>{group.last_sender.split(' ')[0]}: </strong> : ''}
+                                            {group.last_message || 'Nouvelle discussion'}
+                                        </span>
+                                        <div className="thread-meta">
+                                            {hasUnread && <span className="unread-dot">{group.unread_count}</span>}
+                                            <button 
+                                                className={`thread-star-btn ${group.is_important ? 'active' : ''}`}
+                                                onClick={e => handleToggleStar(group, e)}
+                                            >
+                                                <Star size={14} fill={group.is_important ? "currentColor" : "none"} />
+                                            </button>
+                                            {folder !== 'trash' && group.type !== 'public' && (
+                                                <button className="thread-del-btn" onClick={e => handleTrash(group, e)} title="Mettre à la corbeille">
+                                                    <Trash2 size={13} />
                                                 </button>
-
-                                                {folder !== 'trash' && group.type !== 'public' && (
-                                                    <button className="thread-del-btn" onClick={e => handleTrash(group, e)} title="Supprimer">
+                                            )}
+                                            {folder === 'trash' && (
+                                                <>
+                                                    <button className="thread-restore-btn" onClick={e => handleRestore(group, e)} title="Restaurer">
+                                                        <ArrowLeft size={13} />
+                                                    </button>
+                                                    <button className="thread-del-btn danger" onClick={e => handlePermanentDelete(group, e)} title="Supprimer définitivement">
                                                         <Trash2 size={13} />
                                                     </button>
-                                                )}
-                                                {folder === 'trash' && (
-                                                    <button className="thread-del-btn restore" onClick={e => handleRestore(group, e)} title="Restaurer">
-                                                        <RefreshCw size={13} />
-                                                    </button>
-                                                )}
-                                            </div>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
-                            );
-                        })}
-                    </div>
-                )}
+                            </div>
+                        );
+                    })}
+                </div>
             </section>
 
             {/* ── Colonne 3 : Conversation ── */}
             <section className="mailbox-detail">
                 {selectedGroup ? (
                     <>
-                        {/* Header de la conversation */}
                         <div className="detail-header">
-                            <button className="icon-btn" onClick={() => setSelectedGroup(null)} title="Retour">
+                            <button className="icon-btn back-to-list-mobile" onClick={() => setSelectedGroup(null)} title="Retour">
+                                <ArrowLeft size={20} />
+                            </button>
+                            <button className="icon-btn close-detail-desktop" onClick={() => setSelectedGroup(null)} title="Fermer">
                                 <ChevronLeft size={20} />
                             </button>
                             <div className="detail-avatar">
-                                {selectedGroup.type === 'public'
-                                    ? '#'
-                                    : getInitial(getGroupTitle(selectedGroup))}
+                                {selectedGroup.type === 'public' ? '#' : getInitial(getGroupTitle(selectedGroup))}
                             </div>
                             <div className="detail-info">
                                 <h3>{getGroupTitle(selectedGroup)}</h3>
-                                <span>{selectedGroup.type === 'public' ? 'Canal ouvert à tous' : 'Discussion privée'}</span>
+                                <span>{selectedGroup.type === 'public' ? 'Canal ouvert' : 'Privé'}</span>
                             </div>
-                            <button className="icon-btn" title="Options">
-                                <MoreHorizontal size={20} />
-                            </button>
                         </div>
 
-                        {/* Messages */}
                         <div className="detail-messages">
-                            {messages.length === 0 ? (
-                                <div className="messages-empty">
-                                    <MessageSquare size={48} opacity={0.15} />
-                                    <p>Commencez la conversation</p>
-                                </div>
-                            ) : (
-                                messages.map((msg, i) => {
-                                    const isMe = msg.sender_id === user?.id;
-                                    const showMeta = i === 0 || messages[i - 1].sender_id !== msg.sender_id;
-                                    return (
-                                        <div key={msg.id} className={`msg-row ${isMe ? 'mine' : ''}`}>
-                                            {!isMe && showMeta && (
-                                                <div className="msg-avatar">
-                                                    {(msg.sender_name || '?').charAt(0)}
-                                                </div>
-                                            )}
-                                            {!isMe && !showMeta && <div className="msg-avatar-spacer" />}
-                                            <div className="msg-block">
-                                                {!isMe && showMeta && (
-                                                    <div className="msg-sender">
-                                                        {msg.sender_name}
-                                                        <span className="msg-role">{msg.sender_role}</span>
-                                                    </div>
-                                                )}
-                                                <div className="msg-bubble">
-                                                    <span className="msg-text">{msg.content}</span>
-                                                    <span className="msg-time">
-                                                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                    </span>
-                                                </div>
+                            {messages.map((msg, i) => {
+                                const isMe = msg.sender_id === user?.id;
+                                const showMeta = i === 0 || messages[i - 1].sender_id !== msg.sender_id;
+                                return (
+                                    <div key={msg.id} className={`msg-row ${isMe ? 'mine' : ''} ${msg.id.toString().startsWith('temp-') ? 'sending' : ''}`}>
+                                        {!isMe && showMeta && <div className="msg-avatar">{(msg.sender_name || '?').charAt(0)}</div>}
+                                        {!isMe && !showMeta && <div className="msg-avatar-spacer" />}
+                                        <div className="msg-block">
+                                            {!isMe && showMeta && <div className="msg-sender">{msg.sender_name} <span className="msg-role">{msg.sender_role}</span></div>}
+                                            <div className="msg-bubble">
+                                                <span className="msg-text">{msg.content}</span>
+                                                <span className="msg-time">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                             </div>
                                         </div>
-                                    );
-                                })
-                            )}
+                                    </div>
+                                );
+                            })}
                             <div ref={messagesEndRef} />
                         </div>
 
-                        {/* Zone de saisie */}
                         {folder !== 'trash' ? (
                             <form className="detail-input" onSubmit={handleSendMessage}>
                                 <div className="input-wrapper">
                                     <textarea
-                                        placeholder={`Répondre à ${getGroupTitle(selectedGroup)}…`}
+                                        placeholder="Écrivez votre message..."
                                         value={newMessage}
                                         onChange={(e) => {
                                             setNewMessage(e.target.value);
-                                            e.target.style.height = '44px';
-                                            e.target.style.height = `${Math.min(e.target.scrollHeight, 130)}px`;
+                                            e.target.style.height = 'auto';
+                                            e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
                                         }}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' && !e.shiftKey) {
@@ -428,11 +446,11 @@ const Messages = () => {
                                         rows={1}
                                     />
                                     <div className="input-toolbar">
-                                        <button type="button" className="toolbar-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)}>
+                                        <button type="button" className="icon-btn small" onClick={() => setShowEmojiPicker(!showEmojiPicker)}>
                                             <Smile size={18} />
                                         </button>
                                         {showEmojiPicker && (
-                                            <div className="emoji-picker app-fade-in">
+                                            <div className="emoji-picker">
                                                 {commonEmojis.map(e => (
                                                     <button key={e} type="button" onClick={() => { setNewMessage(p => p + e); setShowEmojiPicker(false); }}>
                                                         {e}
@@ -449,10 +467,13 @@ const Messages = () => {
                             </form>
                         ) : (
                             <div className="trash-notice">
-                                <Trash2 size={15} />
-                                <span>Cette discussion est dans la corbeille.</span>
-                                <button onClick={e => handleRestore(selectedGroup, e)}>
-                                    <ArrowLeft size={13} /> Restaurer
+                                <Trash2 size={15} /><span>Discussion supprimée.</span>
+                                <button onClick={e => handleRestore(selectedGroup, e)}><ArrowLeft size={13} /> Restaurer</button>
+                                <button
+                                    className="trash-delete-btn"
+                                    onClick={e => handlePermanentDelete(selectedGroup, e)}
+                                >
+                                    <Trash2 size={13} /> Supprimer définitivement
                                 </button>
                             </div>
                         )}
@@ -460,23 +481,13 @@ const Messages = () => {
                 ) : (
                     <div className="detail-placeholder">
                         <MessageSquare size={56} opacity={0.12} />
-                        <p>Sélectionnez une conversation</p>
-                        <span>ou créez un nouveau message</span>
-                        <button className="mailbox-compose-btn-inline" onClick={() => setShowNewChatModal(true)}>
-                            <Plus size={16} /> Nouveau message
-                        </button>
+                        <p>Sélectionnez une discussion</p>
+                        <button className="mailbox-compose-btn-inline" onClick={() => setShowNewChatModal(true)}><Plus size={16} /> Nouveau message</button>
                     </div>
                 )}
             </section>
 
-            {/* Modale de création */}
-            {showNewChatModal && (
-                <AgentSelectorModal
-                    onClose={() => setShowNewChatModal(false)}
-                    onSelect={handleNewDiscussion}
-                    excludeUserId={user?.id}
-                />
-            )}
+            {showNewChatModal && <AgentSelectorModal onClose={() => setShowNewChatModal(false)} onSelect={handleNewDiscussion} excludeUserId={user?.id} />}
         </div>
     );
 };

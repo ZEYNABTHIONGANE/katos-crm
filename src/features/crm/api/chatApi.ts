@@ -50,7 +50,17 @@ export const chatApi = {
             Array.isArray(m.chat_groups) ? m.chat_groups[0] : m.chat_groups
         ).filter(Boolean) || []) as ChatGroup[];
 
-        // 3. Pour chaque groupe, enrichir avec le dernier message et le statut
+        // 3. Récupérer les statuts par thread (corbeille/important) depuis la nouvelle table
+        const { data: threadStatuses } = await supabase
+            .from('chat_user_thread_status')
+            .select('group_id, is_deleted, is_important')
+            .eq('user_id', userId);
+
+        const threadStatusMap = new Map(
+            (threadStatuses || []).map(s => [s.group_id, s])
+        );
+
+        // 4. Pour chaque groupe, enrichir avec le dernier message
         const enriched = await Promise.all(privateGroups.map(async (group) => {
             // Dernier message du groupe
             const { data: lastMsgs } = await supabase
@@ -62,22 +72,12 @@ export const chatApi = {
 
             const lastMsg = lastMsgs?.[0];
 
-            // Vérifier le statut (supprimé, important) de la discussion pour cet utilisateur
-            let isDeletedByMe = false;
-            let isImportant = false;
-            if (lastMsg) {
-                const { data: statusData } = await supabase
-                    .from('chat_message_status')
-                    .select('is_deleted, is_important')
-                    .eq('user_id', userId)
-                    .eq('message_id', lastMsg.id)
-                    .maybeSingle();
-                isDeletedByMe = statusData?.is_deleted || false;
-                isImportant = statusData?.is_important || false;
-            }
+            // Statut corbeille/important depuis la table dédiée (fiable)
+            const threadStatus = threadStatusMap.get(group.id);
+            const isDeletedByMe = threadStatus?.is_deleted || false;
+            const isImportant   = threadStatus?.is_important || false;
 
-            // Compter les messages non-lus RÉELS
-            // = messages pas de moi + pas dans chat_message_status(is_read=true)
+            // Compter les messages non-lus
             const { data: allMsgs } = await supabase
                 .from('chat_messages')
                 .select('id')
@@ -141,13 +141,17 @@ export const chatApi = {
             filteredPrivate = enriched.filter(g => g.is_deleted_by_me);
         }
 
+        // 5. Fusionner et dédoublonner par ID
+        const allGroups = [...publicGroups, ...filteredPrivate];
+        const uniqueGroups = Array.from(new Map(allGroups.map(g => [g.id, g])).values());
+
         // Trier par dernier message
-        filteredPrivate.sort((a, b) =>
+        uniqueGroups.sort((a, b) =>
             new Date(b.last_message_at || b.created_at).getTime() -
             new Date(a.last_message_at || a.created_at).getTime()
         );
 
-        return [...publicGroups, ...filteredPrivate];
+        return uniqueGroups;
     },
 
     // Récupérer les messages d'un groupe avec infos expéditeur
@@ -211,62 +215,62 @@ export const chatApi = {
         });
     },
 
-    // Supprimer une discussion de sa propre vue (mettre en corbeille)
+    // Déplacer une discussion vers la corbeille
     async moveThreadToTrash(groupId: string, userId: string) {
-        const { data: msgs } = await supabase
-            .from('chat_messages')
-            .select('id')
-            .eq('group_id', groupId);
+        const { error } = await supabase
+            .from('chat_user_thread_status')
+            .upsert({ group_id: groupId, user_id: userId, is_deleted: true },
+                { onConflict: 'group_id,user_id' });
 
-        if (!msgs || msgs.length === 0) {
-            // Si aucun message, créer quand même un marqueur fictif en marquant directement le groupe
-            // En pratique, mettre un seul status sur le dernier message
-            return;
+        if (error) {
+            console.error('Erreur moveThreadToTrash:', error);
+            throw new Error(error.message);
         }
-
-        const lastMsg = msgs[msgs.length - 1];
-        await supabase.from('chat_message_status').upsert({
-            message_id: lastMsg.id,
-            user_id: userId,
-            is_deleted: true,
-            is_read: true
-        }, { onConflict: 'message_id,user_id' });
     },
 
     // Restaurer une discussion depuis la corbeille
     async restoreThreadFromTrash(groupId: string, userId: string) {
-        const { data: msgs } = await supabase
-            .from('chat_messages')
-            .select('id')
-            .eq('group_id', groupId);
+        const { error } = await supabase
+            .from('chat_user_thread_status')
+            .upsert({ group_id: groupId, user_id: userId, is_deleted: false },
+                { onConflict: 'group_id,user_id' });
 
-        if (!msgs || msgs.length === 0) return;
+        if (error) {
+            console.error('Erreur restoreThreadFromTrash:', error);
+            throw new Error(error.message);
+        }
+    },
 
-        const lastMsg = msgs[msgs.length - 1];
-        await supabase.from('chat_message_status').upsert({
-            message_id: lastMsg.id,
-            user_id: userId,
-            is_deleted: false
-        }, { onConflict: 'message_id,user_id' });
+    // Supprimer définitivement une discussion (retire l'utilisateur des membres)
+    async permanentlyDeleteThread(groupId: string, userId: string) {
+        // Supprimer le statut thread
+        await supabase
+            .from('chat_user_thread_status')
+            .delete()
+            .eq('group_id', groupId)
+            .eq('user_id', userId);
+
+        // Retirer l'utilisateur du groupe → disparaît de tous les dossiers
+        const { error } = await supabase
+            .from('chat_group_members')
+            .delete()
+            .eq('group_id', groupId)
+            .eq('user_id', userId);
+
+        if (error) {
+            console.error('Erreur permanentlyDeleteThread:', error);
+            throw new Error(error.message);
+        }
     },
 
     // Marquer une discussion comme importante (Star)
     async toggleStar(groupId: string, userId: string, newState: boolean) {
-        const { data: msgs } = await supabase
-            .from('chat_messages')
-            .select('id')
-            .eq('group_id', groupId)
-            .order('created_at', { ascending: false })
-            .limit(1);
+        const { error } = await supabase
+            .from('chat_user_thread_status')
+            .upsert({ group_id: groupId, user_id: userId, is_important: newState },
+                { onConflict: 'group_id,user_id' });
 
-        if (!msgs || msgs.length === 0) return;
-
-        const lastMsgId = msgs[0].id;
-        await supabase.from('chat_message_status').upsert({
-            message_id: lastMsgId,
-            user_id: userId,
-            is_important: newState
-        }, { onConflict: 'message_id,user_id' });
+        if (error) console.error('Erreur toggleStar:', error);
     },
 
     // Retrouver ou créer une discussion avec un ensemble spécifique de membres
@@ -359,18 +363,36 @@ export const chatApi = {
 
     // Créer le Canal Général par défaut s'il n'existe pas
     async ensureDefaultGroups() {
-        const { data: general } = await supabase
+        // Utiliser .limit(1) au lieu de .maybeSingle() pour éviter que
+        // des doublons existants (> 1 ligne) ne retournent null et créent un 3ème canal.
+        const { data: existing } = await supabase
             .from('chat_groups')
             .select('id')
             .eq('type', 'public')
             .eq('name', 'Canal Général')
-            .maybeSingle();
+            .limit(1);
 
-        if (!general) {
+        if (!existing || existing.length === 0) {
             await supabase.from('chat_groups').insert([{
                 name: 'Canal Général',
                 type: 'public'
             }]);
         }
+    },
+
+    // Supprimer les doublons de "Canal Général" en ne gardant que le plus ancien
+    async deduplicatePublicChannels() {
+        const { data: generals } = await supabase
+            .from('chat_groups')
+            .select('id, created_at')
+            .eq('type', 'public')
+            .eq('name', 'Canal Général')
+            .order('created_at', { ascending: true });
+
+        if (!generals || generals.length <= 1) return;
+
+        // Garder le premier (le plus ancien), supprimer le reste
+        const toDelete = generals.slice(1).map(g => g.id);
+        await supabase.from('chat_groups').delete().in('id', toDelete);
     }
 };

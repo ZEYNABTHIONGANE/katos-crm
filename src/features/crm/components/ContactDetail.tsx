@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
     ArrowLeft, Phone, Mail, MapPin, Calendar, Clock, Edit2, CheckCircle2, Plus,
     Megaphone, User, Folder, MessageSquare, ClipboardList, HardHat,
-    Trash2
+    ArrowRight, Trash2
 } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import DocumentManager from './DocumentManager';
@@ -14,6 +14,7 @@ import { useAuth } from '@/app/providers/AuthProvider';
 import { fetchCommercials } from '../api/contactApi';
 import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
 import { supabase } from '@/lib/supabaseClient';
+import { ALL_STATUSES } from '../utils/crmConstants';
 import { signalComplianceIssue } from '../api/complianceApi';
 import { fetchAvailableSlots, bookFieldSlot, type FieldSlot } from '../api/fieldApi';
 import { ShieldAlert, AlertTriangle } from 'lucide-react';
@@ -29,6 +30,7 @@ const INTERACTION_CONFIG: Record<InteractionType, { icon: any; label: string; co
     visite_terrain: { icon: MapPin, label: 'Visite Terrain', color: '#f59e0b' },
     visite_chantier: { icon: HardHat, label: 'Visite Chantier', color: '#ef4444' },
     note: { icon: MessageSquare, label: 'Note interne', color: '#6b7280' },
+    pipeline_step: { icon: ArrowRight, label: 'Changement d\'étape', color: '#9d174d' },
 };
 
 const ContactDetail = () => {
@@ -44,7 +46,7 @@ const ContactDetail = () => {
     const { user } = useAuth();
     const { showToast } = useToast();
 
-    const [commercials, setCommercials] = useState<{ id: string, name: string, service: string }[]>([]);
+    const [commercials, setCommercials] = useState<{ id: string, name: string, service: string, role?: string }[]>([]);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showInteractionModal, setShowInteractionModal] = useState(false);
     const [editingInteraction, setEditingInteraction] = useState<string | null>(null);
@@ -143,10 +145,11 @@ const ContactDetail = () => {
     const [editForm, setEditForm] = useState<any>(null);
 
     const availableAgents = useMemo(() => {
-        if (user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') return commercials;
-        if (!editForm?.service) return commercials;
+        const list = commercials.filter(c => c.role !== 'technicien_terrain' && c.role !== 'technicien_chantier');
+        if (user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') return list;
+        if (!editForm?.service) return list;
         const profileService = editForm.service === 'gestion_immobiliere' ? 'gestion' : editForm.service;
-        return commercials.filter(c => c.service === profileService);
+        return list.filter(c => c.service === profileService);
     }, [commercials, editForm?.service, user]);
     const [interactionForm, setInteractionForm] = useState({
         type: 'call' as InteractionType,
@@ -754,18 +757,9 @@ const ContactDetail = () => {
                     <div className="form-group">
                         <label className="form-label">Statut</label>
                         <select className="form-select" value={editForm.status} onChange={e => setEditForm({ ...editForm, status: e.target.value })}>
-                            <option value="Prospect">Prospect</option>
-                            <option value="Qualification">Qualification</option>
-                            <option value="RDV">RDV</option>
-                            <option value="Proposition Commerciale">Proposition Commerciale</option>
-                            <option value="Négociation">Négociation</option>
-                            <option value="Réservation">Réservation</option>
-                            <option value="Contrat">Contrat</option>
-                            <option value="Paiement">Paiement</option>
-                            <option value="Transfert de dossier technique">Transfert dossier tech</option>
-                            <option value="Suivi Chantier">Suivi Chantier</option>
-                            <option value="Livraison Client">Livraison Client</option>
-                            <option value="Fidélisation">Fidélisation</option>
+                            {ALL_STATUSES.map(s => (
+                                <option key={s} value={s}>{s}</option>
+                            ))}
                         </select>
                     </div>
                     <div className="form-group">

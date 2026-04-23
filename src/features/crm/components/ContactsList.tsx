@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, Filter, Plus, Phone, Mail, MapPin, Eye, Edit2, Trash2, MessageSquare, Upload } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import ServiceSelector from './ServiceSelector';
@@ -10,6 +10,7 @@ import { useToast } from '@/app/providers/ToastProvider';
 import { useNotifications } from '@/app/providers/NotifProvider';
 import { fetchCommercials } from '../api/contactApi';
 import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
+import { ALL_STATUSES } from '../utils/crmConstants';
 
 const SOURCE_OPTIONS = [
     'Site web', 'Facebook', 'Instagram', 'TikTok', 'LinkedIn', 
@@ -52,7 +53,9 @@ const ContactsList = () => {
     const { showToast } = useToast();
     const { addNotif } = useNotifications();
     const [searchTerm, setSearchTerm] = useState('');
-    const [filter, setFilter] = useState('Tous');
+    const [searchParams] = useSearchParams();
+    const [filter, setFilter] = useState(searchParams.get('filter') || 'Tous');
+    const [agentFilter, setAgentFilter] = useState('all'); // Filtre par commercial
     const [openMenu, setOpenMenu] = useState<number | null>(null);
     const [showModal, setShowModal] = useState(false);
     const [editContact, setEditContact] = useState<CrmContact | null>(null);
@@ -241,6 +244,9 @@ const ContactsList = () => {
 
     // Filtrer les commerciaux selon le service sélectionné dans le formulaire
     const availableAgents = commercials.filter(c => {
+        // Exclure les techniciens (ils ne sont pas des commerciaux)
+        if (c.role === 'technicien_terrain' || c.role === 'technicien_chantier') return false;
+
         // Pour les admins, dir_com et superviseurs, on montre TOUS les agents
         if (user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') return true;
         
@@ -259,15 +265,28 @@ const ContactsList = () => {
         return false;
     });
 
+    // ─── Liste des commerciaux supervisés (pour le dropdown de filtre) ───
+    const supervisedForFilter = (() => {
+        const names = getSupervisedAgentNames(user, commercials);
+        if (names === null) {
+            // Admin / Dir : tous les commerciaux distincts présents dans les contacts
+            const set = new Set<string>();
+            contacts.forEach(c => { if (c.assignedAgent) set.add(c.assignedAgent); });
+            return Array.from(set).sort();
+        }
+        // RC / Manager : uniquement leurs agents (pas leur propre nom)
+        return names.filter(n => n !== user?.name).sort();
+    })();
+
     const filtered = contacts.filter(c => {
-        // Filtrage par Recherche et Status (existant)
+        // 1. Recherche texte
         const matchesSearch =
             c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             c.company.toLowerCase().includes(searchTerm.toLowerCase());
-        
+
+        // 2. Filtre statut / température
         const score = calculateLeadScore(c);
         let matchesFilter = false;
-
         if (filter === 'Tous') {
             matchesFilter = true;
         } else if (filter === 'temp-hot') {
@@ -276,24 +295,31 @@ const ContactsList = () => {
             matchesFilter = score >= 16 && score < 35;
         } else if (filter === 'temp-cold') {
             matchesFilter = score < 16;
+        } else if (filter === 'dossiers-chauds') {
+            matchesFilter = ['Proposition Commerciale', 'Négociation', 'Réservation'].includes(c.status);
+        } else if (filter === 'ventes-globales') {
+            const SALE_STATUSES_LOCAL = ['Contrat', 'Paiement', 'Transfert de dossier technique', 'Transfert dossier tech', 'Suivi Chantier', 'Livraison Client', 'Fidélisation', 'Client', 'Projet Livré'];
+            matchesFilter = SALE_STATUSES_LOCAL.includes(c.status);
         } else {
             matchesFilter = c.status === filter;
         }
 
         if (!matchesSearch || !matchesFilter) return false;
 
-        // ─── Filtrage hiérarchique ───
-        const supervisedNames = getSupervisedAgentNames(user, commercials);
-        
-        if (supervisedNames === null) {
-            return true; // Accès total
+        // 3. Filtre par commercial (dropdown)
+        if (agentFilter !== 'all') {
+            if ((c.assignedAgent || '').trim().toLowerCase() !== agentFilter.trim().toLowerCase()) return false;
         }
+
+        // 4. Filtrage hiérarchique (accès)
+        const supervisedNames = getSupervisedAgentNames(user, commercials);
+        if (supervisedNames === null) return true; // Accès total
 
         if (user?.role === 'assistante') {
             return c.createdBy === user.name || !c.assignedAgent;
         }
 
-        // Pour tous les autres rôles (RC, Manager, Commercial)
+        // RC / Manager / Commercial : uniquement les contacts supervisés
         const lowerSupervised = supervisedNames.map(n => n?.trim().toLowerCase());
         return lowerSupervised.includes((c.assignedAgent || '').trim().toLowerCase());
     });
@@ -458,6 +484,23 @@ const ContactsList = () => {
                             <option value="Projet Livré">Statut: Projets Livrés</option>
                         </select>
                     </div>
+
+                    {/* Filtre par commercial — visible uniquement pour admin / dir_commercial / resp_commercial */}
+                    {['admin', 'dir_commercial', 'resp_commercial'].includes(user?.role || '') && supervisedForFilter.length > 0 && (
+                        <div className="filter-group">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            <select
+                                value={agentFilter}
+                                onChange={(e) => setAgentFilter(e.target.value)}
+                                style={{ minWidth: 160 }}
+                            >
+                                <option value="all">Tous les commerciaux</option>
+                                {supervisedForFilter.map(name => (
+                                    <option key={name} value={name}>{name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -594,18 +637,9 @@ const ContactsList = () => {
                     <div className="form-group">
                         <label className="form-label">Statut CRM</label>
                         <select className="form-select" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
-                            <option value="Prospect">Prospect</option>
-                            <option value="Qualification">Qualification</option>
-                            <option value="RDV">RDV</option>
-                            <option value="Proposition Commerciale">Proposition Commerciale</option>
-                            <option value="Négociation">Négociation</option>
-                            <option value="Réservation">Réservation</option>
-                            <option value="Contrat">Contrat</option>
-                            <option value="Paiement">Paiement</option>
-                            <option value="Transfert de dossier technique">Transfert dossier tech</option>
-                            <option value="Suivi Chantier">Suivi Chantier</option>
-                            <option value="Livraison Client">Livraison Client</option>
-                            <option value="Fidélisation">Fidélisation</option>
+                            {ALL_STATUSES.map(s => (
+                                <option key={s} value={s}>{s}</option>
+                            ))}
                         </select>
                     </div>
                     <div className="form-group">

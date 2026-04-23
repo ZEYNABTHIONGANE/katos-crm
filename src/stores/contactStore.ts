@@ -21,6 +21,24 @@ export const STATUS_TO_COLUMN: Record<string, string> = {
     'Suivi Chantier': 'suivi_chantier',
     'Livraison Client': 'livraison',
     'Fidélisation': 'fidelisation',
+    'Pas intéressé': 'pas_interesse',
+};
+
+// ─── Status → Progress % ──────────────────────────────────────────────
+export const STATUS_PROGRESS: Record<string, number> = {
+    'pas_interesse': 0,
+    'prospect': 5,
+    'qualification': 10,
+    'rdv': 20,
+    'proposition': 35,
+    'negociation': 50,
+    'reservation': 65,
+    'contrat': 80,
+    'paiement': 90,
+    'transfert_technique': 93,
+    'suivi_chantier': 95,
+    'livraison': 100,
+    'fidelisation': 100,
 };
 
 // ─── Shared Types ────────────────────────────────────────────────────────
@@ -46,6 +64,7 @@ export interface CrmContact {
     budgetConfirmed?: boolean;
     isReactive?: boolean;
     convertedAt?: string; // Date of conversion to client
+    refusalReason?: string; // Motif si "Pas intéressé"
 }
 
 export interface FollowUp {
@@ -59,7 +78,7 @@ export interface FollowUp {
     interactionId?: string; // Link to the interaction that created this relance
 }
 
-export type InteractionType = 'call' | 'email' | 'rdv' | 'visite_terrain' | 'visite_chantier' | 'note';
+export type InteractionType = 'call' | 'email' | 'rdv' | 'visite_terrain' | 'visite_chantier' | 'note' | 'pipeline_step';
 
 export interface Interaction {
     id: string;
@@ -104,7 +123,7 @@ interface ContactStore {
     addInteractionsBulk: (interactions: Omit<Interaction, 'id'>[]) => Promise<number>;
     updateContact: (id: number, updates: Partial<CrmContact>) => Promise<boolean>;
     deleteContact: (id: number) => Promise<void>;
-    moveContactStatus: (id: number, newStatus: string) => Promise<boolean>;
+    moveContactStatus: (id: number, newStatus: string, comment?: string, agentName?: string, refusalReason?: string) => Promise<boolean>;
 
     addFollowUp: (f: Omit<FollowUp, 'id'>) => Promise<void>;
     updateFollowUp: (id: string, updates: Partial<FollowUp>) => Promise<void>;
@@ -249,13 +268,16 @@ export const useContactStore = create<ContactStore>()((set, get) => ({
         await api.deleteContactApi(id);
     },
 
-    moveContactStatus: async (id, newStatus) => {
-        const { contacts } = get();
+    moveContactStatus: async (id: number, newStatus: string, comment?: string, agentName?: string, refusalReason?: string) => {
+        const { contacts, addInteraction } = get();
         const contact = contacts.find(c => c.id === id);
         if (!contact) return false;
 
         const previousContact = { ...contact };
-        const updates: Partial<CrmContact> = { status: newStatus };
+        const updates: Partial<CrmContact> = { 
+            status: newStatus,
+            refusalReason: refusalReason || undefined
+        };
 
         // Blocage si litige actif et passage à statut final
         if (['Livraison Client', 'Projet Livré'].includes(newStatus)) {
@@ -266,7 +288,7 @@ export const useContactStore = create<ContactStore>()((set, get) => ({
             }
         }
 
-        // Auto-set convertedAt if status moves to a sale status for the first time
+        // Auto-set convertedAt
         if (!contact.convertedAt) {
             const SALE_STATUSES = ['Client', 'Projet Livré', 'Contrat', 'Paiement', 'Transfert de dossier technique', 'Transfert dossier tech', 'Suivi Chantier', 'Livraison Client'];
             if (SALE_STATUSES.includes(newStatus)) {
@@ -274,15 +296,27 @@ export const useContactStore = create<ContactStore>()((set, get) => ({
             }
         }
 
+        // Optimistic update
         set((state) => ({ contacts: state.contacts.map(c => c.id === id ? { ...c, ...updates } : c) }));
         
         try {
             const success = await api.updateContactApi(id, updates);
             if (success === false) {
-                // Rollback
                 set((state) => ({ contacts: state.contacts.map(c => c.id === id ? previousContact : c) }));
                 return false;
             }
+
+            // Log the transition in history
+            await addInteraction({
+                contactId: id,
+                type: 'pipeline_step',
+                title: `Passage à l'étape : ${newStatus}`,
+                description: comment || `L'agent a déplacé le prospect vers l'étape ${newStatus}.`,
+                date: new Date().toISOString().split('T')[0],
+                heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                agent: agentName || contact.assignedAgent || 'Système'
+            });
+
             return true;
         } catch (err) {
             console.error('[STORE] moveStatus Error:', err);

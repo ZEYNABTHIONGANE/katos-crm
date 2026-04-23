@@ -395,7 +395,7 @@ const Agents = () => {
                 </div>
                 
                 <div className="header-actions">
-                    {user?.role === 'admin' && (
+                    {(user?.role === 'admin' || user?.role === 'dir_commercial') && (
                         <>
                             <button className="btn-primary" onClick={handleOpenCreateModal}>
                                 <Plus size={18} /> Nouveau Collaborateur
@@ -516,7 +516,7 @@ const Agents = () => {
                                     <Star size={14} fill="currentColor" />
                                     {agent.stats.performance}%
                                 </div>
-                                {user?.role === 'admin' && (
+                                {(user?.role === 'admin' || user?.role === 'dir_commercial') && (
                                     <button className="btn-icon-sm" onClick={() => handleOpenEditModal(agent)} title="Modifier l'agent">
                                         <Edit2 size={14} />
                                     </button>

@@ -100,8 +100,14 @@ const Sidebar = ({ isCollapsed }: { isCollapsed: boolean }) => {
                     allowedRoles: ['admin', 'dir_commercial', 'resp_commercial']
                 },
                 {
+                    path: '/suivi-commercial',
+                    name: 'Suivi Commercial',
+                    icon: <ClipboardCheck size={18} />,
+                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial']
+                },
+                {
                     path: '/rapports',
-                    name: 'Rapports/Exports',
+                    name: 'Statistiques & Analyses',
                     icon: <PieChart size={18} />,
                     allowedRoles: ['admin', 'dir_commercial', 'resp_commercial']
                 },

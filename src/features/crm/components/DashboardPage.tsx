@@ -7,10 +7,10 @@ import {
     PieChart, Pie, Cell, Legend, AreaChart, Area, RadialBarChart, RadialBar,
     BarChart, Bar
 } from 'recharts';
-import { Users, User, ArrowUpRight, ArrowDownRight, Star, LayoutDashboard, TrendingUp, Plus, Phone, Mail, Clock, Home } from 'lucide-react';
+import { Users, User, ArrowUpRight, ArrowDownRight, Star, LayoutDashboard, TrendingUp, Plus, Phone, Mail, Home } from 'lucide-react';
 import { fetchCommercials } from '../api/contactApi';
 import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
-import { SALE_STATUSES } from '../utils/crmConstants';
+import { SALE_STATUSES, PIPELINE_STATUSES } from '../utils/crmConstants';
 import { useEffect } from 'react';
 import ComplianceDashboard from './ComplianceDashboard';
 
@@ -91,17 +91,8 @@ const Dashboard = () => {
             filteredContacts = filteredContacts.filter(c => c.assignedAgent === agentFilter);
         }
 
-        // Statuts de vente (centralisés dans crmConstants.ts)
-        // NOTE: SALE_STATUSES importé depuis crmConstants - cohérent avec la page Agents
-        const SALE_STATUSES_LOCAL = SALE_STATUSES;
-        
-        const PROSPECT_STATUSES = [
-            'Prospect', 'Qualification', 'En Qualification', 
-            'RDV', 'RDV / Visite Terrain', 'Proposition Commerciale', 
-            'Négociation', 'Réservation'
-        ];
-
-        const prospects = filteredContacts.filter(c => PROSPECT_STATUSES.includes(c.status));
+        // Statuts de vente et pipeline (centralisés dans crmConstants.ts)
+        const prospects = filteredContacts.filter(c => PIPELINE_STATUSES.includes(c.status));
         const clients = filteredContacts.filter(c => SALE_STATUSES.includes(c.status));
         const salesCount = clients.length;
 
@@ -121,7 +112,7 @@ const Dashboard = () => {
             const rawAgent = c.assignedAgent || 'Non assigné';
             const agentKey = rawAgent.trim().toLowerCase();
             if (!agentMap[agentKey]) agentMap[agentKey] = { name: rawAgent, deals: 0, prospects: 0 };
-            if (SALE_STATUSES_LOCAL.includes(c.status)) {
+            if (SALE_STATUSES.includes(c.status)) {
                 agentMap[agentKey].deals++;
             }
             // prospects = total contacts (all statuses) — cohérent avec la page Gestion Agents
@@ -141,7 +132,7 @@ const Dashboard = () => {
         };
 
         filteredContacts.forEach(c => {
-            if (c.service && (SALE_STATUSES_LOCAL.includes(c.status))) {
+            if (c.service && (SALE_STATUSES.includes(c.status))) {
                 serviceMap[c.service].deals++;
             }
         });
@@ -155,7 +146,7 @@ const Dashboard = () => {
                 const teamNames = getSupervisedAgentNames(rc, commercials) || [];
                 const lowerTeam = teamNames.map(n => n.toLowerCase());
                 const teamSales = contacts.filter(c => 
-                    SALE_STATUSES_LOCAL.includes(c.status) && 
+                    SALE_STATUSES.includes(c.status) && 
                     lowerTeam.includes((c.assignedAgent || '').toLowerCase())
                 ).length;
                 return { name: rc.name, deals: teamSales };
@@ -265,7 +256,9 @@ const Dashboard = () => {
                 return { days: Math.round(min), holder };
             })() : { days: 0, holder: '—' },
 
-            conversionEfficiency: clients.length > 0 ? Math.round((clients.length / (filteredContacts.length || 1)) * 100) : 0,
+            conversionEfficiency: filteredContacts.length > 0 ? Math.round((clients.length / filteredContacts.length) * 100) : 0,
+
+            hotDealsCount: filteredContacts.filter(c => ['Proposition Commerciale', 'Négociation', 'Réservation'].includes(c.status)).length,
 
             // Evolution d'activité dynamique sur les 6 derniers mois
             evolutionData: (() => {
@@ -306,38 +299,49 @@ const Dashboard = () => {
     }, [contacts, interactions, visits, user]);
 
     const getKPIs = () => {
+        const evolution = statsData.evolutionData;
+        const current = evolution[evolution.length - 1] || { ventes: 0, prospects: 0 };
+        const prev = evolution[evolution.length - 2] || { ventes: 0, prospects: 0 };
+
+        const getChange = (curr: number, p: number) => {
+            if (p === 0) return curr > 0 ? '+100%' : '0%';
+            const diff = ((curr - p) / p) * 100;
+            return (diff >= 0 ? '+' : '') + Math.round(diff) + '%';
+        };
+
+        const prospectChange = getChange(current.prospects, prev.prospects);
+        const salesChange = getChange(current.ventes, prev.ventes);
+
         const base = [
-            { label: 'Prospects actifs', value: statsData.prospectsCount, change: '+5%', positive: true, icon: <Users size={22} />, gradient: 'grad-orange' },
-            { label: 'Clients / Dossiers', value: statsData.clientsCount, change: '+2%', positive: true, icon: <Star size={22} />, gradient: 'grad-blue' },
+            { label: 'Prospects actifs', value: statsData.prospectsCount, change: prospectChange, positive: current.prospects >= prev.prospects, icon: <Users size={22} />, gradient: 'grad-orange', path: '/prospects?filter=Tous' },
+            { label: 'Ventes Globales', value: statsData.salesCount, change: salesChange, positive: current.ventes >= prev.ventes, icon: <LayoutDashboard size={22} />, gradient: 'grad-blue', path: '/prospects?filter=ventes-globales' },
         ];
 
         if (user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') {
             return [
                 ...base,
-                { label: 'Ventes Globales', value: statsData.salesCount, change: '+10%', positive: true, icon: <LayoutDashboard size={22} />, gradient: 'grad-purple' },
+                { label: 'Dossiers Chauds', value: statsData.hotDealsCount, change: 'En cours', positive: true, icon: <Star size={22} />, gradient: 'grad-purple', path: '/prospects?filter=dossiers-chauds' },
                 { 
-                    label: "Délai (Record)", 
+                    label: "Efficacité", 
                     value: (
                         <>
-                            {statsData.avgProcessingTime}
-                            <span style={{ fontSize: '0.65em', opacity: 0.85, fontWeight: 600 }}>j</span>
-                            <span style={{ fontSize: '0.5em', opacity: 0.7, fontWeight: 500, marginLeft: '6px' }}>
-                                (Rec: {statsData.recordProcessingTime.days}j)
-                            </span>
+                            {statsData.conversionEfficiency}
+                            <span style={{ fontSize: '0.65em', opacity: 0.85, fontWeight: 600 }}>%</span>
                         </>
                     ), 
-                    change: `Par: ${statsData.recordProcessingTime.holder}`, 
-                    positive: true, 
+                    change: 'Taux conv.', 
+                    positive: statsData.conversionEfficiency >= 15, 
                     hideArrow: true,
-                    icon: <Clock size={22} />, 
-                    gradient: 'grad-blue' 
+                    icon: <TrendingUp size={22} />, 
+                    gradient: 'grad-green',
+                    path: '/rapports'
                 },
             ];
         }
 
         return [
             ...base,
-            { label: 'Mes Ventes', value: statsData.salesCount, change: 'Objectif 10', positive: statsData.salesCount >= 10, hideArrow: true, icon: <LayoutDashboard size={22} />, gradient: 'grad-green' },
+            { label: 'Mes Dossiers Chauds', value: statsData.hotDealsCount, change: 'Priorité', positive: true, icon: <Star size={22} />, gradient: 'grad-purple', path: '/prospects?filter=dossiers-chauds' },
             { 
                 label: "Performance", 
                 value: (
@@ -346,11 +350,12 @@ const Dashboard = () => {
                         <span style={{ fontSize: '0.65em', opacity: 0.85, fontWeight: 600 }}>%</span>
                     </>
                 ), 
-                change: 'Score', 
-                positive: true, 
+                change: `Objectif 10`, 
+                positive: statsData.salesCount >= 5, 
                 hideArrow: true, 
                 icon: <TrendingUp size={22} />, 
-                gradient: 'grad-purple' 
+                gradient: 'grad-green',
+                path: '/rapports'
             },
         ];
     };
@@ -497,7 +502,12 @@ const Dashboard = () => {
 
                 <div className="stats-grid hero-stats">
                     {getKPIs().map((s, i) => (
-                        <div key={i} className={`stat-card-v2 ${s.gradient}`}>
+                        <div 
+                            key={i} 
+                            className={`stat-card-v2 ${s.gradient}`} 
+                            onClick={() => s.path && navigate(s.path)}
+                            style={{ cursor: s.path ? 'pointer' : 'default' }}
+                        >
                             <div className="stat-icon-wrap">{s.icon}</div>
                             <div className="stat-body">
                                 <span className="stat-label-v2">{s.label}</span>

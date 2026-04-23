@@ -13,6 +13,7 @@ const ChatContext = createContext<ChatContextType | null>(null);
 export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     const { user } = useAuth();
     const [totalUnreadCount, setTotalUnreadCount] = useState(0);
+    const refreshTimer = React.useRef<any>(null);
 
     // Recalcule le vrai total depuis la BDD (lus = dans chat_message_status)
     const refreshUnreadCount = useCallback(async () => {
@@ -21,9 +22,20 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         setTotalUnreadCount(count);
     }, [user]);
 
+    // Version débouncée pour éviter de spammer la BDD sur une rafale de messages
+    const triggerDebouncedRefresh = useCallback(() => {
+        if (refreshTimer.current) clearTimeout(refreshTimer.current);
+        refreshTimer.current = setTimeout(() => {
+            refreshUnreadCount();
+        }, 1000);
+    }, [refreshUnreadCount]);
+
     // Chargement initial
     useEffect(() => {
         if (user) refreshUnreadCount();
+        return () => {
+            if (refreshTimer.current) clearTimeout(refreshTimer.current);
+        };
     }, [user, refreshUnreadCount]);
 
     // Écouter en temps réel les nouveaux messages
@@ -39,7 +51,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
                     const newMsg = payload.new as any;
                     // Si ce n'est pas mon message, ça crée un nouveau non-lu → recalcul
                     if (newMsg.sender_id !== user.id) {
-                        refreshUnreadCount();
+                        triggerDebouncedRefresh();
                     }
                 }
             )
@@ -50,7 +62,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
                     const status = payload.new as any;
                     // Si c'est mon statut "lu" qui vient d'être créé → recalcul
                     if (status.user_id === user.id && status.is_read) {
-                        refreshUnreadCount();
+                        triggerDebouncedRefresh();
                     }
                 }
             )
@@ -60,7 +72,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
                 (payload) => {
                     const status = payload.new as any;
                     if (status.user_id === user.id) {
-                        refreshUnreadCount();
+                        triggerDebouncedRefresh();
                     }
                 }
             )
@@ -69,7 +81,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [user, refreshUnreadCount]);
+    }, [user, triggerDebouncedRefresh]);
 
     return (
         <ChatContext.Provider value={{ totalUnreadCount, refreshUnreadCount }}>

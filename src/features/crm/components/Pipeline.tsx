@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -10,7 +10,7 @@ import { useContactStore, STATUS_TO_COLUMN, type CrmContact } from '@/stores/con
 import { useToast } from '@/app/providers/ToastProvider';
 import { fetchCommercials } from '../api/contactApi';
 import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
-import { useEffect } from 'react';
+import Modal from '@/components/ui/Modal';
 
 // ---------- Types ----------
 const COLUMN_META: Record<string, { title: string; color: string; icon: React.ReactNode }> = {
@@ -26,15 +26,15 @@ const COLUMN_META: Record<string, { title: string; color: string; icon: React.Re
     suivi_chantier: { title: 'Suivi Chantier', color: '#FBBF24', icon: <Wrench size={16} /> },
     livraison: { title: 'Livraison Client', color: '#10B981', icon: <CheckCircle2 size={16} /> },
     fidelisation: { title: 'Fidélisation', color: '#2B2E83', icon: <Star size={16} /> },
+    pas_interesse: { title: 'Pas intéressé', color: '#94a3b8', icon: <Trash2 size={16} /> },
 };
 
 const columnOrder = [
     'prospect', 'qualification', 'rdv', 'proposition', 'negociation',
     'reservation', 'contrat', 'paiement', 'transfert_technique',
-    'suivi_chantier', 'livraison', 'fidelisation'
+    'suivi_chantier', 'livraison', 'fidelisation', 'pas_interesse'
 ];
 
-// Inverse map: column → status
 const COLUMN_TO_STATUS: Record<string, string> = {
     prospect: 'Prospect',
     qualification: 'Qualification',
@@ -48,9 +48,17 @@ const COLUMN_TO_STATUS: Record<string, string> = {
     suivi_chantier: 'Suivi Chantier',
     livraison: 'Livraison Client',
     fidelisation: 'Fidélisation',
+    pas_interesse: 'Pas intéressé',
 };
 
-
+const REFUSAL_REASONS = [
+    "Prospect n'a pas de budget",
+    "Prospect n'a pas confiance",
+    "Prospect a peur des litiges",
+    "Prospect veut voir avec sa banque",
+    "La localisation est un peu loin pour le prospect",
+    "Autre (Précisez ci-dessous)"
+];
 
 const SERVICE_LABELS: Record<string, { label: string; color: string }> = {
     foncier: { label: 'Foncier', color: '#E96C2E' },
@@ -76,12 +84,7 @@ const KanbanCard = ({
     return (
         <div
             className="kanban-card"
-            style={{
-                cursor: 'pointer',
-                padding: '0.6rem',
-                borderRadius: '8px',
-                marginBottom: '0.5rem'
-            }}
+            style={{ cursor: 'pointer', padding: '0.6rem', borderRadius: '8px', marginBottom: '0.5rem' }}
             onClick={() => navigate(`/prospects/${contact.id}`)}
         >
             <div className="kcard-header" style={{ marginBottom: '0.5rem' }}>
@@ -98,7 +101,6 @@ const KanbanCard = ({
                     </button>
                     {menuOpen && (
                         <div className="kcard-dropdown">
-                            {/* ... menu items ... */}
                             {nextCol && ['commercial', 'admin', 'dir_commercial'].includes(userRole || '') && (
                                 <button onClick={() => { onMove(contact.id, nextCol); setMenuOpen(false); }}>
                                     <ArrowRight size={13} /> Avancer l'étape
@@ -120,11 +122,8 @@ const KanbanCard = ({
             <div className="kcard-meta" style={{ gap: '4px', flexWrap: 'wrap', marginBottom: '4px' }}>
                 {svc && (
                     <span className="kcard-tag" style={{
-                        fontSize: '0.65rem',
-                        padding: '1px 6px',
-                        color: svc.color,
-                        borderColor: svc.color + '33',
-                        background: svc.color + '0a'
+                        fontSize: '0.65rem', padding: '1px 6px', color: svc.color,
+                        borderColor: svc.color + '33', background: svc.color + '0a'
                     }}>
                         {svc.label}
                     </span>
@@ -154,12 +153,7 @@ const KanbanCard = ({
                 {nextCol && ['commercial', 'admin', 'dir_commercial'].includes(userRole || '') && (
                     <button
                         className="kcard-advance-btn"
-                        style={{
-                            borderColor: colColor,
-                            color: colColor,
-                            padding: '2px 8px',
-                            fontSize: '0.65rem'
-                        }}
+                        style={{ borderColor: colColor, color: colColor, padding: '2px 8px', fontSize: '0.65rem' }}
                         onClick={() => onMove(contact.id, nextCol)}
                     >
                         Avancer <ArrowRight size={10} />
@@ -177,7 +171,14 @@ const Pipeline = () => {
     const { showToast } = useToast();
 
     const [search, setSearch] = useState('');
+    const [agentFilter, setAgentFilter] = useState('');
+    const [serviceFilter, setServiceFilter] = useState('');
     const [commercials, setCommercials] = useState<any[]>([]);
+
+    const [moveModal, setMoveModal] = useState<{ contactId: number; targetStatus: string; contactName: string } | null>(null);
+    const [transitionNote, setTransitionNote] = useState('');
+    const [selectedRefusal, setSelectedRefusal] = useState('');
+    const [isMoving, setIsMoving] = useState(false);
 
     useEffect(() => {
         const load = async () => {
@@ -187,41 +188,41 @@ const Pipeline = () => {
         load();
     }, []);
 
+    const agentOptions = useMemo(() => {
+        const supervised = getSupervisedAgentNames(user, commercials);
+        if (supervised === null) return commercials.map(c => c.name).sort();
+        return supervised.sort();
+    }, [commercials, user]);
 
-
-    // Group contacts into columns based on their status
     const columns = useMemo(() => {
-        // Obtenir la liste des agents supervisés
         const supervisedNames = getSupervisedAgentNames(user, commercials);
         const lowerSupervised = supervisedNames ? supervisedNames.map(n => n?.trim().toLowerCase()) : null;
 
         return columnOrder.reduce((acc, colId) => {
             const statusForCol = COLUMN_TO_STATUS[colId];
-            let filteredContacts = contacts.filter(c => STATUS_TO_COLUMN[c.status] === colId || c.status === statusForCol);
+            let list = contacts.filter(c => STATUS_TO_COLUMN[c.status] === colId || c.status === statusForCol);
 
-            // Filtrage hiérarchique
             if (lowerSupervised !== null) {
                 if (user?.role === 'assistante') {
-                    filteredContacts = filteredContacts.filter(c => c.createdBy === user?.name || !c.assignedAgent);
+                    list = list.filter(c => c.createdBy === user?.name || !c.assignedAgent);
                 } else {
-                    filteredContacts = filteredContacts.filter(c =>
-                        lowerSupervised.includes((c.assignedAgent || '').trim().toLowerCase())
-                    );
+                    list = list.filter(c => lowerSupervised.includes((c.assignedAgent || '').trim().toLowerCase()));
                 }
             }
 
-            // Filtre supplémentaire optionnel pour les managers (si on veut encore restreindre par service)
             if (user?.role === 'manager') {
                 const userService = user.service === 'gestion' ? 'gestion_immobiliere' : user.service;
-                filteredContacts = filteredContacts.filter(c => !c.service || c.service === userService);
+                list = list.filter(c => !c.service || c.service === userService);
             }
 
-            acc[colId] = filteredContacts;
+            if (agentFilter) list = list.filter(c => (c.assignedAgent || '').trim().toLowerCase() === agentFilter.toLowerCase());
+            if (serviceFilter) list = list.filter(c => c.service === serviceFilter);
+
+            acc[colId] = list;
             return acc;
         }, {} as Record<string, CrmContact[]>);
-    }, [contacts, user, commercials]);
+    }, [contacts, user, commercials, agentFilter, serviceFilter]);
 
-    // Apply search filter
     const filteredColumns = useMemo(() => {
         if (!search.trim()) return columns;
         const q = search.toLowerCase();
@@ -230,7 +231,9 @@ const Pipeline = () => {
                 c.name.toLowerCase().includes(q) ||
                 c.company.toLowerCase().includes(q) ||
                 c.phone.toLowerCase().includes(q) ||
-                (c.address && c.address.toLowerCase().includes(q)) ||
+                (c.email && c.email.toLowerCase().includes(q)) ||
+                (c.notes && c.notes.toLowerCase().includes(q)) ||
+                (c.assignedAgent && c.assignedAgent.toLowerCase().includes(q)) ||
                 (c.service && c.service.toLowerCase().includes(q)) ||
                 (c.propertyTitle && c.propertyTitle.toLowerCase().includes(q))
             );
@@ -240,20 +243,46 @@ const Pipeline = () => {
 
     const filteredTotal = Object.values(filteredColumns).reduce((s, arr) => s + arr.length, 0);
 
-
-
-    const moveCard = async (id: number, toColId: string) => {
+    const moveCard = (id: number, toColId: string) => {
         const newStatus = COLUMN_TO_STATUS[toColId];
-        if (newStatus) {
-            const success = await moveContactStatus(id, newStatus);
-            if (success === false) {
-                showToast(`Erreur lors de la mise à jour (Base de données)`, 'error');
-            } else {
-                showToast(`Statut mis à jour : ${newStatus}`);
-            }
+        const contact = contacts.find(c => c.id === id);
+        if (newStatus && contact) {
+            setMoveModal({ contactId: id, targetStatus: newStatus, contactName: contact.name });
+            setTransitionNote('');
+            setSelectedRefusal('');
         }
     };
 
+    const confirmMove = async () => {
+        if (!moveModal) return;
+        setIsMoving(true);
+        
+        // Build the final note
+        let finalNote = transitionNote.trim();
+        if (moveModal.targetStatus === 'Pas intéressé') {
+            if (selectedRefusal && !selectedRefusal.includes('Autre')) {
+                finalNote = selectedRefusal + (transitionNote ? ` - ${transitionNote}` : '');
+            }
+        }
+
+        try {
+            const success = await moveContactStatus(
+                moveModal.contactId, 
+                moveModal.targetStatus, 
+                finalNote || undefined,
+                user?.name,
+                selectedRefusal || undefined
+            );
+            if (success) {
+                showToast(`Passage à l'étape : ${moveModal.targetStatus}`);
+                setMoveModal(null);
+            } else {
+                showToast(`Erreur lors de la mise à jour`, 'error');
+            }
+        } finally {
+            setIsMoving(false);
+        }
+    };
 
     return (
         <div className="pipeline-page">
@@ -262,21 +291,34 @@ const Pipeline = () => {
                     <h1>Pipeline Commercial</h1>
                     <p className="subtitle">Suivi visuel du cycle de vente ({filteredTotal} prospects)</p>
                 </div>
-                <div className="d-flex gap-2">
-                    <div className="search-box">
-                        <Search size={18} className="text-muted" />
-                        <input
-                            type="text"
-                            placeholder="Rechercher..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                        />
-                    </div>
-                </div>
             </div>
 
+            <div className="pipeline-toolbar card-premium mb-4" style={{ display: 'flex', gap: '1rem', padding: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="search-box" style={{ flex: 1, minWidth: '250px' }}>
+                    <Search size={18} className="text-muted" />
+                    <input type="text" placeholder="Rechercher (nom, commercial, tel...)" value={search} onChange={(e) => setSearch(e.target.value)} />
+                </div>
+                <div className="filter-group d-flex align-items-center gap-2">
+                    <User size={16} className="text-muted" />
+                    <select className="form-select-sm" value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)} style={{ minWidth: '180px' }}>
+                        <option value="">Tous les commerciaux</option>
+                        {agentOptions.map(name => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group d-flex align-items-center gap-2">
+                    <Folder size={16} className="text-muted" />
+                    <select className="form-select-sm" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} style={{ minWidth: '150px' }}>
+                        <option value="">Tous les services</option>
+                        <option value="foncier">Vente Terrains</option>
+                        <option value="construction">Construction</option>
+                        <option value="gestion_immobiliere">Gestion Immo</option>
+                    </select>
+                </div>
+                {(search || agentFilter || serviceFilter) && (
+                    <button className="btn-text-sm text-primary" onClick={() => { setSearch(''); setAgentFilter(''); setServiceFilter(''); }}>Réinitialiser</button>
+                )}
+            </div>
 
-            {/* ── Colonnes Kanban ── */}
             <div className="kanban-board">
                 {columnOrder.map(colId => {
                     const meta = COLUMN_META[colId];
@@ -292,15 +334,7 @@ const Pipeline = () => {
                             </div>
                             <div className="column-body">
                                 {cards.length > 0 ? cards.map(contact => (
-                                    <KanbanCard
-                                        key={contact.id}
-                                        contact={contact}
-                                        colId={colId}
-                                        colColor={meta.color}
-                                        onMove={moveCard}
-                                        onDelete={deleteContact}
-                                        userRole={user?.role}
-                                    />
+                                    <KanbanCard key={contact.id} contact={contact} colId={colId} colColor={meta.color} onMove={moveCard} onDelete={deleteContact} userRole={user?.role} />
                                 )) : (
                                     <div className="empty-column">
                                         <Circle size={16} style={{ color: 'var(--text-muted)', opacity: 0.3 }} /> {search ? 'Aucun résultat' : 'Colonne vide'}
@@ -312,6 +346,55 @@ const Pipeline = () => {
                 })}
             </div>
 
+            <Modal isOpen={!!moveModal} onClose={() => setMoveModal(null)} title={`Avancement : ${moveModal?.contactName}`} size="md">
+                <div style={{ marginBottom: '1.5rem' }}>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                        Vous déplacez ce prospect vers l'étape : <strong>{moveModal?.targetStatus}</strong>
+                    </p>
+
+                    {moveModal?.targetStatus === 'Pas intéressé' ? (
+                        <div className="refusal-selection mb-15">
+                            <label className="form-label" style={{ fontWeight: 700 }}>Motif du refus</label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                                {REFUSAL_REASONS.map(reason => (
+                                    <label key={reason} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem', cursor: 'pointer', padding: '8px', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                                        <input 
+                                            type="radio" 
+                                            name="refusal_reason" 
+                                            value={reason} 
+                                            checked={selectedRefusal === reason}
+                                            onChange={e => setSelectedRefusal(e.target.value)}
+                                        />
+                                        {reason}
+                                    </label>
+                                ))}
+                            </div>
+                            {(selectedRefusal.includes('Autre') || selectedRefusal === '') && (
+                                <div className="mt-15">
+                                    <label className="form-label">Note complémentaire / Précisions</label>
+                                    <textarea 
+                                        className="form-textarea" rows={3} 
+                                        placeholder="Détaillez la raison du refus..." 
+                                        value={transitionNote} 
+                                        onChange={e => setTransitionNote(e.target.value)} 
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="form-group">
+                            <label className="form-label">Note de suivi (facultatif)</label>
+                            <textarea className="form-textarea" rows={4} placeholder="Décrivez la situation..." value={transitionNote} onChange={e => setTransitionNote(e.target.value)} />
+                        </div>
+                    )}
+                </div>
+                <div className="form-actions">
+                    <button className="btn-secondary" onClick={() => setMoveModal(null)} disabled={isMoving}>Annuler</button>
+                    <button className="btn-primary" onClick={confirmMove} disabled={isMoving || (moveModal?.targetStatus === 'Pas intéressé' && !selectedRefusal)}>
+                        {isMoving ? 'Mise à jour...' : 'Confirmer le changement'}
+                    </button>
+                </div>
+            </Modal>
         </div>
     );
 };
