@@ -3,14 +3,18 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from '@/components/layout/Sidebar/Sidebar';
 import Header from '@/components/layout/Header/Header';
 import { useContactStore } from '@/stores/contactStore';
+import { useAuth } from '@/app/providers/AuthProvider';
 
 const Layout = () => {
+    const { user } = useAuth();
     const fetchData = useContactStore(state => state.fetchData);
     const [isCollapsed, setIsCollapsed] = useState(false);
 
     useEffect(() => {
-        fetchData();
-    }, [fetchData]);
+        if (user) {
+            fetchData();
+        }
+    }, [fetchData, user]);
 
     return (
         <div className={`layout-container ${isCollapsed ? 'sidebar-collapsed' : ''}`}>

@@ -235,12 +235,13 @@ const ContactsList = () => {
     };
 
     useEffect(() => {
+        if (!user) return;
         const loadCommercials = async () => {
             const data = await fetchCommercials() as any;
             setCommercials(data);
         };
         loadCommercials();
-    }, []);
+    }, [user]);
 
     // Filtrer les commerciaux selon le service sélectionné dans le formulaire
     const availableAgents = commercials.filter(c => {

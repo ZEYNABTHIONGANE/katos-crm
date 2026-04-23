@@ -48,12 +48,13 @@ const Dashboard = () => {
     const [commercials, setCommercials] = useState<any[]>([]);
 
     useEffect(() => {
+        if (!user) return;
         const load = async () => {
             const data = await fetchCommercials();
             setCommercials(data);
         };
         load();
-    }, []);
+    }, [user]);
 
     const agents = useMemo(() => {
         const supervisedNames = getSupervisedAgentNames(user, commercials);

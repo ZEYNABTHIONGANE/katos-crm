@@ -59,6 +59,7 @@ const SuiviCommercial = () => {
 
     // -- Init --
     useEffect(() => {
+        if (!user) return;
         const load = async () => {
             const [agentsData, evalsData] = await Promise.all([
                 fetchCommercials(),
@@ -68,7 +69,7 @@ const SuiviCommercial = () => {
             setEvaluations(evalsData);
         };
         load();
-    }, []);
+    }, [user]);
 
     // -- Period Calculation --
     useEffect(() => {
