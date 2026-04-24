@@ -20,6 +20,8 @@ const TYPE_LABELS: Record<DocumentType, string> = {
     devis: 'Devis',
     facture: 'Facture',
     bon_reservation: 'Bon de réservation',
+    identite: "Pièce d'identité",
+    passeport: 'Passeport',
     autre: 'Autre document'
 };
 
@@ -29,6 +31,8 @@ const TYPE_COLORS: Record<DocumentType, string> = {
     devis: '#10B981',
     facture: '#F59E0B',
     bon_reservation: '#EF4444',
+    identite: '#8B5CF6',
+    passeport: '#EC4899',
     autre: '#64748b'
 };
 

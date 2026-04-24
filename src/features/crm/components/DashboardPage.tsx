@@ -236,25 +236,32 @@ const Dashboard = () => {
                 .sort((a, b) => b.deals - a.deals),
                 
             avgProcessingTime: Math.round(clients.reduce((acc, c) => {
-                const created = new Date(c.createdAt || '').getTime();
+                const created = c.createdAt ? new Date(c.createdAt).getTime() : 0;
+                if (!created || isNaN(created)) return acc;
+                
                 const converted = c.convertedAt ? new Date(c.convertedAt).getTime() : new Date().getTime();
-                const days = (converted - created) / (1000 * 60 * 60 * 24);
+                if (isNaN(converted)) return acc;
+
+                const days = Math.max(0, (converted - created) / (1000 * 60 * 60 * 24));
                 return acc + days;
-            }, 0) / (clients.length || 1)),
+            }, 0) / (clients.filter(c => c.createdAt).length || 1)),
 
             recordProcessingTime: clients.length > 0 ? (() => {
                 let min = Infinity;
                 let holder = '—';
                 clients.forEach(c => {
-                    const created = new Date(c.createdAt || '').getTime();
+                    if (!c.createdAt) return;
+                    const created = new Date(c.createdAt).getTime();
                     const converted = c.convertedAt ? new Date(c.convertedAt).getTime() : new Date().getTime();
+                    if (isNaN(created) || isNaN(converted)) return;
+
                     const diff = (converted - created) / (1000 * 60 * 60 * 24);
-                    if (diff < min) {
+                    if (diff >= 0 && diff < min) {
                         min = diff;
                         holder = c.assignedAgent || '—';
                     }
                 });
-                return { days: Math.round(min), holder };
+                return { days: min === Infinity ? 0 : Math.round(min), holder };
             })() : { days: 0, holder: '—' },
 
             conversionEfficiency: filteredContacts.length > 0 ? Math.round((clients.length / filteredContacts.length) * 100) : 0,

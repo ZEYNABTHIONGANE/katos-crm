@@ -121,30 +121,46 @@ const SuiviCommercial = () => {
     // -- Pipeline Progress Data (Active Deals) --
     const activeDeals = useMemo(() => {
         const supervisedLower = supervisedCommercials?.map(n => n.toLowerCase()) || [];
+        const normalizedCommercialFilter = commercialFilter.toLowerCase().trim();
         
         let list = contacts.filter(c => {
-            // Filtrage hiérarchique
+            // 1. Filtrage hiérarchique
             const agentName = (c.assignedAgent || '').trim().toLowerCase();
             
-            // Si l'utilisateur a une vue restreinte (supervisedCommercials !== null)
             if (supervisedCommercials !== null) {
-                // S'il n'est pas assigné, on vérifie éventuellement s'il a été créé par l'utilisateur
                 if (!agentName) return false; 
                 if (!supervisedLower.includes(agentName)) return false;
             }
             
-            // Si l'utilisateur est Admin/Dir (supervisedCommercials === null), on montre tout (assigné ou non)
-            
-            if (commercialFilter !== 'all' && c.assignedAgent !== commercialFilter) return false;
+            // 2. Filtrage par commercial sélectionné
+            if (commercialFilter !== 'all') {
+                if (agentName !== normalizedCommercialFilter) return false;
+            }
 
+            // 3. Filtrage par étape
             if (stageFilter !== 'all') {
                 const colId = STATUS_TO_COLUMN[c.status] || 'prospect';
                 if (colId !== stageFilter) return false;
             }
 
+            // 4. Filtrage par période (basé sur l'activité récente)
+            if (period !== 'tout') {
+                const hasActivityInPeriod = interactions.some(i => 
+                    i.contactId === c.id && 
+                    i.date >= startDate && 
+                    i.date <= endDate
+                );
+                if (!hasActivityInPeriod) return false;
+            }
+
+            // 5. Recherche intelligente multi-termes
             if (searchQuery) {
-                const q = searchQuery.toLowerCase();
-                return c.name.toLowerCase().includes(q) || c.company?.toLowerCase().includes(q) || c.assignedAgent.toLowerCase().includes(q);
+                const terms = searchQuery.toLowerCase().trim().split(/\s+/);
+                const searchableText = `${c.name} ${c.company || ''} ${c.assignedAgent || ''} ${c.service || ''} ${c.status || ''}`.toLowerCase();
+                
+                // Tous les mots-clés doivent être présents
+                const matches = terms.every(term => searchableText.includes(term));
+                if (!matches) return false;
             }
 
             return true;
@@ -167,23 +183,36 @@ const SuiviCommercial = () => {
                 lastStepDate: lastStep?.date
             };
         }).sort((a, b) => b.progress - a.progress);
-    }, [contacts, interactions, commercialFilter, stageFilter, searchQuery, supervisedCommercials]);
+    }, [contacts, interactions, commercialFilter, stageFilter, searchQuery, supervisedCommercials, period, startDate, endDate]);
 
     // -- Pipeline Steps Feed (Activity Log) --
     const pipelineFeed = useMemo(() => {
+        const normalizedCommercialFilter = commercialFilter.toLowerCase().trim();
+        
         return interactions
             .filter(i => i.type === 'pipeline_step')
             .filter(i => {
                 const supervisedLower = supervisedCommercials?.map(n => n.toLowerCase()) || [];
                 const agentName = (i.agent || '').trim().toLowerCase();
+                
+                // 1. Filtrage hiérarchique
                 if (supervisedCommercials !== null && !supervisedLower.includes(agentName)) return false;
-                if (commercialFilter !== 'all' && i.agent !== commercialFilter) return false;
+                
+                // 2. Filtrage par commercial sélectionné
+                if (commercialFilter !== 'all') {
+                    if (agentName !== normalizedCommercialFilter) return false;
+                }
+
+                // 3. Filtrage par période
                 if (i.date < startDate || i.date > endDate) return false;
                 
+                // 4. Recherche intelligente multi-termes
                 if (searchQuery) {
-                    const q = searchQuery.toLowerCase();
+                    const terms = searchQuery.toLowerCase().trim().split(/\s+/);
                     const contact = contacts.find(c => c.id === i.contactId);
-                    return contact?.name.toLowerCase().includes(q) || i.agent?.toLowerCase().includes(q) || i.title.toLowerCase().includes(q);
+                    const searchableText = `${contact?.name || ''} ${i.agent || ''} ${i.title || ''} ${i.description || ''}`.toLowerCase();
+                    
+                    return terms.every(term => searchableText.includes(term));
                 }
                 return true;
             })

@@ -82,12 +82,6 @@ const Sidebar = ({ isCollapsed }: { isCollapsed: boolean }) => {
             title: 'OUTILS & ADMIN',
             items: [
                 {
-                    path: '/documents',
-                    name: 'Gestion Documents',
-                    icon: <Folders size={18} />,
-                    allowedRoles: ['admin', 'dir_commercial', 'conformite']
-                },
-                {
                     path: '/compliance',
                     name: 'Litige & Conformité',
                     icon: <ShieldAlert size={18} />,

@@ -1,11 +1,15 @@
 import { useState, useMemo } from 'react';
 import { 
     Search, Filter, FileText, Download, Trash2, 
-    User, HardHat, ExternalLink, ShieldAlert
+    User, HardHat, ExternalLink, ShieldAlert,
+    Upload, Plus, PieChart, Briefcase, FileCheck, Layers
 } from 'lucide-react';
 import { useContactStore } from '@/stores/contactStore';
 import type { DocumentType } from '../types/documents';
 import { useToast } from '@/app/providers/ToastProvider';
+import { useAuth } from '@/app/providers/AuthProvider';
+import Modal from '@/components/ui/Modal';
+import { useRef } from 'react';
 
 const TYPE_LABELS: Record<DocumentType, string> = {
     contrat: 'Contrat',
@@ -13,6 +17,8 @@ const TYPE_LABELS: Record<DocumentType, string> = {
     devis: 'Devis',
     facture: 'Facture',
     bon_reservation: 'Bon de réservation',
+    identite: "Pièce d'identité",
+    passeport: 'Passeport',
     autre: 'Autre document'
 };
 
@@ -22,20 +28,41 @@ const TYPE_COLORS: Record<DocumentType, string> = {
     devis: '#10B981',
     facture: '#F59E0B',
     bon_reservation: '#EF4444',
+    identite: '#8B5CF6',
+    passeport: '#EC4899',
     autre: '#64748b'
 };
 
-import { useAuth } from '@/app/providers/AuthProvider';
-
 const DocumentsPage = () => {
-    const { documents, contacts, constructionProjects, deleteDocument } = useContactStore();
+    const { documents, contacts, constructionProjects, deleteDocument, addDocument } = useContactStore();
     const { user } = useAuth();
     const { showToast } = useToast();
     
-    // Sécurité Rôle : Seul admin, dir_commercial et conformite
+    // Permissions : Admin, Directeur, Responsable, Conformité
     const hasAccess = useMemo(() => {
-        return ['admin', 'dir_commercial', 'conformite'].includes(user?.role || '');
+        return ['admin', 'dir_commercial', 'resp_commercial', 'conformite'].includes(user?.role || '');
     }, [user]);
+
+    const canUpload = useMemo(() => {
+        return ['admin', 'dir_commercial', 'resp_commercial'].includes(user?.role || '');
+    }, [user]);
+
+    const [searchTerm, setSearchTerm] = useState('');
+    const [typeFilter, setTypeFilter] = useState<'all' | DocumentType>('all');
+    const [showUploadModal, setShowUploadModal] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    
+    const [uploadForm, setUploadForm] = useState({
+        name: '',
+        type: 'autre' as DocumentType,
+        contactId: '',
+        projectId: '',
+        propertyId: '',
+        propertyType: '' as 'land' | 'villa' | '',
+        url: 'https://example.com/demo.pdf', // Mock
+        size: ''
+    });
 
     if (!hasAccess) {
         return (
@@ -51,14 +78,25 @@ const DocumentsPage = () => {
         );
     }
     
-    const [searchTerm, setSearchTerm] = useState('');
-    const [typeFilter, setTypeFilter] = useState<'all' | DocumentType>('all');
+    // Stats calculation
+    const stats = useMemo(() => {
+        return {
+            total: documents.length,
+            contracts: documents.filter(d => d.type === 'contrat').length,
+            plans: documents.filter(d => d.type === 'plan').length,
+            invoices: documents.filter(d => d.type === 'facture').length
+        };
+    }, [documents]);
 
     const getContactName = (id: number) => contacts.find(c => c.id === id)?.name || 'Inconnu';
-    const getProjectName = (id?: string) => {
-        if (!id) return null;
-        const project = constructionProjects.find(p => p.id === id);
-        return project ? `Chantier #${project.id}` : null;
+    
+    const getPropertyInfo = (doc: any) => {
+        if (doc.projectId) return `Chantier #${doc.projectId}`;
+        if (doc.propertyId) {
+            const contact = contacts.find(c => c.id === doc.contactId);
+            return contact?.propertyTitle || `Bien #${doc.propertyId}`;
+        }
+        return null;
     };
 
     const filteredDocs = useMemo(() => {
@@ -67,8 +105,51 @@ const DocumentsPage = () => {
                                getContactName(doc.contactId).toLowerCase().includes(searchTerm.toLowerCase());
             const matchesType = typeFilter === 'all' || doc.type === typeFilter;
             return matchesSearch && matchesType;
-        });
+        }).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     }, [documents, searchTerm, typeFilter, contacts]);
+
+    const handleUpload = () => {
+        if (!uploadForm.name || !uploadForm.contactId) {
+            showToast('Veuillez remplir les champs obligatoires');
+            return;
+        }
+        addDocument({
+            name: uploadForm.name,
+            type: uploadForm.type,
+            contactId: parseInt(uploadForm.contactId),
+            projectId: uploadForm.projectId || undefined,
+            propertyId: uploadForm.propertyId || undefined,
+            propertyType: uploadForm.propertyType || undefined,
+            url: uploadForm.url,
+            size: uploadForm.size || '1.2 MB',
+            fileType: selectedFile?.name.split('.').pop() || 'pdf'
+        });
+        showToast('Document ajouté avec succès');
+        setShowUploadModal(false);
+        setSelectedFile(null);
+        setUploadForm({ 
+            name: '', 
+            type: 'autre', 
+            contactId: '', 
+            projectId: '', 
+            propertyId: '',
+            propertyType: '',
+            url: 'https://example.com/demo.pdf', 
+            size: '' 
+        });
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setSelectedFile(file);
+            // Auto-fill name if empty
+            if (!uploadForm.name) {
+                setUploadForm(prev => ({ ...prev, name: file.name.split('.')[0] }));
+            }
+            setUploadForm(prev => ({ ...prev, size: (file.size / (1024 * 1024)).toFixed(1) + ' MB' }));
+        }
+    };
 
     const handleDelete = (id: string) => {
         if (window.confirm('Supprimer ce document ?')) {
@@ -79,32 +160,78 @@ const DocumentsPage = () => {
 
     return (
         <div className="documents-page">
-            <div className="page-header d-flex-between">
+            <div className="page-header d-flex justify-between align-center">
                 <div>
-                    <h1>Gestion Documentaire</h1>
-                    <p className="subtitle">Centralisez et sécurisez tous vos actifs documentaires</p>
+                    <h1>Espace Documentaire</h1>
+                    <p className="subtitle">Gestion centralisée des contrats, plans et factures</p>
+                </div>
+                {canUpload && (
+                    <button className="btn-primary flex items-center gap-2" onClick={() => setShowUploadModal(true)}>
+                        <Plus size={20} /> Nouveau Document
+                    </button>
+                )}
+            </div>
+
+            {/* Stats Overview */}
+            <div className="doc-stats-grid">
+                <div className="doc-stat-card">
+                    <div className="stat-icon-wrapper" style={{ background: 'linear-gradient(135deg, #2B2E83 0%, #3B82F6 100%)' }}>
+                        <Layers size={24} />
+                    </div>
+                    <div className="stat-info">
+                        <span className="stat-value">{stats.total}</span>
+                        <span className="stat-label">Total Documents</span>
+                    </div>
+                </div>
+                <div className="doc-stat-card">
+                    <div className="stat-icon-wrapper" style={{ background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)' }}>
+                        <FileCheck size={24} />
+                    </div>
+                    <div className="stat-info">
+                        <span className="stat-value">{stats.contracts}</span>
+                        <span className="stat-label">Contrats Signés</span>
+                    </div>
+                </div>
+                <div className="doc-stat-card">
+                    <div className="stat-icon-wrapper" style={{ background: 'linear-gradient(135deg, #E96C2E 0%, #FB923C 100%)' }}>
+                        <Briefcase size={24} />
+                    </div>
+                    <div className="stat-info">
+                        <span className="stat-value">{stats.plans}</span>
+                        <span className="stat-label">Plans & Techniques</span>
+                    </div>
+                </div>
+                <div className="doc-stat-card">
+                    <div className="stat-icon-wrapper" style={{ background: 'linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%)' }}>
+                        <PieChart size={24} />
+                    </div>
+                    <div className="stat-info">
+                        <span className="stat-value">{stats.invoices}</span>
+                        <span className="stat-label">Factures & Devis</span>
+                    </div>
                 </div>
             </div>
 
-            <div className="filters-bar p-2 rounded-2xl flex gap-3 mb-8">
-                <div className="search-input flex-1 flex items-center bg-white border border-gray-100 rounded-xl px-4 shadow-sm focus-within:ring-2 focus-within:ring-primary/10 transition-all">
-                    <Search size={18} className="text-gray-400" />
+            {/* Toolbar */}
+            <div className="filters-bar d-flex gap-3">
+                <div className="search-input flex-1 d-flex align-center px-4 bg-white/50 rounded-xl border border-white">
+                    <Search size={18} className="text-muted mr-2" />
                     <input 
                         type="text" 
-                        placeholder="Rechercher par nom de document ou client..."
-                        className="bg-transparent border-none outline-none p-3 w-full text-sm font-medium"
+                        placeholder="Rechercher un document ou un client..."
+                        className="bg-transparent border-none outline-none py-3 w-full text-sm font-semibold"
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="flex items-center bg-white border border-gray-100 rounded-xl px-4 shadow-sm">
-                    <Filter size={18} className="text-gray-400 mr-2" />
+                <div className="type-selector d-flex align-center px-4 bg-white/50 rounded-xl border border-white">
+                    <Filter size={18} className="text-muted mr-2" />
                     <select 
-                        className="bg-transparent border-none outline-none text-sm py-3 font-medium cursor-pointer"
+                        className="bg-transparent border-none outline-none py-3 text-sm font-bold cursor-pointer"
                         value={typeFilter}
                         onChange={e => setTypeFilter(e.target.value as any)}
                     >
-                        <option value="all">Tous les types</option>
+                        <option value="all">Toutes les catégories</option>
                         {Object.entries(TYPE_LABELS).map(([val, label]) => (
                             <option key={val} value={val}>{label}</option>
                         ))}
@@ -112,30 +239,31 @@ const DocumentsPage = () => {
                 </div>
             </div>
 
-            <div className="card-premium p-0 overflow-hidden" style={{ background: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(10px)' }}>
-                <table className="rpt-table w-full border-collapse">
+            {/* Table View */}
+            <div className="card-premium p-0 overflow-hidden" style={{ background: 'rgba(255,255,255,0.4)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.6)' }}>
+                <table className="rpt-table w-full">
                     <thead>
-                        <tr className="bg-gray-50/50">
-                            <th className="text-left p-4 text-[10px] uppercase text-gray-400 font-extrabold tracking-wider">Document</th>
-                            <th className="text-left p-4 text-[10px] uppercase text-gray-400 font-extrabold tracking-wider">Type</th>
-                            <th className="text-left p-4 text-[10px] uppercase text-gray-400 font-extrabold tracking-wider">Client / Projet</th>
-                            <th className="text-left p-4 text-[10px] uppercase text-gray-400 font-extrabold tracking-wider">Version</th>
-                            <th className="text-left p-4 text-[10px] uppercase text-gray-400 font-extrabold tracking-wider">Dernière MAJ</th>
-                            <th className="text-right p-4 text-[10px] uppercase text-gray-400 font-extrabold tracking-wider">Actions</th>
+                        <tr>
+                            <th>Document</th>
+                            <th>Catégorie</th>
+                            <th>Client / Projet</th>
+                            <th>Version</th>
+                            <th>Modifié le</th>
+                            <th className="text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {filteredDocs.length > 0 ? filteredDocs.map(doc => (
-                            <tr key={doc.id} className="hover:bg-white/80 transition-all cursor-default group">
-                                <td className="p-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2.5 bg-primary/5 text-primary rounded-xl group-hover:scale-110 transition-transform">
-                                            <FileText size={20} />
+                            <tr key={doc.id}>
+                                <td>
+                                    <div className="d-flex align-center gap-3">
+                                        <div className="file-type-icon">
+                                            <FileText size={20} style={{ color: TYPE_COLORS[doc.type] }} />
                                         </div>
-                                        <span className="font-bold text-sm text-text-main">{doc.name}</span>
+                                        <span className="font-bold text-sm text-slate-800">{doc.name}</span>
                                     </div>
                                 </td>
-                                <td className="p-4">
+                                <td>
                                     <span 
                                         className="text-[10px] uppercase font-black px-3 py-1 rounded-full" 
                                         style={{ backgroundColor: colorMix(TYPE_COLORS[doc.type], 0.1), color: TYPE_COLORS[doc.type] }}
@@ -143,34 +271,36 @@ const DocumentsPage = () => {
                                         {TYPE_LABELS[doc.type]}
                                     </span>
                                 </td>
-                                <td className="p-4">
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-bold flex items-center gap-1.5 text-text-main">
-                                            <User size={14} className="text-primary/40" />
+                                <td>
+                                    <div className="d-flex flex-col">
+                                        <span className="text-sm font-bold d-flex align-center gap-1 text-slate-700">
+                                            <User size={12} className="text-muted" />
                                             {getContactName(doc.contactId)}
                                         </span>
-                                        {doc.projectId && (
-                                            <span className="text-[11px] text-secondary font-bold flex items-center gap-1.5 mt-1 bg-secondary/5 w-fit px-2 py-0.5 rounded-md">
-                                                <HardHat size={12} />
-                                                {getProjectName(doc.projectId)}
+                                        {getPropertyInfo(doc) && (
+                                            <span className="text-[10px] font-bold text-secondary mt-1">
+                                                <HardHat size={10} className="mr-1" />
+                                                {getPropertyInfo(doc)}
                                             </span>
                                         )}
                                     </div>
                                 </td>
-                                <td className="p-4">
-                                    <span className="text-xs font-black bg-gray-100 px-2.5 py-1 rounded-lg text-gray-600 border border-gray-200/50">v{doc.version}</span>
+                                <td>
+                                    <span className="text-xs font-extrabold bg-slate-100 text-slate-500 px-2 py-0.5 rounded border border-slate-200">v{doc.version}</span>
                                 </td>
-                                <td className="p-4 text-xs font-medium text-gray-500">{doc.updatedAt}</td>
-                                <td className="p-4">
-                                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button className="p-2 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-xl transition-all" title="Ouvrir">
+                                <td>
+                                    <span className="text-xs font-medium text-slate-400">{doc.updatedAt}</span>
+                                </td>
+                                <td>
+                                    <div className="d-flex justify-end gap-1">
+                                        <button className="p-2 text-slate-400 hover:text-primary transition-colors" title="Ouvrir">
                                             <ExternalLink size={18} />
                                         </button>
-                                        <button className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-xl transition-all" title="Télécharger">
+                                        <button className="p-2 text-slate-400 hover:text-green-600 transition-colors" title="Télécharger">
                                             <Download size={18} />
                                         </button>
                                         <button 
-                                            className="p-2 text-gray-400 hover:text-danger hover:bg-danger/5 rounded-xl transition-all" 
+                                            className="p-2 text-slate-400 hover:text-danger transition-colors" 
                                             title="Supprimer"
                                             onClick={() => handleDelete(doc.id)}
                                         >
@@ -181,22 +311,132 @@ const DocumentsPage = () => {
                             </tr>
                         )) : (
                             <tr>
-                                <td colSpan={6} className="p-20 text-center text-gray-400 font-medium italic">
-                                    <div className="flex flex-col items-center gap-2 opacity-40">
-                                        <Search size={48} />
-                                        <p>Aucun document ne correspond à votre recherche.</p>
-                                    </div>
+                                <td colSpan={6} className="p-20 text-center text-muted font-medium italic">
+                                    Aucun document trouvé pour ces critères.
                                 </td>
                             </tr>
                         )}
                     </tbody>
                 </table>
             </div>
+
+            {/* Global Upload Modal */}
+            <Modal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} title="Ajouter un nouveau document" size="md">
+                <div className="form-grid">
+                    <div className="form-group col-2">
+                        <label className="form-label">Nom du document *</label>
+                        <input 
+                            className="form-input" 
+                            placeholder="Ex: Contrat de vente finalisé"
+                            value={uploadForm.name}
+                            onChange={e => setUploadForm({ ...uploadForm, name: e.target.value })}
+                        />
+                    </div>
+                    <div className="form-group col-2">
+                        <label className="form-label">Catégorie</label>
+                        <select 
+                            className="form-select"
+                            value={uploadForm.type}
+                            onChange={e => setUploadForm({ ...uploadForm, type: e.target.value as DocumentType })}
+                        >
+                            {Object.entries(TYPE_LABELS).map(([val, label]) => (
+                                <option key={val} value={val}>{label}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="form-group col-2">
+                        <label className="form-label">Associer à un client *</label>
+                        <select 
+                            className="form-select"
+                            value={uploadForm.contactId}
+                            onChange={e => setUploadForm({ ...uploadForm, contactId: e.target.value })}
+                        >
+                            <option value="">Sélectionnez un client...</option>
+                            {contacts.sort((a,b) => a.name.localeCompare(b.name)).map(c => (
+                                <option key={c.id} value={c.id}>{c.name} ({c.company || 'Particulier'})</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="form-group col-2">
+                        <label className="form-label">Lier à un objet (Vente, Location, Chantier)</label>
+                        <p className="text-[10px] text-muted mb-2">Sélectionnez le contexte spécifique de ce document.</p>
+                        <select 
+                            className="form-select"
+                            value={uploadForm.projectId || (uploadForm.propertyId ? 'prop' : '')}
+                            onChange={e => {
+                                const val = e.target.value;
+                                if (val === 'prop') {
+                                    const contact = contacts.find(c => c.id === parseInt(uploadForm.contactId));
+                                    setUploadForm({ 
+                                        ...uploadForm, 
+                                        projectId: '', 
+                                        propertyId: contact?.propertyId || '', 
+                                        propertyType: (contact?.service === 'foncier' ? 'land' : 'villa') 
+                                    });
+                                } else if (val.startsWith('proj_')) {
+                                    setUploadForm({ 
+                                        ...uploadForm, 
+                                        projectId: val.replace('proj_', ''), 
+                                        propertyId: '', 
+                                        propertyType: '' 
+                                    });
+                                } else {
+                                    setUploadForm({ ...uploadForm, projectId: '', propertyId: '', propertyType: '' });
+                                }
+                            }}
+                            disabled={!uploadForm.contactId}
+                        >
+                            <option value="">Document général (KYC / Dossier client)</option>
+                            
+                            {/* Option pour le bien principal (Land/Villa) */}
+                            {(() => {
+                                const contact = contacts.find(c => c.id === parseInt(uploadForm.contactId));
+                                if (contact?.propertyId) {
+                                    const label = contact.service === 'foncier' ? 'Vente Terrain' : 'Achat/Location Villa';
+                                    return <option value="prop">{label} : {contact.propertyTitle || contact.propertyId}</option>;
+                                }
+                                return null;
+                            })()}
+
+                            {/* Options pour les chantiers */}
+                            {constructionProjects
+                                .filter(p => p.contactId === parseInt(uploadForm.contactId))
+                                .map(p => (
+                                    <option key={p.id} value={`proj_${p.id}`}>Chantier #{p.id} ({p.technicianName || 'Sans technicien'})</option>
+                                ))
+                            }
+                        </select>
+                    </div>
+                    <div className="form-group col-2">
+                        <label className="form-label">Fichier</label>
+                        <input 
+                            type="file" 
+                            ref={fileInputRef} 
+                            style={{ display: 'none' }} 
+                            onChange={handleFileChange}
+                            accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx"
+                        />
+                        <div 
+                            className={`upload-dropzone p-8 border-2 border-dashed ${selectedFile ? 'border-primary bg-primary/5' : 'border-slate-200'} rounded-xl text-center hover:border-primary transition-colors cursor-pointer`}
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            <Upload className={`mx-auto ${selectedFile ? 'text-primary' : 'text-muted'} mb-2`} size={32} />
+                            <p className="text-xs font-bold text-slate-500">
+                                {selectedFile ? `Fichier sélectionné : ${selectedFile.name}` : 'Cliquez pour sélectionner un fichier'}
+                            </p>
+                            <p className="text-[10px] text-muted mt-1">PDF, JPG, PNG (Max 10MB)</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="form-actions mt-6">
+                    <button className="btn-secondary" onClick={() => setShowUploadModal(false)}>Annuler</button>
+                    <button className="btn-primary" onClick={handleUpload}>Ajouter au système</button>
+                </div>
+            </Modal>
         </div>
     );
 };
 
-// Helper for background color alpha
 function colorMix(hex: string, alpha: number) {
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);

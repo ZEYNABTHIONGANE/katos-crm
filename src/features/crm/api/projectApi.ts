@@ -124,6 +124,8 @@ export const fetchDocuments = async (): Promise<CrmDocument[]> => {
         ...d,
         contactId: d.contact_id,
         projectId: d.project_id,
+        propertyId: d.metadata?.propertyId,
+        propertyType: d.metadata?.propertyType,
         name: d.name,
         type: d.type,
         url: d.file_url,
@@ -145,7 +147,11 @@ export const createDocumentApi = async (doc: Omit<CrmDocument, 'id' | 'createdAt
             type: doc.type,
             file_url: doc.url,
             version: 1,
-            metadata: { versions: [{ version: 1, url: doc.url, createdAt: now }] }
+            metadata: { 
+                versions: [{ version: 1, url: doc.url, createdAt: now }],
+                propertyId: doc.propertyId,
+                propertyType: doc.propertyType
+            }
         }])
         .select()
         .single();
@@ -167,6 +173,8 @@ export const createDocumentApi = async (doc: Omit<CrmDocument, 'id' | 'createdAt
         ...data,
         contactId: data.contact_id,
         projectId: data.project_id,
+        propertyId: data.metadata?.propertyId,
+        propertyType: data.metadata?.propertyType,
         name: data.name,
         type: data.type,
         url: data.file_url,

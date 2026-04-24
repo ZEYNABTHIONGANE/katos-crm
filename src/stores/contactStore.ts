@@ -158,15 +158,36 @@ export const useContactStore = create<ContactStore>()((set, get) => ({
     documents: [],
 
     fetchData: async () => {
+        console.log('[STORE] Starting resilient data fetch...');
+        
+        const fetchSafely = async <T>(promise: Promise<T>, label: string, fallback: T): Promise<T> => {
+            try {
+                return await promise;
+            } catch (err) {
+                console.error(`[STORE] Error fetching ${label}:`, err);
+                return fallback;
+            }
+        };
+
+        // Fetch all modules in parallel but with individual error handling
         const [contacts, interactions, visits, followUps, projects, docs] = await Promise.all([
-            api.fetchContacts(),
-            api.fetchInteractions(),
-            api.fetchVisits(),
-            api.fetchFollowUps(),
-            projectApi.fetchProjects(),
-            projectApi.fetchDocuments()
+            fetchSafely(api.fetchContacts(), 'contacts', []),
+            fetchSafely(api.fetchInteractions(), 'interactions', []),
+            fetchSafely(api.fetchVisits(), 'visits', []),
+            fetchSafely(api.fetchFollowUps(), 'followUps', []),
+            fetchSafely(projectApi.fetchProjects(), 'projects', []),
+            fetchSafely(projectApi.fetchDocuments(), 'documents', [])
         ]);
-        set({ contacts, interactions, visits, followUps, constructionProjects: projects, documents: docs });
+
+        set({ 
+            contacts, 
+            interactions, 
+            visits, 
+            followUps, 
+            constructionProjects: projects, 
+            documents: docs 
+        });
+        console.log('[STORE] Resilient fetch completed.');
     },
 
     addContact: async (c) => {

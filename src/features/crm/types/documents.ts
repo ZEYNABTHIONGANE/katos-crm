@@ -1,4 +1,4 @@
-export type DocumentType = 'contrat' | 'plan' | 'devis' | 'facture' | 'bon_reservation' | 'autre';
+export type DocumentType = 'contrat' | 'plan' | 'devis' | 'facture' | 'bon_reservation' | 'identite' | 'passeport' | 'autre';
 
 export interface DocumentVersion {
     version: number;
@@ -16,6 +16,8 @@ export interface CrmDocument {
     versions: DocumentVersion[];
     contactId: number;
     projectId?: string;
+    propertyId?: string; // ID of land or villa
+    propertyType?: 'land' | 'villa';
     createdAt: string;
     updatedAt: string;
     size?: string;

@@ -118,11 +118,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const fetchProfile = async (supabaseUser: User) => {
         try {
-            const { data, error } = await supabase
+            // Add a 5s timeout to profile fetching to prevent permanent hang
+            const profilePromise = supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', supabaseUser.id)
                 .single();
+
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
+            );
+
+            const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
 
             if (error) throw error;
 
@@ -150,8 +157,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const login = async (email: string, password: string) => {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        return { error };
+        try {
+            console.log('[AuthProvider] Attempting login for:', email);
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            
+            if (error) {
+                console.error('[AuthProvider] login error:', error.message);
+                return { error };
+            }
+
+            if (data.user) {
+                console.log('[AuthProvider] login successful. Profile will be loaded by auth listener.');
+                // We don't await fetchProfile here because onAuthStateChange is already triggered
+                // and will call fetchProfile. This saves one redundant API call and reduces latency.
+            }
+            
+            return { error: null };
+        } catch (err: any) {
+            console.error('[AuthProvider] login exception:', err);
+            return { error: { message: err.message || 'Une erreur inattendue est survenue' } };
+        }
     };
 
     const logout = async () => {

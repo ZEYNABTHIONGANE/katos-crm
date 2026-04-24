@@ -51,18 +51,35 @@ const safeStorage = (() => {
 // This is safe for single-tab SPA usage.
 const inMemoryLock = (() => {
     const locks: Record<string, Promise<void>> = {};
+    const lockHolders: Record<string, number> = {};
 
-    return async (name: string, _acquireTimeout: number, fn: () => Promise<any>) => {
-        // Wait for any existing lock on this name to release
+    return async (name: string, acquireTimeout: number, fn: () => Promise<any>) => {
+        const id = Math.random().toString(36).substring(7);
+        // console.debug(`[Lock ${id}] Requesting: ${name}`);
+
         const previous = locks[name] ?? Promise.resolve();
         let releaseLock!: () => void;
         const current = new Promise<void>((resolve) => { releaseLock = resolve; });
-        locks[name] = previous.then(() => current);
+        locks[name] = previous.then(() => current).catch(() => current);
 
-        await previous;
         try {
+            // Safety timeout to prevent permanent deadlocks
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error(`Lock timeout for ${name}`)), acquireTimeout || 10000)
+            );
+
+            await Promise.race([previous, timeoutPromise]);
+            
+            // console.debug(`[Lock ${id}] Acquired: ${name}`);
+            lockHolders[name] = (lockHolders[name] || 0) + 1;
+            
             return await fn();
+        } catch (err) {
+            console.warn(`[Lock ${id}] Error or Timeout for ${name}:`, err);
+            throw err;
         } finally {
+            // console.debug(`[Lock ${id}] Releasing: ${name}`);
+            lockHolders[name]--;
             releaseLock();
         }
     };
@@ -75,8 +92,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
         detectSessionInUrl: true,
         storageKey: 'katos-crm-auth-token',
         storage: safeStorage,
-        // Override the Web Locks API with our in-memory implementation.
-        // Brave blocks navigator.locks which was causing permanent blank screens.
-        lock: inMemoryLock,
+        // Only override if Web Locks API is blocked/missing
+        lock: typeof navigator !== 'undefined' && navigator.locks ? undefined : inMemoryLock,
     }
 });
