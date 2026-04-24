@@ -1,8 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AuthProvider } from '@/app/providers/AuthProvider';
 import { NotifProvider } from '@/app/providers/NotifProvider';
 import { ToastProvider } from '@/app/providers/ToastProvider';
 import { ChatProvider } from '@/app/providers/ChatProvider';
+
 import Layout from '@/components/layout/DashboardLayout/DashboardLayout';
 import Login from '@/features/auth/components/LoginPage';
 import Dashboard from '@/features/crm/components/DashboardPage';
@@ -31,49 +33,52 @@ import { QueryProvider } from '@/app/providers/QueryProvider';
 
 function App() {
   return (
-    <QueryProvider>
-      <AuthProvider>
-        <NotifProvider>
-          <ChatProvider>
-            <ToastProvider>
-            <BrowserRouter>
-              <Routes>
-                {/* Route publique */}
-                <Route path="/login" element={<Login />} />
+    <ErrorBoundary>
+      <QueryProvider>
+        <AuthProvider>
+          <NotifProvider>
+            <ChatProvider>
+              <ToastProvider>
+                <BrowserRouter>
+                  <Routes>
+                    {/* Route publique */}
+                    <Route path="/login" element={<Login />} />
 
-                {/* Routes protégées */}
-                <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                  <Route index element={<Dashboard />} />
-                  <Route path="prospects" element={<ContactsList />} />
-                  <Route path="prospects/:id" element={<ContactDetail />} />
-                  <Route path="pipeline" element={<Pipeline />} />
-                  <Route path="relances" element={<RoleGuard allowedRoles={['commercial']}><Relances /></RoleGuard>} />
-                  <Route path="agents" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial']}><Agents /></RoleGuard>} />
-                  <Route path="suivi-commercial" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial', 'superviseur']}><SuiviCommercial /></RoleGuard>} />
-                  <Route path="rapports" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial']}><Rapports /></RoleGuard>} />
-                  <Route path="foncier" element={<LandList />} />
-                  <Route path="foncier/:id" element={<LandDetails />} />
-                  <Route path="construction" element={<ConstructionList />} />
-                  <Route path="gestion" element={<GestionList />} />
-                  <Route path="visites" element={<Visites />} />
-                    <Route path="agenda-terrain" element={<RoleGuard allowedRoles={['admin', 'technicien_terrain', 'technicien_chantier', 'commercial', 'dir_commercial', 'resp_commercial']}><FieldAgenda /></RoleGuard>} />
-                  <Route path="documents" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial', 'conformite']}><DocumentsPage /></RoleGuard>} />
-                  <Route path="historique" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial']}><Historique /></RoleGuard>} />
-                  <Route path="faq" element={<FAQ />} />
-                  <Route path="messages" element={<Messages />} />
-                  <Route path="compliance" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'conformite']}><ComplianceDashboard showStats={false} /></RoleGuard>} />
-                </Route>
+                    {/* Routes protégées */}
+                    <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                      <Route index element={<Dashboard />} />
+                      <Route path="prospects" element={<ContactsList />} />
+                      <Route path="prospects/:id" element={<ContactDetail />} />
+                      <Route path="pipeline" element={<Pipeline />} />
+                      <Route path="relances" element={<RoleGuard allowedRoles={['commercial']}><Relances /></RoleGuard>} />
+                      <Route path="agents" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial']}><Agents /></RoleGuard>} />
+                      <Route path="suivi-commercial" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial', 'superviseur']}><SuiviCommercial /></RoleGuard>} />
+                      <Route path="rapports" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial']}><Rapports /></RoleGuard>} />
+                      <Route path="foncier" element={<LandList />} />
+                      <Route path="foncier/:id" element={<LandDetails />} />
+                      <Route path="construction" element={<ConstructionList />} />
+                      <Route path="gestion" element={<GestionList />} />
+                      <Route path="visites" element={<Visites />} />
+                      <Route path="agenda-terrain" element={<RoleGuard allowedRoles={['admin', 'technicien_terrain', 'technicien_chantier', 'commercial', 'dir_commercial', 'resp_commercial']}><FieldAgenda /></RoleGuard>} />
+                      <Route path="documents" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial', 'conformite']}><DocumentsPage /></RoleGuard>} />
+                      <Route path="historique" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial']}><Historique /></RoleGuard>} />
+                      <Route path="faq" element={<FAQ />} />
+                      <Route path="messages" element={<Messages />} />
+                      <Route path="compliance" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'conformite']}><ComplianceDashboard showStats={false} /></RoleGuard>} />
+                    </Route>
 
-                {/* Fallback */}
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </BrowserRouter>
-          </ToastProvider>
-        </ChatProvider>
-      </NotifProvider>
-      </AuthProvider>
-    </QueryProvider>
+                    {/* Fallback */}
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </BrowserRouter>
+              </ToastProvider>
+            </ChatProvider>
+          </NotifProvider>
+        </AuthProvider>
+      </QueryProvider>
+    </ErrorBoundary>
   );
 }
+
 
 export default App;
