@@ -7,14 +7,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
     console.error('[Supabase] Missing environment variables');
 }
 
-// Safe storage wrapper — prevents Brave's fingerprinting protection from
-// throwing a SecurityError when localStorage is accessed during module init.
-// Falls back to an in-memory store so the app always loads.
+// ─── Safe Storage ─────────────────────────────────────────────────────────────
+// Brave's fingerprinting protection can throw a SecurityError on localStorage.
+// This wrapper silently falls back to an in-memory store.
 const safeStorage = (() => {
     const memStore: Record<string, string> = {};
     let useMemory = false;
 
-    // Test if localStorage is accessible right now
     try {
         localStorage.setItem('__brave_test__', '1');
         localStorage.removeItem('__brave_test__');
@@ -42,6 +41,33 @@ const safeStorage = (() => {
     };
 })();
 
+// ─── In-Memory Lock ───────────────────────────────────────────────────────────
+// ROOT CAUSE OF THE BLANK PAGE ON BRAVE:
+// Brave blocks the Web Locks API (navigator.locks). Supabase uses it internally
+// to prevent concurrent session operations. When Brave blocks it, the lock is
+// never acquired → ALL Supabase auth calls hang indefinitely → blank page.
+//
+// Fix: replace navigator.locks with a simple Promise-based in-memory mutex.
+// This is safe for single-tab SPA usage.
+const inMemoryLock = (() => {
+    const locks: Record<string, Promise<void>> = {};
+
+    return async (name: string, _acquireTimeout: number, fn: () => Promise<any>) => {
+        // Wait for any existing lock on this name to release
+        const previous = locks[name] ?? Promise.resolve();
+        let releaseLock!: () => void;
+        const current = new Promise<void>((resolve) => { releaseLock = resolve; });
+        locks[name] = previous.then(() => current);
+
+        await previous;
+        try {
+            return await fn();
+        } finally {
+            releaseLock();
+        }
+    };
+})();
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
         autoRefreshToken: true,
@@ -49,6 +75,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
         detectSessionInUrl: true,
         storageKey: 'katos-crm-auth-token',
         storage: safeStorage,
+        // Override the Web Locks API with our in-memory implementation.
+        // Brave blocks navigator.locks which was causing permanent blank screens.
+        lock: inMemoryLock,
     }
 });
-
