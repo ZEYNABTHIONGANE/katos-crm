@@ -27,8 +27,6 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// Branded loading screen — replaces the blank white page Brave users were seeing
-// while Supabase attempts to restore the session.
 const AuthLoadingScreen = () => (
     <div style={{
         position: 'fixed', inset: 0,
@@ -44,13 +42,7 @@ const AuthLoadingScreen = () => (
             borderRadius: '50%',
             animation: 'katos-spin 0.8s linear infinite',
         }} />
-        <p style={{
-            color: 'rgba(255,255,255,0.5)',
-            fontSize: '0.875rem',
-            fontFamily: 'Inter, sans-serif',
-            letterSpacing: '0.05em',
-            margin: 0,
-        }}>
+        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.875rem', fontFamily: 'Inter, sans-serif', margin: 0 }}>
             Chargement…
         </p>
         <style>{`@keyframes katos-spin { to { transform: rotate(360deg); } }`}</style>
@@ -63,35 +55,63 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     useEffect(() => {
         let isMounted = true;
+        let settled = false;
 
-        // 2s safety net — Brave often blocks Supabase session restoration silently.
-        // After 2s we unlock the app regardless (shows login page if no session).
-        const safetyTimeout = setTimeout(() => {
-            if (isMounted) {
-                console.warn('[AuthProvider] Safety timeout — forcing unlock');
+        const unlock = () => {
+            if (isMounted && !settled) {
+                settled = true;
                 setLoading(false);
             }
-        }, 2000);
+        };
 
+        // Strategy 1: Check existing session immediately via getSession()
+        // This is a direct API call that doesn't rely on onAuthStateChange.
+        // It bypasses Brave's event-blocking behavior.
+        supabase.auth.getSession().then(({ data: { session }, error }) => {
+            if (!isMounted) return;
+            if (error) {
+                console.warn('[AuthProvider] getSession error:', error.message);
+                unlock();
+                return;
+            }
+            if (session?.user) {
+                fetchProfile(session.user).finally(unlock);
+            } else {
+                unlock();
+            }
+        }).catch((err) => {
+            console.warn('[AuthProvider] getSession threw:', err);
+            unlock();
+        });
+
+        // Strategy 2: Subscribe to future auth changes (login, logout, token refresh)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            clearTimeout(safetyTimeout);
+            if (!isMounted) return;
             try {
-                if (!isMounted) return;
                 if (session?.user) {
                     await fetchProfile(session.user);
                 } else {
-                    if (isMounted) setUser(null);
+                    setUser(null);
                 }
             } catch (err) {
-                console.error('[AuthProvider] Unexpected error:', err);
+                console.error('[AuthProvider] onAuthStateChange error:', err);
             } finally {
-                if (isMounted) setLoading(false);
+                unlock();
             }
         });
 
+        // Strategy 3: Absolute fallback — if both getSession AND onAuthStateChange
+        // fail (e.g. Brave blocks all Supabase network calls), force unlock after 3s.
+        const hardTimeout = window.setTimeout(() => {
+            if (!settled) {
+                console.warn('[AuthProvider] Hard timeout — unlocking app');
+                unlock();
+            }
+        }, 3000);
+
         return () => {
             isMounted = false;
-            clearTimeout(safetyTimeout);
+            window.clearTimeout(hardTimeout);
             subscription.unsubscribe();
         };
     }, []);
@@ -117,7 +137,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             });
         } catch (error) {
             console.error('[AuthProvider] Error fetching profile:', error);
-            // Fallback: use Supabase auth data so user isn't stuck on loading
             setUser({
                 id: supabaseUser.id,
                 email: supabaseUser.email!,
