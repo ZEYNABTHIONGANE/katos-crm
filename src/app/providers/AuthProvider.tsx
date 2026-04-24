@@ -27,6 +27,36 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+// Branded loading screen — replaces the blank white page Brave users were seeing
+// while Supabase attempts to restore the session.
+const AuthLoadingScreen = () => (
+    <div style={{
+        position: 'fixed', inset: 0,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        background: 'linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%)',
+        gap: '1.5rem', zIndex: 9999,
+    }}>
+        <div style={{
+            width: 56, height: 56,
+            border: '3px solid rgba(255,255,255,0.1)',
+            borderTopColor: '#E96C2E',
+            borderRadius: '50%',
+            animation: 'katos-spin 0.8s linear infinite',
+        }} />
+        <p style={{
+            color: 'rgba(255,255,255,0.5)',
+            fontSize: '0.875rem',
+            fontFamily: 'Inter, sans-serif',
+            letterSpacing: '0.05em',
+            margin: 0,
+        }}>
+            Chargement…
+        </p>
+        <style>{`@keyframes katos-spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+);
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<AuthUser | null>(null);
     const [loading, setLoading] = useState(true);
@@ -34,32 +64,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     useEffect(() => {
         let isMounted = true;
 
-        // Safety net: if onAuthStateChange never fires (network issue, Brave storage
-        // restrictions, etc.), force loading=false after 5s so the app never stays blank.
+        // 2s safety net — Brave often blocks Supabase session restoration silently.
+        // After 2s we unlock the app regardless (shows login page if no session).
         const safetyTimeout = setTimeout(() => {
             if (isMounted) {
-                console.warn('[AuthProvider] Safety timeout reached — forcing loading=false');
+                console.warn('[AuthProvider] Safety timeout — forcing unlock');
                 setLoading(false);
             }
-        }, 5000);
+        }, 2000);
 
-        // Écouter les changements d'état (inclut la session initiale en Supabase v2)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            // Always clear the safety timeout when the callback fires
             clearTimeout(safetyTimeout);
-
             try {
                 if (!isMounted) return;
-
                 if (session?.user) {
                     await fetchProfile(session.user);
                 } else {
                     if (isMounted) setUser(null);
                 }
             } catch (err) {
-                console.error('[AuthProvider] Unexpected error in onAuthStateChange:', err);
+                console.error('[AuthProvider] Unexpected error:', err);
             } finally {
-                // Always unlock the app, even if an error occurred
                 if (isMounted) setLoading(false);
             }
         });
@@ -92,7 +117,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             });
         } catch (error) {
             console.error('[AuthProvider] Error fetching profile:', error);
-            // Fallback: use Supabase auth data directly so the user isn't stuck
+            // Fallback: use Supabase auth data so user isn't stuck on loading
             setUser({
                 id: supabaseUser.id,
                 email: supabaseUser.email!,
@@ -106,10 +131,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const login = async (email: string, password: string) => {
-        const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-        });
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
         return { error };
     };
 
@@ -120,7 +142,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     return (
         <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user, loading }}>
-            {!loading && children}
+            {loading ? <AuthLoadingScreen /> : children}
         </AuthContext.Provider>
     );
 };
