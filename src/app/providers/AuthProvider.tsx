@@ -34,20 +34,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     useEffect(() => {
         let isMounted = true;
 
+        // Safety net: if onAuthStateChange never fires (network issue, Brave storage
+        // restrictions, etc.), force loading=false after 5s so the app never stays blank.
+        const safetyTimeout = setTimeout(() => {
+            if (isMounted) {
+                console.warn('[AuthProvider] Safety timeout reached — forcing loading=false');
+                setLoading(false);
+            }
+        }, 5000);
+
         // Écouter les changements d'état (inclut la session initiale en Supabase v2)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            if (!isMounted) return;
+            // Always clear the safety timeout when the callback fires
+            clearTimeout(safetyTimeout);
 
-            if (session?.user) {
-                await fetchProfile(session.user);
-            } else {
-                setUser(null);
+            try {
+                if (!isMounted) return;
+
+                if (session?.user) {
+                    await fetchProfile(session.user);
+                } else {
+                    if (isMounted) setUser(null);
+                }
+            } catch (err) {
+                console.error('[AuthProvider] Unexpected error in onAuthStateChange:', err);
+            } finally {
+                // Always unlock the app, even if an error occurred
+                if (isMounted) setLoading(false);
             }
-            setLoading(false);
         });
 
         return () => {
             isMounted = false;
+            clearTimeout(safetyTimeout);
             subscription.unsubscribe();
         };
     }, []);
@@ -72,13 +91,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 parent_id: data.parent_id || null,
             });
         } catch (error) {
-            console.error('Error fetching profile:', error);
-            // Fallback user if profile doesn't exist yet
+            console.error('[AuthProvider] Error fetching profile:', error);
+            // Fallback: use Supabase auth data directly so the user isn't stuck
             setUser({
                 id: supabaseUser.id,
                 email: supabaseUser.email!,
                 name: supabaseUser.email!.split('@')[0],
-                role: 'commercial', // Default role
+                role: 'commercial',
                 service: null,
                 avatar: 'U',
                 parent_id: null,
