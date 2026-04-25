@@ -1,6 +1,6 @@
  import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardCheck, Clock, AlertTriangle, CheckCircle2, ArrowRight, Calendar, Phone, ChevronDown, Search, X, Edit2, Trash2, Mail, FileText, MapPin } from 'lucide-react';
+import { ClipboardCheck, Clock, AlertTriangle, CheckCircle2, ArrowRight, Calendar, Phone, ChevronDown, Search, X, Edit2, Trash2, Mail, FileText, MapPin, Plus } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import { useContactStore } from '@/stores/contactStore';
 import type { FollowUp } from '@/stores/contactStore';
@@ -14,11 +14,78 @@ const todayStr = fmt(today);
 const Relances = () => {
     const { 
         contacts, followUps, visits, interactions,
-        updateFollowUp, updateVisit, deleteFollowUp, deleteVisit, moveVisitStatut 
+        updateFollowUp, updateVisit, deleteFollowUp, deleteVisit, moveVisitStatut, addFollowUp 
     } = useContactStore();
     const { user } = useAuth();
     const { showToast } = useToast();
     const navigate = useNavigate();
+
+    // ─── État modal Nouvelle Tâche ───────────────────────────────────────
+    const [showNewTaskModal, setShowNewTaskModal] = useState(false);
+    const [newTaskForm, setNewTaskForm] = useState({
+        contactId: '' as string | number,
+        note: '',
+        dateRelance: new Date().toISOString().split('T')[0],
+        priorite: 'normale' as 'haute' | 'normale' | 'basse',
+        type: 'note' as string,
+    });
+    const [isCreating, setIsCreating] = useState(false);
+    const [contactSearch, setContactSearch] = useState('');
+    const [showContactDropdown, setShowContactDropdown] = useState(false);
+
+    // Tous les prospects (pas seulement les miens) pour la création de tâche
+    const allContactsSorted = useMemo(() => {
+        return [...contacts].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    }, [contacts]);
+
+    const filteredContactOptions = useMemo(() => {
+        if (!contactSearch.trim()) return allContactsSorted.slice(0, 50);
+        return allContactsSorted.filter(c =>
+            c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
+            (c.company || '').toLowerCase().includes(contactSearch.toLowerCase()) ||
+            (c.phone || '').includes(contactSearch)
+        ).slice(0, 30);
+    }, [allContactsSorted, contactSearch]);
+
+    const handleCreateTask = async () => {
+        if (!newTaskForm.contactId || !newTaskForm.note.trim() || !newTaskForm.dateRelance) {
+            showToast('Veuillez remplir tous les champs obligatoires', 'error');
+            return;
+        }
+        setIsCreating(true);
+        try {
+            const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
+            let statut: FollowUp['statut'] = 'upcoming';
+            if (newTaskForm.dateRelance < todayStr) statut = 'retard';
+            else if (newTaskForm.dateRelance === todayStr) statut = 'today';
+
+            await addFollowUp({
+                contactId: Number(newTaskForm.contactId),
+                agent: user?.name || '',
+                dateRelance: newTaskForm.dateRelance,
+                // Préfixe le type dans la note pour une détection fiable au filtre
+                note: `[${newTaskForm.type.toUpperCase()}] ${newTaskForm.note.trim()}`,
+                statut,
+                priorite: newTaskForm.priorite,
+            });
+            showToast('Tâche créée avec succès !');
+            setShowNewTaskModal(false);
+            setNewTaskForm({
+                contactId: '',
+                note: '',
+                dateRelance: new Date().toISOString().split('T')[0],
+                priorite: 'normale',
+                type: 'note',
+            });
+            setContactSearch('');
+        } catch (err) {
+            console.error(err);
+            showToast('Erreur lors de la création de la tâche', 'error');
+        } finally {
+            setIsCreating(false);
+        }
+    };
 
     // Restriction d'accès : Seuls les commerciaux ont accès à "Mes Tâches"
     // Les admins et managers voient l'Historique global à la place.
@@ -46,103 +113,131 @@ const Relances = () => {
     };
 
     const allActions = useMemo(() => {
-        // Obtenir la date du jour pour calculer le statut en temps réel
-        const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
+        try {
+            // Obtenir la date du jour pour calculer le statut en temps réel
+            const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
 
-        const getDynamicStatut = (dateStr: string, currentStatut: string): 'retard' | 'today' | 'upcoming' | 'done' => {
-            if (currentStatut === 'done' || currentStatut === 'completed') return 'done';
-            if (dateStr < todayStr) return 'retard';
-            if (dateStr === todayStr) return 'today';
-            return 'upcoming';
-        };
-
-        const tasks = followUps.map(f => {
-            // Identifier le type d'interaction parente si possible
-            let type = 'note';
-            if (f.interactionId) {
-                const parent = interactions.find(i => i.id === f.interactionId);
-                if (parent) {
-                    type = parent.type === 'visite_terrain' || parent.type === 'visite_chantier' ? 'visite' : parent.type;
-                }
-            } else if (f.note.toLowerCase().includes('appel')) {
-                type = 'call';
-            } else if (f.note.toLowerCase().includes('rdv') || f.note.toLowerCase().includes('rendez-vous')) {
-                type = 'rdv';
-            }
-
-            return { 
-                ...f, 
-                type,
-                statut: getDynamicStatut(f.dateRelance, f.statut),
-                category: 'follow_up' as const 
+            const getDynamicStatut = (dateStr: string, currentStatut: string): 'retard' | 'today' | 'upcoming' | 'done' => {
+                if (currentStatut === 'done' || currentStatut === 'completed') return 'done';
+                if (!dateStr) return 'upcoming';
+                if (dateStr < todayStr) return 'retard';
+                if (dateStr === todayStr) return 'today';
+                return 'upcoming';
             };
-        });
 
-        const upcomingVisits = visits
-            .filter(v => v.statut !== 'completed' && v.statut !== 'cancelled')
-            .map(v => ({
-                id: v.id.toString(),
-                contactId: v.contactId,
-                agent: v.agent,
-                dateRelance: v.date,
-                note: `[${v.type.toUpperCase()}] ${v.title}`,
-                type: v.type === 'bureau' ? 'rdv' : 'visite',
-                statut: getDynamicStatut(v.date, v.statut),
-                priorite: 'normale' as const,
-                category: 'visit' as const,
-                originalVisit: v
-            }));
+            const tasks = (followUps || []).map(f => {
+                // Détection du type : priorité au préfixe [TYPE] dans la note, puis interactionId, puis mots-clés
+                let type = 'note';
+                const noteUpper = (f.note || '').toUpperCase();
+                if (noteUpper.startsWith('[CALL]') || noteUpper.startsWith('[APPEL]')) {
+                    type = 'call';
+                } else if (noteUpper.startsWith('[RDV]') || noteUpper.startsWith('[RENDEZ-VOUS]')) {
+                    type = 'rdv';
+                } else if (noteUpper.startsWith('[VISITE]') || noteUpper.startsWith('[VISITE_TERRAIN]')) {
+                    type = 'visite';
+                } else if (noteUpper.startsWith('[EMAIL]')) {
+                    type = 'email';
+                } else if (noteUpper.startsWith('[NOTE]')) {
+                    type = 'note';
+                } else if (f.interactionId) {
+                    const parent = (interactions || []).find(i => i.id === f.interactionId);
+                    if (parent) {
+                        type = parent.type === 'visite_terrain' || parent.type === 'visite_chantier' ? 'visite' : parent.type;
+                    }
+                } else if (/\bappel\b/i.test(f.note || '')) {
+                    type = 'call';
+                } else if (/\brdv\b|rendez-vous/i.test(f.note || '')) {
+                    type = 'rdv';
+                } else if (/\bvisite\b/i.test(f.note || '')) {
+                    type = 'visite';
+                } else if (/\bemail\b|\bmail\b/i.test(f.note || '')) {
+                    type = 'email';
+                }
 
-        const completedVisits = visits
-            .filter(v => v.statut === 'completed')
-            .map(v => ({
-                id: v.id.toString(),
-                contactId: v.contactId,
-                agent: v.agent,
-                dateRelance: v.date,
-                note: `[${v.type.toUpperCase()}] ${v.title}`,
-                type: v.type === 'bureau' ? 'rdv' : 'visite',
-                statut: 'done' as const,
-                priorite: 'normale' as const,
-                category: 'visit' as const,
-                originalVisit: v
-            }));
+                return { 
+                    ...f, 
+                    type,
+                    statut: getDynamicStatut(f.dateRelance, f.statut),
+                    category: 'follow_up' as const 
+                };
+            });
 
-        return [...tasks, ...upcomingVisits, ...completedVisits];
+            const upcomingVisits = (visits || [])
+                .filter(v => v.statut !== 'completed' && v.statut !== 'cancelled')
+                .map(v => ({
+                    id: v.id.toString(),
+                    contactId: v.contactId,
+                    agent: v.agent,
+                    dateRelance: v.date,
+                    note: `[${(v.type || '').toUpperCase()}] ${v.title || ''}`,
+                    type: v.type === 'bureau' ? 'rdv' : 'visite',
+                    statut: getDynamicStatut(v.date, v.statut),
+                    priorite: 'normale' as const,
+                    category: 'visit' as const,
+                    originalVisit: v
+                }));
+
+            const completedVisits = (visits || [])
+                .filter(v => v.statut === 'completed')
+                .map(v => ({
+                    id: v.id.toString(),
+                    contactId: v.contactId,
+                    agent: v.agent,
+                    dateRelance: v.date,
+                    note: `[${(v.type || '').toUpperCase()}] ${v.title || ''}`,
+                    type: v.type === 'bureau' ? 'rdv' : 'visite',
+                    statut: 'done' as const,
+                    priorite: 'normale' as const,
+                    category: 'visit' as const,
+                    originalVisit: v
+                }));
+
+            return [...tasks, ...upcomingVisits, ...completedVisits];
+        } catch (err) {
+            console.error("Error calculating allActions:", err);
+            return [];
+        }
     }, [followUps, visits, interactions]);
 
     const filteredRelances = useMemo(() => {
-        const query = searchQuery.toLowerCase().trim();
-        return allActions
-            .filter(r => {
-                const contact = contacts.find(c => c.id === r.contactId);
-                
-                // "Mes Tâches" is strictly personal for everyone
-                const agentNorm = (r.agent || '').trim().toLowerCase();
-                const userNameNorm = (user?.name || '').trim().toLowerCase();
-                if (agentNorm !== userNameNorm) return false;
+        try {
+            const query = searchQuery.toLowerCase().trim();
+            return allActions
+                .filter(r => {
+                    const contact = (contacts || []).find(c => c.id === r.contactId);
+                    
+                    // "Mes Tâches" is strictly personal for everyone
+                    const agentNorm = (r.agent || '').trim().toLowerCase();
+                    const userNameNorm = (user?.name || '').trim().toLowerCase();
+                    if (agentNorm !== userNameNorm) return false;
 
-                // Filtre par statut (via les cartes de stats)
-                const matchesStatus = filter === 'all' || r.statut === filter;
-                if (!matchesStatus) return false;
+                    // Filtre par statut (via les cartes de stats)
+                    const matchesStatus = filter === 'all' || r.statut === filter;
+                    if (!matchesStatus) return false;
 
-                // Filtre par catégorie/type (unifié)
-                const matchesType = typeFilter === 'all' || (r as any).type === typeFilter;
-                if (!matchesType) return false;
+                    // Filtre par catégorie/type (unifié)
+                    const matchesType = typeFilter === 'all' || (r as any).type === typeFilter;
+                    if (!matchesType) return false;
 
-                if (!query) return true;
+                    if (!query) return true;
 
-                const contactName = contact?.name.toLowerCase() || '';
-                const note = r.note.toLowerCase();
-                return contactName.includes(query) || note.includes(query);
-            })
-            .sort((a, b) => {
-                const order = { retard: 0, today: 1, upcoming: 2, done: 3 };
-                if (order[a.statut] !== order[b.statut]) return order[a.statut] - order[b.statut];
-                return new Date(a.dateRelance).getTime() - new Date(b.dateRelance).getTime();
-            });
-    }, [allActions, filter, searchQuery, contacts, user]);
+                    const contactName = contact?.name.toLowerCase() || '';
+                    const note = (r.note || '').toLowerCase();
+                    return contactName.includes(query) || note.includes(query);
+                })
+                .sort((a, b) => {
+                    try {
+                        const order = { retard: 0, today: 1, upcoming: 2, done: 3 };
+                        if (order[a.statut] !== order[b.statut]) return order[a.statut] - order[b.statut];
+                        return new Date(a.dateRelance).getTime() - new Date(b.dateRelance).getTime();
+                    } catch { return 0; }
+                });
+        } catch (err) {
+            console.error("Error calculating filteredRelances:", err);
+            return [];
+        }
+    }, [allActions, filter, typeFilter, searchQuery, contacts, user]);
 
     const markDone = (item: any) => {
         if (item.category === 'visit') {
@@ -222,14 +317,22 @@ const Relances = () => {
     };
 
     const getUrgencyLabel = (r: FollowUp) => {
-        if (r.statut === 'retard') {
-            const dc = Math.round((today.getTime() - new Date(r.dateRelance).getTime()) / 86400000);
-            return { label: `En retard de ${dc}j`, cls: 'tag-retard' };
+        try {
+            if (r.statut === 'done') return { label: 'Effectuée', cls: 'tag-done' };
+            if (r.statut === 'today') return { label: "Aujourd'hui", cls: 'tag-today' };
+            
+            const relanceDate = new Date(r.dateRelance);
+            if (isNaN(relanceDate.getTime())) return { label: 'Date invalide', cls: 'tag-upcoming' };
+
+            if (r.statut === 'retard') {
+                const dc = Math.round((today.getTime() - relanceDate.getTime()) / 86400000);
+                return { label: `En retard de ${dc}j`, cls: 'tag-retard' };
+            }
+            const dc = Math.round((relanceDate.getTime() - today.getTime()) / 86400000);
+            return { label: `Dans ${dc}j`, cls: 'tag-upcoming' };
+        } catch {
+            return { label: '...', cls: 'tag-upcoming' };
         }
-        if (r.statut === 'today') return { label: "Aujourd'hui", cls: 'tag-today' };
-        if (r.statut === 'done') return { label: 'Effectuée', cls: 'tag-done' };
-        const dc = Math.round((new Date(r.dateRelance).getTime() - today.getTime()) / 86400000);
-        return { label: `Dans ${dc}j`, cls: 'tag-upcoming' };
     };
 
     const getPrioriteLabel = (p: string) => {
@@ -240,28 +343,31 @@ const Relances = () => {
 
     return (
         <div className="relances-page">
-            <div className="page-header">
+            <div className="page-header d-flex-between">
                 <div>
                     <h1>Mes Tâches</h1>
                     <p className="subtitle">Suivez vos actions de suivi classées par urgence</p>
                 </div>
+                <button className="btn-primary" onClick={() => setShowNewTaskModal(true)}>
+                    <Plus size={18} /> Nouvelle tâche
+                </button>
             </div>
 
-            {/* Stats */}
+            {/* Stats — chaque carte réinitialise le filtre par type */}
             <div className="relances-stats">
-                <div className="rstat retard" onClick={() => setFilter('retard')}>
+                <div className={`rstat retard ${filter === 'retard' ? 'active' : ''}`} onClick={() => { setFilter(f => f === 'retard' ? 'all' : 'retard'); setTypeFilter('all'); }}>
                     <AlertTriangle size={22} />
                     <div><div className="rstat-num">{count('retard')}</div><div className="rstat-lbl">En retard</div></div>
                 </div>
-                <div className="rstat today" onClick={() => setFilter('today')}>
+                <div className={`rstat today ${filter === 'today' ? 'active' : ''}`} onClick={() => { setFilter(f => f === 'today' ? 'all' : 'today'); setTypeFilter('all'); }}>
                     <ClipboardCheck size={22} />
                     <div><div className="rstat-num">{count('today')}</div><div className="rstat-lbl">Aujourd'hui</div></div>
                 </div>
-                <div className="rstat upcoming" onClick={() => setFilter('upcoming')}>
+                <div className={`rstat upcoming ${filter === 'upcoming' ? 'active' : ''}`} onClick={() => { setFilter(f => f === 'upcoming' ? 'all' : 'upcoming'); setTypeFilter('all'); }}>
                     <Clock size={22} />
                     <div><div className="rstat-num">{count('upcoming')}</div><div className="rstat-lbl">À venir</div></div>
                 </div>
-                <div className="rstat done" onClick={() => setFilter('done')}>
+                <div className={`rstat done ${filter === 'done' ? 'active' : ''}`} onClick={() => { setFilter(f => f === 'done' ? 'all' : 'done'); setTypeFilter('all'); }}>
                     <CheckCircle2 size={22} />
                     <div><div className="rstat-num">{count('done')}</div><div className="rstat-lbl">Effectuées</div></div>
                 </div>
@@ -280,34 +386,73 @@ const Relances = () => {
                         <button 
                             key={f.k} 
                             className={`filter-btn ${typeFilter === f.k ? 'active' : ''}`} 
-                            onClick={() => setTypeFilter(f.k)}
+                            onClick={() => { setTypeFilter(f.k); setFilter('all'); }}
                         >
                             {f.icon} {f.l}
                         </button>
                     ))}
                 </div>
 
-                <div className="search-box">
-                    <Search size={18} className="search-icon" />
-                    <input 
-                        type="text" 
-                        placeholder="Rechercher par client, note, agent..." 
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="search-input"
-                    />
-                    {searchQuery && (
-                        <button className="clear-search" onClick={() => setSearchQuery('')}>
-                            <X size={16} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    {/* Indicateur des filtres actifs + bouton reset */}
+                    {(filter !== 'all' || typeFilter !== 'all' || searchQuery) && (
+                        <button
+                            onClick={() => { setFilter('all'); setTypeFilter('all'); setSearchQuery(''); }}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 6,
+                                background: 'rgba(233,108,46,0.1)', color: '#E96C2E',
+                                border: '1px solid rgba(233,108,46,0.3)', borderRadius: 8,
+                                padding: '0.4rem 0.9rem', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer'
+                            }}
+                        >
+                            <X size={14} /> Réinitialiser les filtres
                         </button>
                     )}
+                    <div className="search-box">
+                        <Search size={18} className="search-icon" />
+                        <input 
+                            type="text" 
+                            placeholder="Rechercher par client ou note..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="search-input"
+                        />
+                        {searchQuery && (
+                            <button className="clear-search" onClick={() => setSearchQuery('')}>
+                                <X size={16} />
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
             {/* Liste */}
             <div className="relances-list">
                 {filteredRelances.length === 0 && (
-                    <div className="empty-relances"><ClipboardCheck size={40} /><p>Aucune tâche dans cette catégorie.</p></div>
+                    <div className="empty-relances">
+                        <ClipboardCheck size={40} />
+                        <p>
+                            {filter !== 'all' && typeFilter !== 'all'
+                                ? `Aucune tâche de type sélectionné dans cette période.`
+                                : filter !== 'all'
+                                ? `Aucune tâche « ${filter === 'retard' ? 'en retard' : filter === 'today' ? "d'aujourd'hui" : filter === 'upcoming' ? 'à venir' : 'effectuée'} ».`
+                                : typeFilter !== 'all'
+                                ? `Aucune tâche de ce type trouvée.`
+                                : searchQuery
+                                ? `Aucun résultat pour « ${searchQuery} ».`
+                                : `Aucune tâche pour le moment.`
+                            }
+                        </p>
+                        {(filter !== 'all' || typeFilter !== 'all' || searchQuery) && (
+                            <button
+                                className="btn-secondary"
+                                style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}
+                                onClick={() => { setFilter('all'); setTypeFilter('all'); setSearchQuery(''); }}
+                            >
+                                Voir toutes mes tâches
+                            </button>
+                        )}
+                    </div>
                 )}
                 {filteredRelances.map(r => {
                     const contact = contacts.find(c => c.id === r.contactId);
@@ -446,6 +591,124 @@ const Relances = () => {
                 <div className="form-actions">
                     <button className="btn-secondary" onClick={() => setShowEditModal(null)}>Annuler</button>
                     <button className="btn-primary" onClick={handleSaveEdit}>Enregistrer les modifications</button>
+                </div>
+            </Modal>
+
+            {/* ---- Modale Nouvelle Tâche ---- */}
+            <Modal isOpen={showNewTaskModal} onClose={() => { setShowNewTaskModal(false); setContactSearch(''); }} title="Nouvelle tâche" size="md">
+                <div className="form-grid">
+                    <div className="form-group col-2" style={{ position: 'relative' }}>
+                        <label className="form-label">Prospect concerné * <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.8rem' }}>({allContactsSorted.length} disponibles)</span></label>
+                        <input
+                            className="form-input"
+                            placeholder="Taper pour rechercher, ou cliquer pour voir la liste..."
+                            value={contactSearch}
+                            onFocus={() => setShowContactDropdown(true)}
+                            onBlur={() => setTimeout(() => setShowContactDropdown(false), 180)}
+                            onChange={e => {
+                                setContactSearch(e.target.value);
+                                setNewTaskForm(f => ({ ...f, contactId: '' }));
+                                setShowContactDropdown(true);
+                            }}
+                            autoComplete="off"
+                        />
+                        {/* Dropdown toujours visible au focus, filtré si recherche */}
+                        {showContactDropdown && !newTaskForm.contactId && (
+                            <div style={{ border: '1px solid var(--border-soft)', borderRadius: '8px', background: 'white', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', maxHeight: 220, overflowY: 'auto', position: 'absolute', zIndex: 200, width: '100%', top: '100%', left: 0, marginTop: 2 }}>
+                                {filteredContactOptions.length === 0 ? (
+                                    <div style={{ padding: '0.8rem 1rem', color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>Aucun prospect trouvé</div>
+                                ) : (
+                                    filteredContactOptions.map(c => (
+                                        <div
+                                            key={c.id}
+                                            onMouseDown={() => {
+                                                setNewTaskForm(f => ({ ...f, contactId: c.id }));
+                                                setContactSearch(c.name + (c.company ? ` — ${c.company}` : ''));
+                                                setShowContactDropdown(false);
+                                            }}
+                                            style={{ padding: '0.55rem 1rem', cursor: 'pointer', borderBottom: '1px solid var(--border-soft)', fontSize: '0.88rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                                            onMouseEnter={e => (e.currentTarget.style.background = '#f0f4ff')}
+                                            onMouseLeave={e => (e.currentTarget.style.background = 'white')}
+                                        >
+                                            <span>
+                                                <span style={{ fontWeight: 600 }}>{c.name}</span>
+                                                {c.company && <span style={{ color: 'var(--text-muted)', marginLeft: 6, fontSize: '0.78rem' }}>{c.company}</span>}
+                                            </span>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0, marginLeft: 8 }}>{c.assignedAgent || '—'}</span>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
+                        {newTaskForm.contactId && (
+                            <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontSize: '0.78rem', color: '#059669', fontWeight: 700 }}>✓ Prospect sélectionné</span>
+                                <button
+                                    type="button"
+                                    onClick={() => { setNewTaskForm(f => ({ ...f, contactId: '' })); setContactSearch(''); setShowContactDropdown(true); }}
+                                    style={{ background: 'none', border: 'none', color: '#E96C2E', cursor: 'pointer', fontSize: '0.75rem', padding: 0 }}
+                                >
+                                    Changer
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="form-group">
+                        <label className="form-label">Type d'action</label>
+                        <select
+                            className="form-select"
+                            value={newTaskForm.type}
+                            onChange={e => setNewTaskForm(f => ({ ...f, type: e.target.value }))}
+                        >
+                            <option value="note">📝 Rappel / Note</option>
+                            <option value="call">📞 Appel à faire</option>
+                            <option value="rdv">📅 Rendez-vous</option>
+                            <option value="visite">📍 Visite terrain</option>
+                            <option value="email">📧 Email à envoyer</option>
+                        </select>
+                    </div>
+
+                    <div className="form-group">
+                        <label className="form-label">Priorité</label>
+                        <select
+                            className="form-select"
+                            value={newTaskForm.priorite}
+                            onChange={e => setNewTaskForm(f => ({ ...f, priorite: e.target.value as any }))}
+                        >
+                            <option value="basse">🟢 Basse</option>
+                            <option value="normale">🟡 Normale</option>
+                            <option value="haute">🔴 Haute</option>
+                        </select>
+                    </div>
+
+                    <div className="form-group">
+                        <label className="form-label">Date d'échéance *</label>
+                        <input
+                            className="form-input"
+                            type="date"
+                            value={newTaskForm.dateRelance}
+                            onChange={e => setNewTaskForm(f => ({ ...f, dateRelance: e.target.value }))}
+                            min={new Date().toISOString().split('T')[0]}
+                        />
+                    </div>
+
+                    <div className="form-group col-2">
+                        <label className="form-label">Description / Note *</label>
+                        <textarea
+                            className="form-textarea"
+                            style={{ minHeight: 80 }}
+                            placeholder="Que faut-il faire ? (ex: Rappeler pour confirmer le RDV, Envoyer la proposition...)"
+                            value={newTaskForm.note}
+                            onChange={e => setNewTaskForm(f => ({ ...f, note: e.target.value }))}
+                        />
+                    </div>
+                </div>
+                <div className="form-actions">
+                    <button className="btn-secondary" onClick={() => { setShowNewTaskModal(false); setContactSearch(''); }}>Annuler</button>
+                    <button className="btn-primary" onClick={handleCreateTask} disabled={isCreating}>
+                        {isCreating ? 'Création...' : 'Créer la tâche'}
+                    </button>
                 </div>
             </Modal>
         </div>

@@ -10,6 +10,7 @@ import { Edit2, Plus, Shield, Briefcase, Lock, User, Trash2 } from 'lucide-react
 import { SALE_STATUSES } from '../utils/crmConstants';
 
 const getAgentColor = (name: string) => {
+    if (!name) return { bg: '#64748b', text: '#fff' };
     const colors = [
         { bg: '#2B2E83', text: '#fff' }, 
         { bg: '#E96C2E', text: '#fff' }, 
@@ -301,89 +302,100 @@ const Agents = () => {
 
     // Calcul des statistiques pour chaque agent
     const agentsWithStats = useMemo(() => {
-        // Uses shared SALE_STATUSES from crmConstants for consistency with Dashboard
-        
-        const filteredAgents = agents.filter(a => {
-            const search = searchTerm.toLowerCase();
-            const matchesSearch = (
-                a.name.toLowerCase().includes(search) ||
-                (a.email?.toLowerCase().includes(search))
-            );
+        try {
+            // Uses shared SALE_STATUSES from crmConstants for consistency with Dashboard
+            const currentAgents = agents || [];
             
-            const matchesRole = filterRole === 'all' || a.role === filterRole;
-            
-            return matchesSearch && matchesRole;
-        });
-
-        const withStats = filteredAgents.map(agent => {
-            const isResp = agent.role === 'resp_commercial';
-            const isSupervisorRole = agent.role === 'resp_commercial';
-            
-            const normAgentName = (agent.name || '').trim().toLowerCase();
-
-            // Pour un superviseur, on compte son équipe. Pour un commercial, on compte ses attributions.
-            const agentContacts = contacts.filter(c => {
-                const assigned = (c.assignedAgent || '').trim().toLowerCase();
-                if (isResp) {
-                    // RC voit les clients de son équipe (ceux rattachés à lui-même ou à ses agents)
-                    const supervisedAgents = agents.filter(comm => comm.parent_id === agent.id);
-                    const supervisedNames = [agent.name, ...supervisedAgents.map(a => a.name)].map(n => n.trim().toLowerCase());
-                    return supervisedNames.includes(assigned);
-                }
-                return assigned === normAgentName;
+            const filteredAgents = currentAgents.filter(a => {
+                const search = (searchTerm || '').toLowerCase();
+                const matchesSearch = (
+                    (a.name || '').toLowerCase().includes(search) ||
+                    (a.email?.toLowerCase().includes(search))
+                );
+                
+                const matchesRole = filterRole === 'all' || a.role === filterRole;
+                
+                return matchesSearch && matchesRole;
             });
 
-            const agentInteractions = interactions.filter(i => {
-                const iAgent = (i.agent || '').trim().toLowerCase();
-                if (isResp) {
-                    const supervisedAgents = agents.filter(comm => comm.parent_id === agent.id);
-                    const supervisedNames = [agent.name, ...supervisedAgents.map(a => a.name)].map(n => n.trim().toLowerCase());
-                    return supervisedNames.includes(iAgent);
-                }
-                return iAgent === normAgentName;
+            const withStats = filteredAgents.map(agent => {
+                const isResp = agent.role === 'resp_commercial';
+                const isSupervisorRole = agent.role === 'resp_commercial';
+                
+                const normAgentName = (agent.name || '').trim().toLowerCase();
+
+                // Pour un superviseur, on compte son équipe. Pour un commercial, on compte ses attributions.
+                const agentContacts = (contacts || []).filter(c => {
+                    const assigned = (c.assignedAgent || '').trim().toLowerCase();
+                    if (isResp) {
+                        // RC voit les clients de son équipe (ceux rattachés à lui-même ou à ses agents)
+                        const supervisedAgents = currentAgents.filter(comm => comm.parent_id === agent.id);
+                        const supervisedNames = [agent.name, ...supervisedAgents.map(a => a.name)].map(n => (n || '').trim().toLowerCase());
+                        return supervisedNames.includes(assigned);
+                    }
+                    return assigned === normAgentName;
+                });
+
+                const agentInteractions = (interactions || []).filter(i => {
+                    const iAgent = (i.agent || '').trim().toLowerCase();
+                    if (isResp) {
+                        const supervisedAgents = currentAgents.filter(comm => comm.parent_id === agent.id);
+                        const supervisedNames = [agent.name, ...supervisedAgents.map(a => a.name)].map(n => (n || '').trim().toLowerCase());
+                        return supervisedNames.includes(iAgent);
+                    }
+                    return iAgent === normAgentName;
+                });
+
+                const agentSales = agentContacts.filter(c => SALE_STATUSES.includes(c.status));
+                
+                const prospectsCount = agentContacts.length;
+                const salesCount = agentSales.length;
+                const conversionRate = prospectsCount > 0 ? (salesCount / prospectsCount) * 100 : 0;
+                
+                // Ajustement performance : On pondère différemment pour un superviseur (gestion d'équipe)
+                const performance = Math.min(100, isSupervisorRole 
+                    ? (salesCount * 5) + (agentInteractions.length * 0.2) // Stats globales de l'équipe
+                    : (salesCount * 10) + (agentInteractions.length * 0.5) // Stats individuelles
+                );
+
+                return {
+                    ...agent,
+                    stats: {
+                        prospects: prospectsCount,
+                        ventes: salesCount,
+                        interactions: agentInteractions.length,
+                        conversion: conversionRate.toFixed(1),
+                        performance: performance.toFixed(0)
+                    }
+                };
             });
 
-            const agentSales = agentContacts.filter(c => SALE_STATUSES.includes(c.status));
-            
-            const prospectsCount = agentContacts.length;
-            const salesCount = agentSales.length;
-            const conversionRate = prospectsCount > 0 ? (salesCount / prospectsCount) * 100 : 0;
-            
-            // Ajustement performance : On pondère différemment pour un superviseur (gestion d'équipe)
-            const performance = Math.min(100, isSupervisorRole 
-                ? (salesCount * 5) + (agentInteractions.length * 0.2) // Stats globales de l'équipe
-                : (salesCount * 10) + (agentInteractions.length * 0.5) // Stats individuelles
-            );
-
-            return {
-                ...agent,
-                stats: {
-                    prospects: prospectsCount,
-                    ventes: salesCount,
-                    interactions: agentInteractions.length,
-                    conversion: conversionRate.toFixed(1),
-                    performance: performance.toFixed(0)
-                }
-            };
-        });
-
-        // Tri : par performance
-        return withStats.sort((a, b) => Number(b.stats.performance) - Number(a.stats.performance));
+            // Tri : par performance
+            return withStats.sort((a, b) => Number(b.stats.performance) - Number(a.stats.performance));
+        } catch (err) {
+            console.error("Error calculating agentsWithStats:", err);
+            return [];
+        }
     }, [agents, contacts, interactions, searchTerm, filterRole]);
 
     // Stats globales
     const globalStats = useMemo(() => {
-        if (agentsWithStats.length === 0) return { avgPerf: 0, totalSales: 0, topAgent: '—' };
-        
-        const totalSales = agentsWithStats.reduce((sum, a) => sum + a.stats.ventes, 0);
-        const avgPerf = agentsWithStats.reduce((sum, a) => sum + Number(a.stats.performance), 0) / agentsWithStats.length;
-        const topAgent = agentsWithStats[0].name;
+        try {
+            if (!agentsWithStats || agentsWithStats.length === 0) return { avgPerf: 0, totalSales: 0, topAgent: '—' };
+            
+            const totalSales = agentsWithStats.reduce((sum, a) => sum + (a.stats?.ventes || 0), 0);
+            const avgPerf = agentsWithStats.reduce((sum, a) => sum + Number(a.stats?.performance || 0), 0) / agentsWithStats.length;
+            const topAgent = agentsWithStats[0].name;
 
-        return {
-            avgPerf: avgPerf.toFixed(0),
-            totalSales,
-            topAgent
-        };
+            return {
+                avgPerf: avgPerf.toFixed(0),
+                totalSales,
+                topAgent
+            };
+        } catch (err) {
+            console.error("Error calculating globalStats:", err);
+            return { avgPerf: 0, totalSales: 0, topAgent: '—' };
+        }
     }, [agentsWithStats]);
 
     return (

@@ -61,28 +61,37 @@ const Historique = () => {
     };
 
     const unifiedHistory = useMemo(() => {
-        const historyItems = [
-            ...interactions
-                .filter(i => i.type !== 'pipeline_step')
-                .map(i => ({ ...i, category: 'interaction' as const, is_visit: false })),
-            ...visits.map(v => ({ 
-                id: 'v' + v.id, contactId: v.contactId,
-                type: (v.type === 'chantier' ? 'visite_chantier' : v.type === 'terrain' ? 'visite_terrain' : 'rdv') as InteractionType,
-                title: v.title, description: v.notes, date: v.date, heure: v.heure, agent: v.agent, lieu: v.lieu,
-                category: 'visit' as const, is_visit: true, statut: v.statut, issue: undefined, technician: v.technician
-            }))
-        ];
+        try {
+            const historyItems = [
+                ...(interactions || [])
+                    .filter(i => i.type !== 'pipeline_step')
+                    .map(i => ({ ...i, category: 'interaction' as const, is_visit: false })),
+                ...(visits || []).map(v => ({ 
+                    id: 'v' + v.id, contactId: v.contactId,
+                    type: (v.type === 'chantier' ? 'visite_chantier' : v.type === 'terrain' ? 'visite_terrain' : 'rdv') as InteractionType,
+                    title: v.title, description: v.notes, date: v.date, heure: v.heure, agent: v.agent, lieu: v.lieu,
+                    category: 'visit' as const, is_visit: true, statut: v.statut, issue: undefined, technician: v.technician
+                }))
+            ];
 
-        const uniqueItems: any[] = [];
-        const seenKeys = new Set<string>();
+            const uniqueItems: any[] = [];
+            const seenKeys = new Set<string>();
 
-        for (const item of historyItems) {
-            if (item.type === 'note') { uniqueItems.push(item); continue; }
-            const key = `${item.contactId}_${item.date}_${item.heure || '00:00'}_${(item.title || '').toLowerCase().trim()}`;
-            if (!seenKeys.has(key)) { uniqueItems.push(item); seenKeys.add(key); }
+            for (const item of historyItems) {
+                if (item.type === 'note') { uniqueItems.push(item); continue; }
+                const key = `${item.contactId}_${item.date}_${item.heure || '00:00'}_${((item.title || '').toLowerCase().trim())}`;
+                if (!seenKeys.has(key)) { uniqueItems.push(item); seenKeys.add(key); }
+            }
+
+            return uniqueItems.sort((a, b) => {
+                try {
+                    return new Date(b.date + 'T' + (b.heure || '00:00')).getTime() - new Date(a.date + 'T' + (a.heure || '00:00')).getTime();
+                } catch { return 0; }
+            });
+        } catch (err) {
+            console.error("Error calculating unifiedHistory:", err);
+            return [];
         }
-
-        return uniqueItems.sort((a, b) => new Date(b.date + 'T' + (b.heure || '00:00')).getTime() - new Date(a.date + 'T' + (a.heure || '00:00')).getTime());
     }, [interactions, visits]);
 
     const agents = useMemo(() => {
@@ -92,28 +101,33 @@ const Historique = () => {
     }, [unifiedHistory]);
 
     const filtered = useMemo(() => {
-        return unifiedHistory.filter(h => {
-            const contact = contacts.find(c => c.id === h.contactId);
-            const supervisedNames = getSupervisedAgentNames(user, commercials);
-            
-            if (supervisedNames !== null) {
-                if (user?.role === 'assistante') {
-                    if (contact?.createdBy !== user.name && contact?.assignedAgent) return false;
-                } else {
-                    const lowerSupervised = supervisedNames.map(n => n?.trim().toLowerCase());
-                    if (!lowerSupervised.includes((h.agent || '').trim().toLowerCase())) return false;
+        try {
+            return unifiedHistory.filter(h => {
+                const contact = (contacts || []).find(c => c.id === h.contactId);
+                const supervisedNames = getSupervisedAgentNames(user, commercials);
+                
+                if (supervisedNames !== null) {
+                    if (user?.role === 'assistante') {
+                        if (contact?.createdBy !== user.name && contact?.assignedAgent) return false;
+                    } else {
+                        const lowerSupervised = supervisedNames.map(n => (n || '').trim().toLowerCase());
+                        if (!lowerSupervised.includes((h.agent || '').trim().toLowerCase())) return false;
+                    }
                 }
-            }
 
-            const matchType = filter === 'all' || h.type === filter;
-            const matchAgent = agentFilter === 'all' || h.agent === agentFilter;
-            const matchSearch = search === '' || 
-                (contact?.name || '').toLowerCase().includes(search.toLowerCase()) ||
-                h.title.toLowerCase().includes(search.toLowerCase()) ||
-                (h.agent && h.agent.toLowerCase().includes(search.toLowerCase()));
-            
-            return matchType && matchAgent && matchSearch;
-        });
+                const matchType = filter === 'all' || h.type === filter;
+                const matchAgent = agentFilter === 'all' || h.agent === agentFilter;
+                const matchSearch = search === '' || 
+                    (contact?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+                    (h.title || '').toLowerCase().includes(search.toLowerCase()) ||
+                    (h.agent && h.agent.toLowerCase().includes(search.toLowerCase()));
+                
+                return matchType && matchAgent && matchSearch;
+            });
+        } catch (err) {
+            console.error("Error calculating filtered history:", err);
+            return [];
+        }
     }, [unifiedHistory, filter, search, contacts, user, commercials]);
 
     return (
@@ -150,7 +164,8 @@ const Historique = () => {
 
             <div className="historique-timeline">
                 {filtered.map((item, index) => {
-                    const type = INTERACTION_CONFIG[item.type as InteractionType] || INTERACTION_CONFIG.note;
+                    const typeKey = (item.type as InteractionType) || 'note';
+                    const type = INTERACTION_CONFIG[typeKey] || INTERACTION_CONFIG.note;
                     const contact = contacts.find(c => c.id === item.contactId);
                     const showDate = index === 0 || filtered[index - 1].date !== item.date;
                     const dateStr = new Date(item.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });

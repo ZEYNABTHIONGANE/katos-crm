@@ -56,92 +56,97 @@ const Rapports = () => {
     const stats = useMemo(() => {
         if (loading || !rawData.contacts.length) return null;
 
-        const now = new Date();
-        let startDate: Date | null = null;
+        try {
+            const now = new Date();
+            let startDate: Date | null = null;
 
-        if (period === 'aujourdhui') {
-            startDate = new Date(now);
-            startDate.setHours(0, 0, 0, 0);
-        } else if (period === 'cette-semaine') {
-            startDate = new Date(now);
-            const day = now.getDay() || 7; 
-            startDate.setDate(now.getDate() - day + 1);
-            startDate.setHours(0, 0, 0, 0);
-        } else if (period === 'ce-mois') {
-            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        } else if (period === 'trimestre') {
-            const quarter = Math.floor(now.getMonth() / 3);
-            startDate = new Date(now.getFullYear(), quarter * 3, 1);
-        } else if (period === 'annee') {
-            startDate = new Date(now.getFullYear(), 0, 1);
-        }
-
-        const filteredContacts = startDate 
-            ? rawData.contacts.filter(c => c.createdAt && new Date(c.createdAt) >= startDate!)
-            : rawData.contacts;
-            
-        const filteredVisits = startDate
-            ? rawData.visits.filter(v => v.date && new Date(v.date) >= startDate!)
-            : rawData.visits;
-
-        // KPI calculations
-        const newProspects = filteredContacts.length;
-        const closedSales = filteredContacts.filter(c => SALE_STATUSES.includes(c.status)).length;
-        const visitsCompleted = filteredVisits.filter(v => v.statut === 'completed').length;
-        const conversionRate = newProspects > 0 ? Math.round((closedSales / newProspects) * 100) : 0;
-
-        // Agent Performance
-        const agentPerf: AgentPerf[] = rawData.agents
-            .filter(agent => agent.role === 'commercial')
-            .map(agent => {
-                const agentNameLower = (agent.name || '').trim().toLowerCase();
-                const agentContacts = filteredContacts.filter(c =>
-                    (c.assignedAgent || '').trim().toLowerCase() === agentNameLower
-                );
-                
-                const activeProspectsCount = agentContacts.filter(c => PIPELINE_STATUSES.includes(c.status)).length;
-                const agentSales = agentContacts.filter(c => SALE_STATUSES.includes(c.status)).length;
-                const conversion = agentContacts.length > 0
-                    ? Math.round((agentSales / agentContacts.length) * 100)
-                    : 0;
-
-                return {
-                    agent: agent.name,
-                    prospects: activeProspectsCount,
-                    sales: agentSales,
-                    conversion: `${conversion}%`
-                };
-            })
-            .filter(a => a.prospects > 0 || a.sales > 0)
-            .sort((a, b) => b.sales - a.sales);
-
-        // Origin Analysis
-        const originsMap = new Map<string, number>();
-        filteredContacts.forEach(c => {
-            let source = c.source || 'Autre / Inconnu';
-            if (['Facebook', 'Instagram', 'TikTok'].includes(source)) {
-                source = 'RÉSEAUX SOCIAUX';
+            if (period === 'aujourdhui') {
+                startDate = new Date(now);
+                startDate.setHours(0, 0, 0, 0);
+            } else if (period === 'cette-semaine') {
+                startDate = new Date(now);
+                const day = now.getDay() || 7; 
+                startDate.setDate(now.getDate() - day + 1);
+                startDate.setHours(0, 0, 0, 0);
+            } else if (period === 'ce-mois') {
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            } else if (period === 'trimestre') {
+                const quarter = Math.floor(now.getMonth() / 3);
+                startDate = new Date(now.getFullYear(), quarter * 3, 1);
+            } else if (period === 'annee') {
+                startDate = new Date(now.getFullYear(), 0, 1);
             }
-            originsMap.set(source, (originsMap.get(source) || 0) + 1);
-        });
 
-        const totalWithSource = Array.from(originsMap.values()).reduce((a, b) => a + b, 0);
-        const originAnalysis: OriginData[] = Array.from(originsMap.entries()).map(([label, count], i) => ({
-            label,
-            count,
-            val: totalWithSource > 0 ? Math.round((count / totalWithSource) * 100) : 0,
-            color: COLORS[i % COLORS.length]
-        })).sort((a, b) => b.val - a.val);
+            const filteredContacts = startDate 
+                ? rawData.contacts.filter(c => c.createdAt && new Date(c.createdAt) >= startDate!)
+                : rawData.contacts;
+                
+            const filteredVisits = startDate
+                ? rawData.visits.filter(v => v.date && new Date(v.date) >= startDate!)
+                : rawData.visits;
 
-        return {
-            newProspects,
-            closedSales,
-            visitsCompleted,
-            conversionRate,
-            agentPerformance: agentPerf,
-            originAnalysis,
-            filteredContacts
-        };
+            // KPI calculations
+            const newProspects = filteredContacts.length;
+            const closedSales = filteredContacts.filter(c => SALE_STATUSES.includes(c.status)).length;
+            const visitsCompleted = filteredVisits.filter(v => v.statut === 'completed').length;
+            const conversionRate = newProspects > 0 ? Math.round((closedSales / newProspects) * 100) : 0;
+
+            // Agent Performance
+            const agentPerf: AgentPerf[] = rawData.agents
+                .filter(agent => agent.role === 'commercial')
+                .map(agent => {
+                    const agentNameLower = (agent.name || '').trim().toLowerCase();
+                    const agentContacts = filteredContacts.filter(c =>
+                        (c.assignedAgent || '').trim().toLowerCase() === agentNameLower
+                    );
+                    
+                    const activeProspectsCount = agentContacts.filter(c => PIPELINE_STATUSES.includes(c.status)).length;
+                    const agentSales = agentContacts.filter(c => SALE_STATUSES.includes(c.status)).length;
+                    const conversion = agentContacts.length > 0
+                        ? Math.round((agentSales / agentContacts.length) * 100)
+                        : 0;
+
+                    return {
+                        agent: agent.name || 'Utilisateur inconnu',
+                        prospects: activeProspectsCount,
+                        sales: agentSales,
+                        conversion: `${conversion}%`
+                    };
+                })
+                .filter(a => a.prospects > 0 || a.sales > 0)
+                .sort((a, b) => b.sales - a.sales);
+
+            // Origin Analysis
+            const originsMap = new Map<string, number>();
+            filteredContacts.forEach(c => {
+                let source = c.source || 'Autre / Inconnu';
+                if (['Facebook', 'Instagram', 'TikTok'].includes(source)) {
+                    source = 'RÉSEAUX SOCIAUX';
+                }
+                originsMap.set(source, (originsMap.get(source) || 0) + 1);
+            });
+
+            const totalWithSource = Array.from(originsMap.values()).reduce((a, b) => a + b, 0);
+            const originAnalysis: OriginData[] = Array.from(originsMap.entries()).map(([label, count], i) => ({
+                label,
+                count,
+                val: totalWithSource > 0 ? Math.round((count / totalWithSource) * 100) : 0,
+                color: COLORS[i % COLORS.length]
+            })).sort((a, b) => b.val - a.val);
+
+            return {
+                newProspects,
+                closedSales,
+                visitsCompleted,
+                conversionRate,
+                agentPerformance: agentPerf,
+                originAnalysis,
+                filteredContacts
+            };
+        } catch (err) {
+            console.error('[Rapports] Calculation error:', err);
+            return null;
+        }
     }, [period, rawData, loading]);
 
     const downloadCSV = () => {

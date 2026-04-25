@@ -153,7 +153,7 @@ const FAQ = () => {
         } else {
             showToast('Erreur lors de l\'ajout', 'error');
         }
-        setIsSubmitting(true);
+        setIsSubmitting(false);
     };
 
     const handleDeleteFaq = async (id: string) => {

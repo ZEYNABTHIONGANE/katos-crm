@@ -7,11 +7,9 @@ import {
     PieChart, Pie, Cell, Legend, AreaChart, Area, RadialBarChart, RadialBar,
     BarChart, Bar
 } from 'recharts';
-import { Users, User, ArrowUpRight, ArrowDownRight, Star, LayoutDashboard, TrendingUp, Plus, Phone, Mail, Home } from 'lucide-react';
-import { fetchCommercials } from '../api/contactApi';
+import { Users, User, ArrowUpRight, ArrowDownRight, Star, LayoutDashboard, TrendingUp, Plus, Phone, Mail, Home, Calendar } from 'lucide-react';
 import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
 import { SALE_STATUSES, PIPELINE_STATUSES } from '../utils/crmConstants';
-import { useEffect } from 'react';
 import ComplianceDashboard from './ComplianceDashboard';
 
 const SERVICE_LABELS: Record<string, string> = {
@@ -37,7 +35,7 @@ const getStatusBadge = (status: string) => {
 
 const Dashboard = () => {
     const { user } = useAuth();
-    const { contacts, interactions, visits } = useContactStore();
+    const { contacts, interactions, visits, commercials, followUps } = useContactStore();
     const navigate = useNavigate();
 
     if (user?.role === 'conformite') {
@@ -45,231 +43,112 @@ const Dashboard = () => {
     }
 
     const [agentFilter, setAgentFilter] = useState('all');
-    const [commercials, setCommercials] = useState<any[]>([]);
-
-    useEffect(() => {
-        if (!user) return;
-        const load = async () => {
-            const data = await fetchCommercials();
-            setCommercials(data);
-        };
-        load();
-    }, [user]);
 
     const agents = useMemo(() => {
-        const supervisedNames = getSupervisedAgentNames(user, commercials);
-        if (supervisedNames === null) {
-            const set = new Set<string>();
-            contacts.forEach(c => { if (c.assignedAgent) set.add(c.assignedAgent); });
-            return Array.from(set).sort();
+        try {
+            const supervisedNames = getSupervisedAgentNames(user, commercials);
+            if (supervisedNames === null) {
+                const set = new Set<string>();
+                contacts.forEach(c => { if (c.assignedAgent) set.add(c.assignedAgent); });
+                return Array.from(set).sort();
+            }
+            // Pour les RC/Managers, on ne montre que les agents qu'ils supervisent
+            return supervisedNames.filter(name => name && name !== user?.name).sort();
+        } catch (err) {
+            console.error('[Dashboard] Error calculating agents list:', err);
+            return [];
         }
-        // Pour les RC/Managers, on ne montre que les agents qu'ils supervisent
-        return supervisedNames.filter(name => name !== user?.name).sort();
     }, [contacts, user, commercials]);
 
     // ─── Calcul des Données Dynamiques ───
     const statsData = useMemo(() => {
-        // Filtrage initial selon le rôle
-        let filteredContacts = contacts;
-        
-        // ─── Filtrage hiérarchique ───
-        const supervisedNames = getSupervisedAgentNames(user, commercials);
-        
-        if (supervisedNames === null) {
-            filteredContacts = contacts; // Accès total
-        } else if (user?.role === 'assistante') {
-            filteredContacts = contacts.filter(c => c.createdBy === user?.name || !c.assignedAgent);
-        } else {
-            // RC, Manager, Commercial, etc.
-            const lowerSupervised = supervisedNames.map(n => n?.toLowerCase());
-            filteredContacts = contacts.filter(c => 
-                lowerSupervised.includes((c.assignedAgent || '').toLowerCase())
-            );
-        }
-
-        // Apply Smart Filters (Agent & Date)
-        if (agentFilter !== 'all') {
-            filteredContacts = filteredContacts.filter(c => c.assignedAgent === agentFilter);
-        }
-
-        // Statuts de vente et pipeline (centralisés dans crmConstants.ts)
-        const prospects = filteredContacts.filter(c => PIPELINE_STATUSES.includes(c.status));
-        const clients = filteredContacts.filter(c => SALE_STATUSES.includes(c.status));
-        const salesCount = clients.length;
-
-
-        // Répartition par Groupes de Statut
-        const distribution = [
-            { name: 'Prospects', value: filteredContacts.filter(c => ['Prospect', 'Qualification', 'En Qualification'].includes(c.status)).length, fill: '#E96C2E' },
-            { name: 'Négo/Résa', value: filteredContacts.filter(c => ['Proposition Commerciale', 'Négociation', 'Réservation'].includes(c.status)).length, fill: '#F59E0B' },
-            { name: 'RDV/Visites', value: filteredContacts.filter(c => ['RDV', 'RDV / Visite Terrain'].includes(c.status)).length, fill: '#8b5cf6' },
-            { name: 'Contrats/Paie', value: filteredContacts.filter(c => ['Contrat', 'Paiement'].includes(c.status)).length, fill: '#2B2E83' },
-            { name: 'Clients & Liv.', value: filteredContacts.filter(c => ['Suivi Chantier', 'Livraison Client', 'Projet Livré', 'Fidélisation', 'Transfert de dossier technique', 'Transfert dossier tech'].includes(c.status)).length, fill: '#10B981' },
-        ];
-
-        // Top Agents : Total contacts (prospects + ventes) pour cohérence avec la page Agents
-        const agentMap: Record<string, { name: string, deals: number, prospects: number }> = {};
-        filteredContacts.forEach(c => {
-            const rawAgent = c.assignedAgent || 'Non assigné';
-            const agentKey = rawAgent.trim().toLowerCase();
-            if (!agentMap[agentKey]) agentMap[agentKey] = { name: rawAgent, deals: 0, prospects: 0 };
-            if (SALE_STATUSES.includes(c.status)) {
-                agentMap[agentKey].deals++;
+        try {
+            // Filtrage initial selon le rôle
+            let filteredContacts = contacts;
+            
+            // ─── Filtrage hiérarchique ───
+            const supervisedNames = getSupervisedAgentNames(user, commercials);
+            
+            if (supervisedNames === null) {
+                filteredContacts = contacts; // Accès total
+            } else if (user?.role === 'assistante') {
+                filteredContacts = contacts.filter(c => c.createdBy === user?.name || !c.assignedAgent);
+            } else {
+                // RC, Manager, Commercial, etc.
+                const lowerSupervised = (supervisedNames || []).map(n => n?.toLowerCase()).filter(Boolean);
+                filteredContacts = contacts.filter(c => 
+                    lowerSupervised.includes((c.assignedAgent || '').toLowerCase())
+                );
             }
-            // prospects = total contacts (all statuses) — cohérent avec la page Gestion Agents
-            agentMap[agentKey].prospects++;
-        });
 
-        const topAgents = Object.values(agentMap)
-            .filter(a => a.name !== 'Non assigné')
-            .sort((a, b) => b.deals - a.deals)
-            .slice(0, 5);
-
-        // Performance par Service (Ventes totales par service)
-        const serviceMap: Record<string, { name: string, deals: number }> = {
-            foncier: { name: 'Foncier', deals: 0 },
-            construction: { name: 'Construction', deals: 0 },
-            gestion_immobiliere: { name: 'Gestion Immo', deals: 0 }
-        };
-
-        filteredContacts.forEach(c => {
-            if (c.service && (SALE_STATUSES.includes(c.status))) {
-                serviceMap[c.service].deals++;
+            // Apply Smart Filters (Agent & Date)
+            if (agentFilter !== 'all') {
+                filteredContacts = filteredContacts.filter(c => c.assignedAgent === agentFilter);
             }
-        });
 
-        const servicePerformance = Object.values(serviceMap).sort((a, b) => b.deals - a.deals);
+            // Statuts de vente et pipeline (centralisés dans crmConstants.ts)
+            const prospects = filteredContacts.filter(c => PIPELINE_STATUSES.includes(c.status));
+            const clients = filteredContacts.filter(c => SALE_STATUSES.includes(c.status));
+            const salesCount = clients.length;
 
-        // Performance des Responsables (Exclusivement pour DC/Admin)
-        const responsablePerformance = (user?.role === 'admin' || user?.role === 'dir_commercial') ? (() => {
-            const rcs = commercials.filter(p => p.role === 'resp_commercial');
-            return rcs.map(rc => {
-                const teamNames = getSupervisedAgentNames(rc, commercials) || [];
-                const lowerTeam = teamNames.map(n => n.toLowerCase());
-                const teamSales = contacts.filter(c => 
-                    SALE_STATUSES.includes(c.status) && 
-                    lowerTeam.includes((c.assignedAgent || '').toLowerCase())
-                ).length;
-                return { name: rc.name, deals: teamSales };
-            }).sort((a, b) => b.deals - a.deals);
-        })() : [];
+            // Répartition par Groupes de Statut
+            const distribution = [
+                { name: 'Prospects', value: filteredContacts.filter(c => ['Prospect', 'Qualification', 'En Qualification'].includes(c.status)).length, fill: '#E96C2E' },
+                { name: 'Négo/Résa', value: filteredContacts.filter(c => ['Proposition Commerciale', 'Négociation', 'Réservation'].includes(c.status)).length, fill: '#F59E0B' },
+                { name: 'RDV/Visites', value: filteredContacts.filter(c => ['RDV', 'RDV / Visite Terrain'].includes(c.status)).length, fill: '#8b5cf6' },
+                { name: 'Contrats/Paie', value: filteredContacts.filter(c => ['Contrat', 'Paiement'].includes(c.status)).length, fill: '#2B2E83' },
+                { name: 'Clients & Liv.', value: filteredContacts.filter(c => ['Suivi Chantier', 'Livraison Client', 'Projet Livré', 'Fidélisation', 'Transfert de dossier technique', 'Transfert dossier tech'].includes(c.status)).length, fill: '#10B981' },
+            ];
 
-        return {
-            prospectsCount: prospects.length,
-            clientsCount: clients.length,
-            salesCount,
-            distribution,
-            topAgents,
-            servicePerformance,
-            responsablePerformance,
-            assistanteTotalAssigned: contacts.filter(c => {
-                const isCreator = c.createdBy ? c.createdBy === user?.name : !c.assignedAgent;
-                return isCreator && c.assignedAgent;
-            }).length,
-            assistanteToContinue: contacts.filter(c => {
-                const isCreator = c.createdBy ? c.createdBy === user?.name : !c.assignedAgent;
-                return isCreator && !c.assignedAgent;
-            }).length,
-            assistanteProspectsList: contacts.filter(c => {
-                const isCreator = c.createdBy ? c.createdBy === user?.name : !c.assignedAgent;
-                return isCreator;
-            }),
-            leadsBySource: Object.entries(filteredContacts.reduce((acc, c) => {
-                const src = c.source;
-                if (!src || src === 'Autre') return acc; // Exclure "Autre" selon demande direction
-                acc[src] = (acc[src] || 0) + 1;
-                return acc;
-            }, {} as Record<string, number>))
-                .map(([name, value]) => ({ name, value }))
-                .sort((a, b) => b.value - a.value),
+            // Top Agents : Total contacts (prospects + ventes) pour cohérence avec la page Agents
+            const agentMap: Record<string, { name: string, deals: number, prospects: number }> = {};
+            filteredContacts.forEach(c => {
+                const rawAgent = c.assignedAgent || 'Non assigné';
+                const agentKey = rawAgent.trim().toLowerCase();
+                if (!agentMap[agentKey]) agentMap[agentKey] = { name: rawAgent, deals: 0, prospects: 0 };
+                if (SALE_STATUSES.includes(c.status)) {
+                    agentMap[agentKey].deals++;
+                }
+                // prospects = total contacts (all statuses) — cohérent avec la page Gestion Agents
+                agentMap[agentKey].prospects++;
+            });
 
-            productPerformance: (() => {
-                const rawData = Object.entries(clients.reduce((acc, c) => {
-                    let product = 'Autre';
-                    const titleRaw = c.propertyTitle || '';
-                    const title = titleRaw.toUpperCase();
-                    
-                    if (title.includes('F3')) product = 'Villa F3';
-                    else if (title.includes('F4')) product = 'Villa F4';
-                    else if (title.includes('F6')) product = 'Villa F6';
-                    else if (titleRaw) product = titleRaw.length > 20 ? titleRaw.substring(0, 18) + '..' : titleRaw;
-                    else if (c.service === 'foncier') product = 'Foncier';
-                    else if (c.service === 'construction') product = 'Construction';
-                    else if (c.service === 'gestion_immobiliere') product = 'Gestion Immo';
-                    
-                    if (!acc[product]) acc[product] = { name: product, units: 0, revenueShare: 0 };
-                    acc[product].units += 1;
-                    const num = parseInt((c.budget || '0').replace(/[^0-9]/g, '')) || 0;
-                    acc[product].revenueShare += num;
-                    return acc;
-                }, {} as Record<string, { name: string, units: number, revenueShare: number }>))
-                .map(([name, data]) => ({ 
-                    name, 
-                    value: data.units, 
-                    shareValue: data.revenueShare 
-                }))
-                .sort((a, b) => b.shareValue - a.shareValue);
+            const topAgents = Object.values(agentMap)
+                .filter(a => a.name !== 'Non assigné')
+                .sort((a, b) => b.deals - a.deals)
+                .slice(0, 5);
 
-                if (rawData.length <= 8) return rawData;
+            // Performance par Service (Ventes totales par service)
+            const serviceMap: Record<string, { name: string, deals: number }> = {
+                foncier: { name: 'Foncier', deals: 0 },
+                construction: { name: 'Construction', deals: 0 },
+                gestion_immobiliere: { name: 'Gestion Immo', deals: 0 }
+            };
 
-                const top8 = rawData.slice(0, 7);
-                const others = rawData.slice(7);
-                const othersCount = others.reduce((sum, item) => sum + item.value, 0);
-                const othersValue = others.reduce((sum, item) => sum + item.shareValue, 0);
+            filteredContacts.forEach(c => {
+                if (c.service && (SALE_STATUSES.includes(c.status))) {
+                    if (serviceMap[c.service]) serviceMap[c.service].deals++;
+                }
+            });
 
-                return [
-                    ...top8,
-                    { name: 'Autres produits', value: othersCount, shareValue: othersValue }
-                ];
-            })(),
+            const servicePerformance = Object.values(serviceMap).sort((a, b) => b.deals - a.deals);
 
-            agentPerformance: Object.values(agentMap)
-                .filter(a => a.name.trim().toLowerCase() !== 'non assigné')
-                .map(agent => {
-                    const agentNameLower = (agent.name || '').trim().toLowerCase();
-                    const agentInteractions = interactions.filter(i => (i.agent || '').trim().toLowerCase() === agentNameLower && (i.type === 'rdv' || i.type === 'visite_terrain'));
-                    const agentVisits = visits.filter(v => (v.agent || '').trim().toLowerCase() === agentNameLower && v.statut === 'completed');
-                    const totalTouchpoints = agentInteractions.length + agentVisits.length;
-                    const conversionRate = totalTouchpoints > 0 ? Math.round((agent.deals / totalTouchpoints) * 100) : 0;
-                    return { ...agent, touchpoints: totalTouchpoints, conversionRate };
-                })
-                .sort((a, b) => b.deals - a.deals),
-                
-            avgProcessingTime: Math.round(clients.reduce((acc, c) => {
-                const created = c.createdAt ? new Date(c.createdAt).getTime() : 0;
-                if (!created || isNaN(created)) return acc;
-                
-                const converted = c.convertedAt ? new Date(c.convertedAt).getTime() : new Date().getTime();
-                if (isNaN(converted)) return acc;
-
-                const days = Math.max(0, (converted - created) / (1000 * 60 * 60 * 24));
-                return acc + days;
-            }, 0) / (clients.filter(c => c.createdAt).length || 1)),
-
-            recordProcessingTime: clients.length > 0 ? (() => {
-                let min = Infinity;
-                let holder = '—';
-                clients.forEach(c => {
-                    if (!c.createdAt) return;
-                    const created = new Date(c.createdAt).getTime();
-                    const converted = c.convertedAt ? new Date(c.convertedAt).getTime() : new Date().getTime();
-                    if (isNaN(created) || isNaN(converted)) return;
-
-                    const diff = (converted - created) / (1000 * 60 * 60 * 24);
-                    if (diff >= 0 && diff < min) {
-                        min = diff;
-                        holder = c.assignedAgent || '—';
-                    }
-                });
-                return { days: min === Infinity ? 0 : Math.round(min), holder };
-            })() : { days: 0, holder: '—' },
-
-            conversionEfficiency: filteredContacts.length > 0 ? Math.round((clients.length / filteredContacts.length) * 100) : 0,
-
-            hotDealsCount: filteredContacts.filter(c => ['Proposition Commerciale', 'Négociation', 'Réservation'].includes(c.status)).length,
+            // Performance des Responsables (Exclusivement pour DC/Admin)
+            const responsablePerformance = (user?.role === 'admin' || user?.role === 'dir_commercial') ? (() => {
+                const rcs = commercials.filter(p => p.role === 'resp_commercial');
+                return rcs.map(rc => {
+                    const teamNames = getSupervisedAgentNames(rc, commercials) || [];
+                    const lowerTeam = teamNames.map(n => n?.toLowerCase()).filter(Boolean);
+                    const teamSales = contacts.filter(c => 
+                        SALE_STATUSES.includes(c.status) && 
+                        lowerTeam.includes((c.assignedAgent || '').toLowerCase())
+                    ).length;
+                    return { name: rc.name || 'Agent', deals: teamSales };
+                }).sort((a, b) => b.deals - a.deals);
+            })() : [];
 
             // Evolution d'activité dynamique sur les 6 derniers mois
-            evolutionData: (() => {
+            const evolutionData = (() => {
                 const months: Record<string, { name: string, ventes: number, prospects: number, sortKey: string }> = {};
                 const now = new Date();
                 
@@ -284,7 +163,6 @@ const Dashboard = () => {
                 }
 
                 filteredContacts.forEach(c => {
-                    // Group prospects by their creation date
                     const createdKey = c.createdAt ? c.createdAt.substring(0, 7) : null;
                     if (createdKey && months[createdKey]) {
                         if (!SALE_STATUSES.includes(c.status)) {
@@ -292,7 +170,6 @@ const Dashboard = () => {
                         }
                     }
 
-                    // Group sales by their conversion date (or creation if legacy)
                     if (SALE_STATUSES.includes(c.status)) {
                         const convertedKey = (c.convertedAt || c.createdAt || '').substring(0, 7);
                         if (convertedKey && months[convertedKey]) {
@@ -302,9 +179,110 @@ const Dashboard = () => {
                 });
 
                 return Object.values(months).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-            })(),
-        };
-    }, [contacts, interactions, visits, user]);
+            })();
+
+            return {
+                prospectsCount: prospects.length,
+                clientsCount: clients.length,
+                salesCount,
+                distribution,
+                topAgents,
+                servicePerformance,
+                responsablePerformance,
+                evolutionData,
+                assistanteTotalAssigned: contacts.filter(c => {
+                    const isCreator = c.createdBy ? c.createdBy === user?.name : !c.assignedAgent;
+                    return isCreator && c.assignedAgent;
+                }).length,
+                assistanteToContinue: contacts.filter(c => {
+                    const isCreator = c.createdBy ? c.createdBy === user?.name : !c.assignedAgent;
+                    return isCreator && !c.assignedAgent;
+                }).length,
+                assistanteProspectsList: contacts.filter(c => {
+                    const isCreator = c.createdBy ? c.createdBy === user?.name : !c.assignedAgent;
+                    return isCreator;
+                }),
+                leadsBySource: Object.entries(filteredContacts.reduce((acc, c) => {
+                    const src = c.source;
+                    if (!src || src === 'Autre') return acc;
+                    acc[src] = (acc[src] || 0) + 1;
+                    return acc;
+                }, {} as Record<string, number>))
+                    .map(([name, value]) => ({ name, value }))
+                    .sort((a, b) => b.value - a.value),
+
+                productPerformance: (() => {
+                    const rawData = Object.entries(clients.reduce((acc, c) => {
+                        let product = 'Autre';
+                        const titleRaw = c.propertyTitle || '';
+                        const title = titleRaw.toUpperCase();
+                        
+                        if (title.includes('F3')) product = 'Villa F3';
+                        else if (title.includes('F4')) product = 'Villa F4';
+                        else if (title.includes('F6')) product = 'Villa F6';
+                        else if (titleRaw) product = titleRaw.length > 20 ? titleRaw.substring(0, 18) + '..' : titleRaw;
+                        else if (c.service === 'foncier') product = 'Foncier';
+                        else if (c.service === 'construction') product = 'Construction';
+                        else if (c.service === 'gestion_immobiliere') product = 'Gestion Immo';
+                        
+                        if (!acc[product]) acc[product] = { name: product, units: 0, revenueShare: 0 };
+                        acc[product].units += 1;
+                        const num = parseInt((c.budget || '0').replace(/[^0-9]/g, '')) || 0;
+                        acc[product].revenueShare += num;
+                        return acc;
+                    }, {} as Record<string, { name: string, units: number, revenueShare: number }>))
+                    .map(([name, data]) => ({ name, value: data.units, shareValue: data.revenueShare }))
+                    .sort((a, b) => b.shareValue - a.shareValue);
+
+                    if (rawData.length <= 8) return rawData;
+                    const top8 = rawData.slice(0, 7);
+                    const others = rawData.slice(7);
+                    return [...top8, { name: 'Autres', value: others.reduce((s, i) => s + i.value, 0), shareValue: others.reduce((s, i) => s + i.shareValue, 0) }];
+                })(),
+
+                agentPerformance: Object.values(agentMap)
+                    .filter(a => a.name.trim().toLowerCase() !== 'non assigné')
+                    .map(agent => {
+                        const agentNameLower = (agent.name || '').trim().toLowerCase();
+                        const agentInteractions = interactions.filter(i => (i.agent || '').trim().toLowerCase() === agentNameLower && (i.type === 'rdv' || i.type === 'visite_terrain'));
+                        const agentVisits = visits.filter(v => (v.agent || '').trim().toLowerCase() === agentNameLower && v.statut === 'completed');
+                        const totalTouchpoints = agentInteractions.length + agentVisits.length;
+                        return { ...agent, touchpoints: totalTouchpoints, conversionRate: totalTouchpoints > 0 ? Math.round((agent.deals / totalTouchpoints) * 100) : 0 };
+                    })
+                    .sort((a, b) => b.deals - a.deals),
+                    
+                avgProcessingTime: Math.round(clients.reduce((acc, c) => {
+                    const created = c.createdAt ? new Date(c.createdAt).getTime() : 0;
+                    if (!created || isNaN(created)) return acc;
+                    const converted = c.convertedAt ? new Date(c.convertedAt).getTime() : new Date().getTime();
+                    const days = Math.max(0, (converted - created) / (1000 * 60 * 60 * 24));
+                    return acc + (isNaN(days) ? 0 : days);
+                }, 0) / (clients.filter(c => c.createdAt).length || 1)),
+
+                recordProcessingTime: clients.length > 0 ? (() => {
+                    let min = Infinity;
+                    let holder = '—';
+                    clients.forEach(c => {
+                        if (!c.createdAt) return;
+                        const created = new Date(c.createdAt).getTime();
+                        const converted = c.convertedAt ? new Date(c.convertedAt).getTime() : new Date().getTime();
+                        const diff = (converted - created) / (1000 * 60 * 60 * 24);
+                        if (diff >= 0 && diff < min) { min = diff; holder = c.assignedAgent || '—'; }
+                    });
+                    return { days: min === Infinity ? 0 : Math.round(min), holder };
+                })() : { days: 0, holder: '—' },
+                conversionEfficiency: filteredContacts.length > 0 ? Math.round((clients.length / filteredContacts.length) * 100) : 0,
+                hotDealsCount: filteredContacts.filter(c => ['Proposition Commerciale', 'Négociation', 'Réservation'].includes(c.status)).length,
+            };
+        } catch (err) {
+            console.error('[Dashboard] Error calculating stats:', err);
+            return {
+                prospectsCount: 0, clientsCount: 0, salesCount: 0, distribution: [], topAgents: [], servicePerformance: [], responsablePerformance: [],
+                assistanteTotalAssigned: 0, assistanteToContinue: 0, assistanteProspectsList: [], leadsBySource: [], productPerformance: [], agentPerformance: [],
+                avgProcessingTime: 0, recordProcessingTime: { days: 0, holder: '—' }, conversionEfficiency: 0, hotDealsCount: 0, evolutionData: []
+            };
+        }
+    }, [contacts, interactions, visits, user, commercials, agentFilter]);
 
     const getKPIs = () => {
         const evolution = statsData.evolutionData;
@@ -757,7 +735,98 @@ const Dashboard = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* ─── Widget Agenda à Venir (Commercial uniquement) ─── */}
+                {user?.role === 'commercial' && (() => {
+                    const now = new Date();
+                    const todayStr = now.toISOString().split('T')[0];
+                    const next30days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                    const myName = (user?.name || '').trim().toLowerCase();
+
+                    const upcomingItems = [
+                        ...(visits || []).filter(v =>
+                            v.statut !== 'completed' && v.statut !== 'cancelled' &&
+                            (v.agent || '').trim().toLowerCase() === myName &&
+                            v.date >= todayStr && v.date <= next30days
+                        ).map(v => ({ id: `v-${v.id}`, date: v.date, heure: v.heure, label: v.title || v.type, type: v.type === 'bureau' ? 'rdv' : 'visite', contactId: v.contactId })),
+                        ...(followUps || []).filter(f =>
+                            f.statut !== 'done' &&
+                            (f.agent || '').trim().toLowerCase() === myName &&
+                            f.dateRelance >= todayStr && f.dateRelance <= next30days
+                        ).map(f => ({ id: `f-${f.id}`, date: f.dateRelance, heure: '', label: f.note, type: 'relance', contactId: f.contactId }))
+                    ].sort((a, b) => a.date.localeCompare(b.date) || (a.heure || '').localeCompare(b.heure || ''));
+
+                    return (
+                        <div className="chart-card card-premium" style={{ minWidth: 0 }}>
+                            <div className="chart-header">
+                                <div>
+                                    <h3>Mon Agenda</h3>
+                                    <p className="chart-subtitle">RDV &amp; visites à venir (30j)</p>
+                                </div>
+                                <button className="btn-secondary btn-sm" onClick={() => navigate('/relances')} style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+                                    Toutes mes tâches
+                                </button>
+                            </div>
+                            {upcomingItems.length === 0 ? (
+                                <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                    <Calendar size={32} style={{ opacity: 0.25, marginBottom: 6 }} />
+                                    <p style={{ fontWeight: 500, fontSize: '0.88rem' }}>Aucun événement prévu</p>
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0 0.25rem 0.75rem', maxHeight: 280, overflowY: 'auto' }}>
+                                    {upcomingItems.map((item, idx) => {
+                                        const contact = contacts.find(c => c.id === item.contactId);
+                                        const isToday = item.date === todayStr;
+                                        const typeColor = item.type === 'rdv' ? '#2B2E83' : item.type === 'visite' ? '#059669' : '#f59e0b';
+                                        return (
+                                            <div key={item.id + idx}
+                                                onClick={() => contact && navigate(`/prospects/${contact.id}`)}
+                                                style={{
+                                                    display: 'flex', alignItems: 'center', gap: '0.75rem',
+                                                    padding: '0.55rem 0.75rem', borderRadius: 8,
+                                                    background: isToday ? 'rgba(43,46,131,0.06)' : 'var(--bg-soft,#f8f9fa)',
+                                                    border: `1px solid ${isToday ? 'rgba(43,46,131,0.2)' : 'var(--border-soft,#eee)'}`,
+                                                    cursor: contact ? 'pointer' : 'default'
+                                                }}
+                                            >
+                                                <div style={{
+                                                    minWidth: 44, textAlign: 'center',
+                                                    background: isToday ? '#2B2E83' : 'white',
+                                                    color: isToday ? 'white' : 'var(--text-main)',
+                                                    borderRadius: 7, padding: '0.2rem 0.3rem',
+                                                    border: '1px solid rgba(0,0,0,0.07)', flexShrink: 0
+                                                }}>
+                                                    <div style={{ fontSize: '0.58rem', fontWeight: 700, opacity: 0.8, textTransform: 'uppercase' }}>
+                                                        {new Date(item.date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'short' })}
+                                                    </div>
+                                                    <div style={{ fontSize: '1rem', fontWeight: 800, lineHeight: 1.1 }}>
+                                                        {new Date(item.date + 'T12:00:00').getDate()}
+                                                    </div>
+                                                </div>
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 1 }}>
+                                                        <span style={{ color: typeColor, fontSize: '0.75rem', fontWeight: 700 }}>
+                                                            {item.type === 'rdv' ? '📅 RDV' : item.type === 'visite' ? '📍 Visite' : '📞 Relance'}
+                                                        </span>
+                                                        {item.heure && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.05)', padding: '1px 5px', borderRadius: 3 }}>{item.heure}</span>}
+                                                        {isToday && <span style={{ fontSize: '0.67rem', background: '#2B2E83', color: 'white', padding: '1px 5px', borderRadius: 3, fontWeight: 700 }}>Auj.</span>}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                        {(item.label || '').replace(/^\[\w+\]\s*/, '')}
+                                                    </div>
+                                                    {contact && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{contact.name}</div>}
+                                                </div>
+                                                {contact && <ArrowUpRight size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
             </div>
+
         </div>
     );
 };

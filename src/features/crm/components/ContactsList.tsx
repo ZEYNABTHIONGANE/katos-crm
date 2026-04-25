@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, Filter, Plus, Phone, Mail, MapPin, Eye, Edit2, Trash2, MessageSquare, Upload } from 'lucide-react';
+import { Search, Filter, Plus, Phone, Mail, MapPin, Eye, Edit2, Trash2, MessageSquare, Upload, Calendar } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import ServiceSelector from './ServiceSelector';
 import PropertyPicker, { type SelectedProperty } from './PropertyPicker';
@@ -62,6 +62,11 @@ const ContactsList = () => {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<CrmContact | null>(null);
     const [form, setForm] = useState<FormData>(emptyForm);
     const [commercials, setCommercials] = useState<{ id: string, name: string, service: string, role?: string, parent_id?: string, group_name?: string }[]>([]);
+    
+    // Filtres par date
+    const [dateFilterType, setDateFilterType] = useState<'all' | 'createdAt' | 'convertedAt'>('all');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
     
     // Import states
     const [showImportModal, setShowImportModal] = useState(false);
@@ -268,62 +273,107 @@ const ContactsList = () => {
 
     // ─── Liste des commerciaux supervisés (pour le dropdown de filtre) ───
     const supervisedForFilter = (() => {
-        const names = getSupervisedAgentNames(user, commercials);
-        if (names === null) {
-            // Admin / Dir : tous les commerciaux distincts présents dans les contacts
-            const set = new Set<string>();
-            contacts.forEach(c => { if (c.assignedAgent) set.add(c.assignedAgent); });
-            return Array.from(set).sort();
+        try {
+            const names = getSupervisedAgentNames(user, commercials);
+            if (names === null) {
+                const set = new Set<string>();
+                (contacts || []).forEach(c => { if (c.assignedAgent) set.add(c.assignedAgent); });
+                return Array.from(set).sort();
+            }
+            return (names || []).filter(n => n && n !== user?.name).sort();
+        } catch (err) {
+            console.error('[ContactsList] Error calculating supervised list:', err);
+            return [];
         }
-        // RC / Manager : uniquement leurs agents (pas leur propre nom)
-        return names.filter(n => n !== user?.name).sort();
     })();
 
-    const filtered = contacts.filter(c => {
-        // 1. Recherche texte
-        const matchesSearch =
-            c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            c.company.toLowerCase().includes(searchTerm.toLowerCase());
+    // Helper pour définir les périodes rapides
+    const setQuickPeriod = (type: 'today' | 'week' | 'month' | 'year') => {
+        const now = new Date();
+        let start = new Date(now);
+        let end = new Date(now);
 
-        // 2. Filtre statut / température
-        const score = calculateLeadScore(c);
-        let matchesFilter = false;
-        if (filter === 'Tous') {
-            matchesFilter = true;
-        } else if (filter === 'temp-hot') {
-            matchesFilter = score >= 35;
-        } else if (filter === 'temp-warm') {
-            matchesFilter = score >= 16 && score < 35;
-        } else if (filter === 'temp-cold') {
-            matchesFilter = score < 16;
-        } else if (filter === 'dossiers-chauds') {
-            matchesFilter = ['Proposition Commerciale', 'Négociation', 'Réservation'].includes(c.status);
-        } else if (filter === 'ventes-globales') {
-            const SALE_STATUSES_LOCAL = ['Contrat', 'Paiement', 'Transfert de dossier technique', 'Transfert dossier tech', 'Suivi Chantier', 'Livraison Client', 'Fidélisation', 'Client', 'Projet Livré'];
-            matchesFilter = SALE_STATUSES_LOCAL.includes(c.status);
-        } else {
-            matchesFilter = c.status === filter;
+        if (type === 'today') {
+            start.setHours(0, 0, 0, 0);
+        } else if (type === 'week') {
+            const day = now.getDay() || 7;
+            start.setDate(now.getDate() - day + 1);
+            start.setHours(0, 0, 0, 0);
+        } else if (type === 'month') {
+            start = new Date(now.getFullYear(), now.getMonth(), 1);
+        } else if (type === 'year') {
+            start = new Date(now.getFullYear(), 0, 1);
         }
 
-        if (!matchesSearch || !matchesFilter) return false;
+        setStartDate(start.toISOString().split('T')[0]);
+        setEndDate(end.toISOString().split('T')[0]);
+        if (dateFilterType === 'all') setDateFilterType('createdAt');
+    };
 
-        // 3. Filtre par commercial (dropdown)
-        if (agentFilter !== 'all') {
-            if ((c.assignedAgent || '').trim().toLowerCase() !== agentFilter.trim().toLowerCase()) return false;
+    const filtered = useMemo(() => {
+        try {
+            return contacts.filter(c => {
+                // 1. Recherche texte
+                const matchesSearch =
+                    (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (c.company || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+                // 2. Filtre statut / température
+                const score = calculateLeadScore(c);
+                let matchesFilter = false;
+                if (filter === 'Tous') {
+                    matchesFilter = true;
+                } else if (filter === 'temp-hot') {
+                    matchesFilter = score >= 35;
+                } else if (filter === 'temp-warm') {
+                    matchesFilter = score >= 16 && score < 35;
+                } else if (filter === 'temp-cold') {
+                    matchesFilter = score < 16;
+                } else if (filter === 'dossiers-chauds') {
+                    matchesFilter = ['Proposition Commerciale', 'Négociation', 'Réservation'].includes(c.status);
+                } else if (filter === 'ventes-globales') {
+                    const SALE_STATUSES_LOCAL = ['Contrat', 'Paiement', 'Transfert de dossier technique', 'Transfert dossier tech', 'Suivi Chantier', 'Livraison Client', 'Fidélisation', 'Client', 'Projet Livré'];
+                    matchesFilter = SALE_STATUSES_LOCAL.includes(c.status);
+                } else {
+                    matchesFilter = c.status === filter;
+                }
+
+                if (!matchesSearch || !matchesFilter) return false;
+
+                // 3. Filtre par commercial (dropdown)
+                if (agentFilter !== 'all') {
+                    if ((c.assignedAgent || '').trim().toLowerCase() !== agentFilter.trim().toLowerCase()) return false;
+                }
+
+                // 4. Filtrage par date (Robuste : gère les dates partielles)
+                if (dateFilterType !== 'all' && (startDate || endDate)) {
+                    const dateValue = dateFilterType === 'createdAt' ? c.createdAt : c.convertedAt;
+                    if (!dateValue) return false;
+                    
+                    const d = typeof dateValue === 'string' ? dateValue.split('T')[0] : '';
+                    if (!d) return false;
+
+                    if (startDate && d < startDate) return false;
+                    if (endDate && d > endDate) return false;
+                }
+
+                // 5. Filtrage hiérarchique (accès)
+                const supervisedNames = getSupervisedAgentNames(user, commercials);
+                if (supervisedNames === null) return true; // Accès total
+
+                if (user?.role === 'assistante') {
+                    return c.createdBy === user.name || !c.assignedAgent;
+                }
+
+                // RC / Manager / Commercial : uniquement les contacts supervisés
+                const lowerSupervised = supervisedNames.map(n => (n || '').trim().toLowerCase()).filter(Boolean);
+                return lowerSupervised.includes((c.assignedAgent || '').trim().toLowerCase());
+            });
+        } catch (err) {
+            console.error('[ContactsList] Error in filter logic:', err);
+            return [];
         }
-
-        // 4. Filtrage hiérarchique (accès)
-        const supervisedNames = getSupervisedAgentNames(user, commercials);
-        if (supervisedNames === null) return true; // Accès total
-
-        if (user?.role === 'assistante') {
-            return c.createdBy === user.name || !c.assignedAgent;
-        }
-
-        // RC / Manager / Commercial : uniquement les contacts supervisés
-        const lowerSupervised = supervisedNames.map(n => n?.trim().toLowerCase());
-        return lowerSupervised.includes((c.assignedAgent || '').trim().toLowerCase());
-    });
+    }, [contacts, searchTerm, filter, agentFilter, user, commercials, dateFilterType, startDate, endDate]);
 
     const getStatusBadge = (status: string) => {
         const s = status || 'Prospect';
@@ -464,42 +514,79 @@ const ContactsList = () => {
             </div>
 
             <div className="contacts-toolbar card-premium">
-                <div className="search-box">
-                    <Search size={18} className="text-muted" />
-                    <input type="text" placeholder="Rechercher par nom ou entreprise..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                <div className="toolbar-main-row">
+                    <div className="search-box">
+                        <Search size={18} className="text-muted" />
+                        <input type="text" placeholder="Rechercher par nom ou entreprise..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                    </div>
+                    <div className="filters">
+                        <div className="filter-group">
+                            <Filter size={18} className="text-muted" />
+                            <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+                                <option value="Tous">Tous les prospects</option>
+                                <option disabled style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>— Par Température —</option>
+                                <option value="temp-hot">Chauds 🔥 (Priorité)</option>
+                                <option value="temp-warm">Tièdes (En cours)</option>
+                                <option value="temp-cold">Froids (À qualifier)</option>
+                                <option disabled style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>— Par Statut —</option>
+                                <option value="Prospect">Statut: Prospects</option>
+                                <option value="En Qualification">Statut: Qualification</option>
+                                <option value="RDV">Statut: RDV Effectués</option>
+                                <option value="Client">Statut: Clients</option>
+                                <option value="Projet Livré">Statut: Projets Livrés</option>
+                            </select>
+                        </div>
+
+                        {/* Filtre par commercial — visible uniquement pour admin / dir_commercial / resp_commercial */}
+                        {['admin', 'dir_commercial', 'resp_commercial'].includes(user?.role || '') && supervisedForFilter.length > 0 && (
+                            <div className="filter-group">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                <select
+                                    value={agentFilter}
+                                    onChange={(e) => setAgentFilter(e.target.value)}
+                                    style={{ minWidth: 160 }}
+                                >
+                                    <option value="all">Tous les commerciaux</option>
+                                    {supervisedForFilter.map(name => (
+                                        <option key={name} value={name}>{name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                    </div>
                 </div>
-                <div className="filters">
-                    <div className="filter-group">
-                        <Filter size={18} className="text-muted" />
-                        <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-                            <option value="Tous">Tous les prospects</option>
-                            <option disabled style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>— Par Température —</option>
-                            <option value="temp-hot">Chauds 🔥 (Priorité)</option>
-                            <option value="temp-warm">Tièdes (En cours)</option>
-                            <option value="temp-cold">Froids (À qualifier)</option>
-                            <option disabled style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>— Par Statut —</option>
-                            <option value="Prospect">Statut: Prospects</option>
-                            <option value="En Qualification">Statut: Qualification</option>
-                            <option value="RDV">Statut: RDV Effectués</option>
-                            <option value="Client">Statut: Clients</option>
-                            <option value="Projet Livré">Statut: Projets Livrés</option>
+
+                <div className="toolbar-date-row">
+                    <div className="date-filter-group">
+                        <Calendar size={16} className="text-muted" />
+                        <span className="date-label">Filtrer par :</span>
+                        <select 
+                            value={dateFilterType} 
+                            onChange={(e) => setDateFilterType(e.target.value as any)}
+                            className="date-type-select"
+                        >
+                            <option value="all">Toutes les dates</option>
+                            <option value="createdAt">Date d'enregistrement</option>
+                            <option value="convertedAt">Date de vente (Client)</option>
                         </select>
                     </div>
 
-                    {/* Filtre par commercial — visible uniquement pour admin / dir_commercial / resp_commercial */}
-                    {['admin', 'dir_commercial', 'resp_commercial'].includes(user?.role || '') && supervisedForFilter.length > 0 && (
-                        <div className="filter-group">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                            <select
-                                value={agentFilter}
-                                onChange={(e) => setAgentFilter(e.target.value)}
-                                style={{ minWidth: 160 }}
-                            >
-                                <option value="all">Tous les commerciaux</option>
-                                {supervisedForFilter.map(name => (
-                                    <option key={name} value={name}>{name}</option>
-                                ))}
-                            </select>
+                    {dateFilterType !== 'all' && (
+                        <div className="date-range-inputs">
+                            <div className="range-input">
+                                <span>Du</span>
+                                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                            </div>
+                            <div className="range-input">
+                                <span>Au</span>
+                                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                            </div>
+                            <div className="quick-periods">
+                                <button onClick={() => setQuickPeriod('today')}>Aujourd'hui</button>
+                                <button onClick={() => setQuickPeriod('week')}>Cette semaine</button>
+                                <button onClick={() => setQuickPeriod('month')}>Ce mois</button>
+                                <button className="clear-date" onClick={() => { setDateFilterType('all'); setStartDate(''); setEndDate(''); }}>Effacer</button>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -519,13 +606,20 @@ const ContactsList = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {filtered.length > 0 ? filtered.map((contact) => (
+                        {filtered.length > 0 ? filtered.map((contact: CrmContact) => (
                             <tr key={contact.id} className="contact-row clickable" onClick={() => navigate(`/prospects/${contact.id}`)}>
                                 <td>
                                     <div className="user-profile-cell">
                                         <div className="avatar-initial">{contact.name.charAt(0)}</div>
                                         <div>
                                             <div className="font-medium text-main">{contact.name}</div>
+                                            <div className="text-xs text-muted">
+                                                {contact.convertedAt ? (
+                                                    <span className="text-success">Vendu le {new Date(contact.convertedAt).toLocaleDateString('fr-FR')}</span>
+                                                ) : (
+                                                    <span>Inscrit le {contact.createdAt ? new Date(contact.createdAt).toLocaleDateString('fr-FR') : '—'}</span>
+                                                )}
+                                            </div>
                                             <div className="text-sm text-muted">{contact.company}</div>
                                         </div>
                                     </div>
@@ -805,6 +899,108 @@ const ContactsList = () => {
                     </div>
                 )}
             </Modal>
+
+            <style>{`
+                .contacts-toolbar {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 1rem;
+                    padding: 1.25rem;
+                    margin-bottom: 1.5rem;
+                }
+                .toolbar-main-row {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 1.5rem;
+                    flex-wrap: wrap;
+                }
+                .toolbar-main-row .search-box { flex: 1; min-width: 300px; }
+                .toolbar-main-row .filters { display: flex; gap: 1rem; flex-wrap: wrap; }
+
+                .toolbar-date-row {
+                    display: flex;
+                    align-items: center;
+                    gap: 1.5rem;
+                    padding-top: 1rem;
+                    border-top: 1px solid rgba(0,0,0,0.05);
+                    flex-wrap: wrap;
+                }
+                .date-filter-group {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.75rem;
+                    color: var(--text-main);
+                    font-weight: 600;
+                    font-size: 0.9rem;
+                }
+                .date-label { color: var(--text-muted); font-weight: 500; }
+                .date-type-select {
+                    border: 1px solid var(--border-color);
+                    border-radius: 8px;
+                    padding: 0.4rem 0.75rem;
+                    font-size: 0.85rem;
+                    font-weight: 600;
+                    background: white;
+                    color: var(--primary);
+                }
+
+                .date-range-inputs {
+                    display: flex;
+                    align-items: center;
+                    gap: 1rem;
+                    flex-wrap: wrap;
+                }
+                .range-input {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    font-size: 0.85rem;
+                    color: var(--text-muted);
+                }
+                .range-input input {
+                    border: 1px solid var(--border-color);
+                    border-radius: 6px;
+                    padding: 0.35rem 0.6rem;
+                    font-size: 0.85rem;
+                    font-weight: 500;
+                }
+
+                .quick-periods {
+                    display: flex;
+                    gap: 0.5rem;
+                }
+                .quick-periods button {
+                    background: #f1f5f9;
+                    border: 1px solid #e2e8f0;
+                    padding: 0.35rem 0.75rem;
+                    border-radius: 6px;
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                    color: #475569;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                .quick-periods button:hover {
+                    background: var(--primary-light);
+                    color: var(--primary);
+                    border-color: var(--primary);
+                }
+                .quick-periods button.clear-date {
+                    background: #fee2e2;
+                    color: #dc2626;
+                    border-color: #fecaca;
+                }
+                .quick-periods button.clear-date:hover {
+                    background: #f87171;
+                    color: white;
+                }
+
+                @media (max-width: 768px) {
+                    .toolbar-main-row .search-box { min-width: 100%; }
+                    .toolbar-date-row { flex-direction: column; align-items: flex-start; gap: 1rem; }
+                }
+            `}</style>
         </div>
     );
 };

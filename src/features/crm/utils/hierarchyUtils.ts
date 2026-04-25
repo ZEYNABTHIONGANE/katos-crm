@@ -31,10 +31,12 @@ export const getSupervisedAgentNames = (
     // Recursive helper to get all descendant names
     const getAllDescendantNames = (parentId: string): string[] => {
         const directChildren = allAgents.filter(a => a.parent_id === parentId);
-        let names = directChildren.map(a => a.name);
+        let names = directChildren.map(a => a.name || 'Utilisateur inconnu');
         
         directChildren.forEach(child => {
-            names = [...names, ...getAllDescendantNames(child.id)];
+            if (child.id) {
+                names = [...names, ...getAllDescendantNames(child.id)];
+            }
         });
         
         return names;
@@ -43,9 +45,9 @@ export const getSupervisedAgentNames = (
     // 2. Responsable Commercial (RC) / Manager
     if (role === 'resp_commercial' || role === 'manager') {
         const descendantNames = getAllDescendantNames(currentUser.id);
-        return [currentUser.name, ...descendantNames];
+        return [currentUser.name || 'Utilisateur', ...descendantNames];
     }
 
     // 3. Default / Commercial / Assistante
-    return [currentUser.name];
+    return [currentUser.name || 'Utilisateur'];
 };

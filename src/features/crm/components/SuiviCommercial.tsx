@@ -26,6 +26,7 @@ const STAGE_META: Record<string, { title: string; color: string }> = {
     rdv: { title: 'RDV', color: '#F59E0B' },
     proposition: { title: 'Proposition Commerciale', color: '#3B82F6' },
     negociation: { title: 'Négociation', color: '#8B5CF6' },
+    pas_interesse: { title: 'Pas intéressé', color: '#ef4444' },
     reservation: { title: 'Réservation', color: '#EC4899' },
     contrat: { title: 'Contrat', color: '#6366F1' },
     paiement: { title: 'Paiement', color: '#14B8A6' },
@@ -33,7 +34,6 @@ const STAGE_META: Record<string, { title: string; color: string }> = {
     suivi_chantier: { title: 'Suivi Chantier', color: '#FBBF24' },
     livraison: { title: 'Livraison Client', color: '#10B981' },
     fidelisation: { title: 'Fidélisation', color: '#2B2E83' },
-    pas_interesse: { title: 'Pas intéressé', color: '#ef4444' },
 };
 
 const SuiviCommercial = () => {
@@ -44,6 +44,7 @@ const SuiviCommercial = () => {
 
     // -- State --
     const [period, setPeriod] = useState('ce-mois');
+    const [timeBasis, setTimeBasis] = useState<'activity' | 'createdAt' | 'convertedAt'>('activity');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [commercialFilter, setCommercialFilter] = useState('all');
@@ -100,149 +101,200 @@ const SuiviCommercial = () => {
 
     // -- Hierarchy Filtering --
     const supervisedCommercials = useMemo(() => {
-        const names = getSupervisedAgentNames(user, commercials);
+        try {
+            const names = getSupervisedAgentNames(user, commercials);
 
-        if (names === null) {
-            // Admin / Dir Commercial : voir tous les commerciaux distincts
-            const set = new Set<string>();
-            contacts.forEach(c => { if (c.assignedAgent) set.add(c.assignedAgent); });
-            return Array.from(set).sort();
+            if (names === null) {
+                // Admin / Dir Commercial : voir tous les commerciaux distincts
+                const set = new Set<string>();
+                (contacts || []).forEach(c => { if (c.assignedAgent) set.add(c.assignedAgent); });
+                return Array.from(set).sort();
+            }
+
+            // Pour un Responsable Commercial : ne montrer QUE ses commerciaux attribués
+            // (exclure son propre nom — il supervise, il ne vend pas directement)
+            if (user?.role === 'resp_commercial') {
+                return (names || []).filter(n => n && n !== user.name).sort();
+            }
+
+            return (names || []).sort();
+        } catch (err) {
+            console.error("Error calculating supervisedCommercials:", err);
+            return [];
         }
-
-        // Pour un Responsable Commercial : ne montrer QUE ses commerciaux attribués
-        // (exclure son propre nom — il supervise, il ne vend pas directement)
-        if (user?.role === 'resp_commercial') {
-            return names.filter(n => n !== user.name).sort();
-        }
-
-        return names.sort();
     }, [commercials, user, contacts]);
 
     // -- Pipeline Progress Data (Active Deals) --
     const activeDeals = useMemo(() => {
-        const supervisedLower = supervisedCommercials?.map(n => n.toLowerCase()) || [];
-        const normalizedCommercialFilter = commercialFilter.toLowerCase().trim();
-        
-        let list = contacts.filter(c => {
-            // 1. Filtrage hiérarchique
-            const agentName = (c.assignedAgent || '').trim().toLowerCase();
+        try {
+            const supervisedLower = supervisedCommercials ? supervisedCommercials.map(n => (n || '').toLowerCase()) : [];
+            const normalizedCommercialFilter = (commercialFilter || '').toLowerCase().trim();
             
-            if (supervisedCommercials !== null) {
-                if (!agentName) return false; 
-                if (!supervisedLower.includes(agentName)) return false;
-            }
-            
-            // 2. Filtrage par commercial sélectionné
-            if (commercialFilter !== 'all') {
-                if (agentName !== normalizedCommercialFilter) return false;
-            }
-
-            // 3. Filtrage par étape
-            if (stageFilter !== 'all') {
-                const colId = STATUS_TO_COLUMN[c.status] || 'prospect';
-                if (colId !== stageFilter) return false;
-            }
-
-            // 4. Filtrage par période (basé sur l'activité récente)
-            if (period !== 'tout') {
-                const hasActivityInPeriod = interactions.some(i => 
-                    i.contactId === c.id && 
-                    i.date >= startDate && 
-                    i.date <= endDate
-                );
-                if (!hasActivityInPeriod) return false;
-            }
-
-            // 5. Recherche intelligente multi-termes
-            if (searchQuery) {
-                const terms = searchQuery.toLowerCase().trim().split(/\s+/);
-                const searchableText = `${c.name} ${c.company || ''} ${c.assignedAgent || ''} ${c.service || ''} ${c.status || ''}`.toLowerCase();
-                
-                // Tous les mots-clés doivent être présents
-                const matches = terms.every(term => searchableText.includes(term));
-                if (!matches) return false;
-            }
-
-            return true;
-        });
-
-        return list.map(c => {
-            const colId = STATUS_TO_COLUMN[c.status] || 'prospect';
-            const progress = STATUS_PROGRESS[colId] || 0;
-            
-            const lastSteps = interactions
-                .filter(i => i.contactId === c.id && i.type === 'pipeline_step')
-                .sort((a, b) => new Date(b.date + 'T' + (b.heure || '00:00')).getTime() - new Date(a.date + 'T' + (a.heure || '00:00')).getTime());
-            
-            const lastStep = lastSteps[0];
-
-            return {
-                ...c,
-                progress,
-                lastStepNote: lastStep?.description || 'Aucune note d\'étape.',
-                lastStepDate: lastStep?.date
-            };
-        }).sort((a, b) => b.progress - a.progress);
-    }, [contacts, interactions, commercialFilter, stageFilter, searchQuery, supervisedCommercials, period, startDate, endDate]);
-
-    // -- Pipeline Steps Feed (Activity Log) --
-    const pipelineFeed = useMemo(() => {
-        const normalizedCommercialFilter = commercialFilter.toLowerCase().trim();
-        
-        return interactions
-            .filter(i => i.type === 'pipeline_step')
-            .filter(i => {
-                const supervisedLower = supervisedCommercials?.map(n => n.toLowerCase()) || [];
-                const agentName = (i.agent || '').trim().toLowerCase();
-                
+            let list = (contacts || []).filter(c => {
                 // 1. Filtrage hiérarchique
-                if (supervisedCommercials !== null && !supervisedLower.includes(agentName)) return false;
+                const agentName = (c.assignedAgent || '').trim().toLowerCase();
+                
+                if (supervisedCommercials !== null) {
+                    if (!agentName) return false; 
+                    if (!supervisedLower.includes(agentName)) return false;
+                }
                 
                 // 2. Filtrage par commercial sélectionné
                 if (commercialFilter !== 'all') {
                     if (agentName !== normalizedCommercialFilter) return false;
                 }
 
-                // 3. Filtrage par période
-                if (i.date < startDate || i.date > endDate) return false;
-                
-                // 4. Recherche intelligente multi-termes
+                // 3. Filtrage par étape
+                if (stageFilter !== 'all') {
+                    const colId = STATUS_TO_COLUMN[c.status] || 'prospect';
+                    if (colId !== stageFilter) return false;
+                }
+
+                // 4. Filtrage par période
+                if (period !== 'tout' && startDate && endDate) {
+                    if (timeBasis === 'activity') {
+                        // Basé sur l'activité récente (interactions)
+                        const hasActivityInPeriod = (interactions || []).some(i => 
+                            i.contactId === c.id && 
+                            i.date >= startDate && 
+                            i.date <= endDate
+                        );
+                        if (!hasActivityInPeriod) return false;
+                    } else if (timeBasis === 'createdAt') {
+                        // Basé sur la date de création
+                        if (!c.createdAt) return false;
+                        const d = c.createdAt.split('T')[0];
+                        if (d < startDate || d > endDate) return false;
+                    } else if (timeBasis === 'convertedAt') {
+                        // Basé sur la date de vente
+                        if (!c.convertedAt) return false;
+                        const d = c.convertedAt.split('T')[0];
+                        if (d < startDate || d > endDate) return false;
+                    }
+                }
+
+                // 5. Recherche intelligente multi-termes
                 if (searchQuery) {
                     const terms = searchQuery.toLowerCase().trim().split(/\s+/);
-                    const contact = contacts.find(c => c.id === i.contactId);
-                    const searchableText = `${contact?.name || ''} ${i.agent || ''} ${i.title || ''} ${i.description || ''}`.toLowerCase();
+                    const searchableText = `${c.name || ''} ${c.company || ''} ${c.assignedAgent || ''} ${c.service || ''} ${c.status || ''}`.toLowerCase();
                     
-                    return terms.every(term => searchableText.includes(term));
+                    // Tous les mots-clés doivent être présents
+                    const matches = terms.every(term => searchableText.includes(term));
+                    if (!matches) return false;
                 }
+
                 return true;
-            })
-            .sort((a, b) => new Date(b.date + 'T' + (b.heure || '00:00')).getTime() - new Date(a.date + 'T' + (a.heure || '00:00')).getTime());
+            });
+
+            return list.map(c => {
+                const colId = STATUS_TO_COLUMN[c.status] || 'prospect';
+                const progress = STATUS_PROGRESS[colId] || 0;
+                
+                const lastSteps = (interactions || [])
+                    .filter(i => i.contactId === c.id && i.type === 'pipeline_step')
+                    .sort((a, b) => {
+                        try {
+                            return new Date(b.date + 'T' + (b.heure || '00:00')).getTime() - new Date(a.date + 'T' + (a.heure || '00:00')).getTime();
+                        } catch { return 0; }
+                    });
+                
+                const lastStep = lastSteps[0];
+
+                return {
+                    ...c,
+                    progress,
+                    lastStepNote: lastStep?.description || 'Aucune note d\'étape.',
+                    lastStepDate: lastStep?.date
+                };
+            }).sort((a, b) => b.progress - a.progress);
+        } catch (err) {
+            console.error("Error calculating activeDeals:", err);
+            return [];
+        }
+    }, [contacts, interactions, commercialFilter, stageFilter, searchQuery, supervisedCommercials, period, timeBasis, startDate, endDate]);
+
+    // -- Pipeline Steps Feed (Activity Log) --
+    const pipelineFeed = useMemo(() => {
+        try {
+            const normalizedCommercialFilter = (commercialFilter || '').toLowerCase().trim();
+            
+            return (interactions || [])
+                .filter(i => i.type === 'pipeline_step')
+                .filter(i => {
+                    const supervisedLower = supervisedCommercials ? supervisedCommercials.map(n => (n || '').toLowerCase()) : [];
+                    const agentName = (i.agent || '').trim().toLowerCase();
+                    
+                    // 1. Filtrage hiérarchique
+                    if (supervisedCommercials !== null && !supervisedLower.includes(agentName)) return false;
+                    
+                    // 2. Filtrage par commercial sélectionné
+                    if (commercialFilter !== 'all') {
+                        if (agentName !== normalizedCommercialFilter) return false;
+                    }
+
+                    // 3. Filtrage par période
+                    if (i.date < startDate || i.date > endDate) return false;
+                    
+                    // 4. Recherche intelligente multi-termes
+                    if (searchQuery) {
+                        const terms = searchQuery.toLowerCase().trim().split(/\s+/);
+                        const contact = (contacts || []).find(c => c.id === i.contactId);
+                        const searchableText = `${contact?.name || ''} ${i.agent || ''} ${i.title || ''} ${i.description || ''}`.toLowerCase();
+                        
+                        return terms.every(term => searchableText.includes(term));
+                    }
+                    return true;
+                })
+                .sort((a, b) => {
+                    try {
+                        return new Date(b.date + 'T' + (b.heure || '00:00')).getTime() - new Date(a.date + 'T' + (a.heure || '00:00')).getTime();
+                    } catch { return 0; }
+                });
+        } catch (err) {
+            console.error("Error calculating pipelineFeed:", err);
+            return [];
+        }
     }, [interactions, supervisedCommercials, commercialFilter, startDate, endDate, searchQuery, contacts]);
 
     // -- KPI Stats --
     const stats = useMemo(() => {
-        const total = activeDeals.length;
-        const avg = total > 0 ? Math.round(activeDeals.reduce((s, d) => s + d.progress, 0) / total) : 0;
-        const advanced = activeDeals.filter(d => d.progress >= 50).length;
-        const wins = activeDeals.filter(d => d.progress === 100).length;
-        return { total, avg, advanced, wins };
+        try {
+            const total = activeDeals.length;
+            const avg = total > 0 ? Math.round(activeDeals.reduce((s, d) => s + (d.progress || 0), 0) / total) : 0;
+            const advanced = activeDeals.filter(d => (d.progress || 0) >= 50).length;
+            const wins = activeDeals.filter(d => (d.progress || 0) === 100).length;
+            return { total, avg, advanced, wins };
+        } catch (err) {
+            console.error("Error calculating stats:", err);
+            return { total: 0, avg: 0, advanced: 0, wins: 0 };
+        }
     }, [activeDeals]);
 
     // -- Distribution Stats (For Director/Admin) --
     const distribution = useMemo(() => {
-        if (supervisedCommercials !== null) return null; // Only for high-level
-        const counts: Record<string, number> = {};
-        contacts.forEach(c => {
-            const key = c.assignedAgent || 'Non assigné';
-            counts[key] = (counts[key] || 0) + 1;
-        });
-        return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+        try {
+            if (supervisedCommercials !== null) return null; // Only for high-level
+            const counts: Record<string, number> = {};
+            (contacts || []).forEach(c => {
+                const key = c.assignedAgent || 'Non assigné';
+                counts[key] = (counts[key] || 0) + 1;
+            });
+            return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+        } catch (err) {
+            console.error("Error calculating distribution:", err);
+            return null;
+        }
     }, [contacts, supervisedCommercials]);
 
     // -- Evaluation Logic --
     const currentEvaluation = useMemo(() => {
-        if (commercialFilter === 'all') return null;
-        return evaluations.find(e => e.agent_name === commercialFilter && e.evaluation_date === startDate);
+        try {
+            if (commercialFilter === 'all') return null;
+            return (evaluations || []).find(e => e.agent_name === commercialFilter && e.evaluation_date === startDate);
+        } catch (err) {
+            console.error("Error calculating currentEvaluation:", err);
+            return null;
+        }
     }, [evaluations, commercialFilter, startDate]);
 
     const handleSaveEval = async () => {
@@ -333,6 +385,17 @@ const SuiviCommercial = () => {
                                 <option value="annee">Année 2026</option>
                                 <option value="tout">Toutes les données</option>
                                 <option value="custom">Personnalisé</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div className="filter-item">
+                        <label>Base temporelle</label>
+                        <div className="input-with-icon">
+                            <Calendar size={14} />
+                            <select value={timeBasis} onChange={e => setTimeBasis(e.target.value as any)}>
+                                <option value="activity">Activités récentes</option>
+                                <option value="createdAt">Date d'enregistrement</option>
+                                <option value="convertedAt">Date de vente</option>
                             </select>
                         </div>
                     </div>

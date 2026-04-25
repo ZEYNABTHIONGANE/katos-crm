@@ -147,6 +147,7 @@ interface ContactStore {
     addDocument: (d: Omit<CrmDocument, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'versions'>) => Promise<void>;
     updateDocumentVersion: (id: string, url: string, notes?: string) => Promise<void>;
     deleteDocument: (id: string) => Promise<void>;
+    commercials: any[];
 }
 
 export const useContactStore = create<ContactStore>()((set, get) => ({
@@ -156,6 +157,7 @@ export const useContactStore = create<ContactStore>()((set, get) => ({
     interactions: [],
     constructionProjects: [],
     documents: [],
+    commercials: [],
 
     fetchData: async () => {
         console.log('[STORE] Starting resilient data fetch...');
@@ -170,13 +172,14 @@ export const useContactStore = create<ContactStore>()((set, get) => ({
         };
 
         // Fetch all modules in parallel but with individual error handling
-        const [contacts, interactions, visits, followUps, projects, docs] = await Promise.all([
+        const [contacts, interactions, visits, followUps, projects, docs, commercials] = await Promise.all([
             fetchSafely(api.fetchContacts(), 'contacts', []),
             fetchSafely(api.fetchInteractions(), 'interactions', []),
             fetchSafely(api.fetchVisits(), 'visits', []),
             fetchSafely(api.fetchFollowUps(), 'followUps', []),
             fetchSafely(projectApi.fetchProjects(), 'projects', []),
-            fetchSafely(projectApi.fetchDocuments(), 'documents', [])
+            fetchSafely(projectApi.fetchDocuments(), 'documents', []),
+            fetchSafely(api.fetchCommercials(), 'commercials', [])
         ]);
 
         set({ 
@@ -185,7 +188,8 @@ export const useContactStore = create<ContactStore>()((set, get) => ({
             visits, 
             followUps, 
             constructionProjects: projects, 
-            documents: docs 
+            documents: docs,
+            commercials
         });
         console.log('[STORE] Resilient fetch completed.');
     },

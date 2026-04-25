@@ -26,7 +26,7 @@ const COLUMN_META: Record<string, { title: string; color: string; icon: React.Re
     suivi_chantier: { title: 'Suivi Chantier', color: '#FBBF24', icon: <Wrench size={16} /> },
     livraison: { title: 'Livraison Client', color: '#10B981', icon: <CheckCircle2 size={16} /> },
     fidelisation: { title: 'Fidélisation', color: '#2B2E83', icon: <Star size={16} /> },
-    pas_interesse: { title: 'Pas intéressé', color: '#94a3b8', icon: <Trash2 size={16} /> },
+    pas_interesse: { title: 'Pas intéressé', color: '#ef4444', icon: <Trash2 size={16} /> },
 };
 
 const columnOrder = [
@@ -78,7 +78,7 @@ const KanbanCard = ({
     const navigate = useNavigate();
     const [menuOpen, setMenuOpen] = useState(false);
     const curIdx = columnOrder.indexOf(colId);
-    const nextCol = columnOrder[curIdx + 1];
+    const nextCol = columnOrder.slice(curIdx + 1).find(c => c !== 'pas_interesse');
     const svc = contact.service ? SERVICE_LABELS[contact.service] : null;
 
     return (
@@ -109,6 +109,11 @@ const KanbanCard = ({
                             <button onClick={() => { navigate(`/prospects/${contact.id}`); setMenuOpen(false); }}>
                                 <FileText size={13} /> Voir la fiche
                             </button>
+                            {colId !== 'pas_interesse' && (
+                                <button className="danger" onClick={() => { onMove(contact.id, 'pas_interesse'); setMenuOpen(false); }}>
+                                    <Trash2 size={13} /> Pas intéressé
+                                </button>
+                            )}
                             {['admin', 'dir_commercial'].includes(userRole || '') && (
                                 <button className="danger" onClick={() => { onDelete(contact.id); setMenuOpen(false); }}>
                                     <Trash2 size={13} /> Supprimer
@@ -189,56 +194,71 @@ const Pipeline = () => {
     }, []);
 
     const agentOptions = useMemo(() => {
-        const supervised = getSupervisedAgentNames(user, commercials);
-        if (supervised === null) return commercials.map(c => c.name).sort();
-        return supervised.sort();
+        try {
+            const supervised = getSupervisedAgentNames(user, commercials);
+            if (supervised === null) return commercials.map(c => c.name).sort();
+            return supervised.sort();
+        } catch (err) {
+            console.error("Error calculating agentOptions:", err);
+            return [];
+        }
     }, [commercials, user]);
 
     const columns = useMemo(() => {
-        const supervisedNames = getSupervisedAgentNames(user, commercials);
-        const lowerSupervised = supervisedNames ? supervisedNames.map(n => n?.trim().toLowerCase()) : null;
+        try {
+            const supervisedNames = getSupervisedAgentNames(user, commercials);
+            const lowerSupervised = supervisedNames ? supervisedNames.map(n => n?.trim().toLowerCase()) : null;
 
-        return columnOrder.reduce((acc, colId) => {
-            const statusForCol = COLUMN_TO_STATUS[colId];
-            let list = contacts.filter(c => STATUS_TO_COLUMN[c.status] === colId || c.status === statusForCol);
+            return columnOrder.reduce((acc, colId) => {
+                const statusForCol = COLUMN_TO_STATUS[colId];
+                let list = (contacts || []).filter(c => STATUS_TO_COLUMN[c.status] === colId || c.status === statusForCol);
 
-            if (lowerSupervised !== null) {
-                if (user?.role === 'assistante') {
-                    list = list.filter(c => c.createdBy === user?.name || !c.assignedAgent);
-                } else {
-                    list = list.filter(c => lowerSupervised.includes((c.assignedAgent || '').trim().toLowerCase()));
+                if (lowerSupervised !== null) {
+                    if (user?.role === 'assistante') {
+                        list = list.filter(c => c.createdBy === user?.name || !c.assignedAgent);
+                    } else {
+                        list = list.filter(c => lowerSupervised.includes((c.assignedAgent || '').trim().toLowerCase()));
+                    }
                 }
-            }
 
-            if (user?.role === 'manager') {
-                const userService = user.service === 'gestion' ? 'gestion_immobiliere' : user.service;
-                list = list.filter(c => !c.service || c.service === userService);
-            }
+                if (user?.role === 'manager') {
+                    const userService = user.service === 'gestion' ? 'gestion_immobiliere' : user.service;
+                    list = list.filter(c => !c.service || c.service === userService);
+                }
 
-            if (agentFilter) list = list.filter(c => (c.assignedAgent || '').trim().toLowerCase() === agentFilter.toLowerCase());
-            if (serviceFilter) list = list.filter(c => c.service === serviceFilter);
+                if (agentFilter) list = list.filter(c => (c.assignedAgent || '').trim().toLowerCase() === agentFilter.toLowerCase());
+                if (serviceFilter) list = list.filter(c => c.service === serviceFilter);
 
-            acc[colId] = list;
-            return acc;
-        }, {} as Record<string, CrmContact[]>);
+                acc[colId] = list;
+                return acc;
+            }, {} as Record<string, CrmContact[]>);
+        } catch (err) {
+            console.error("Error calculating columns:", err);
+            return columnOrder.reduce((acc, colId) => { acc[colId] = []; return acc; }, {} as Record<string, CrmContact[]>);
+        }
     }, [contacts, user, commercials, agentFilter, serviceFilter]);
 
     const filteredColumns = useMemo(() => {
-        if (!search.trim()) return columns;
-        const q = search.toLowerCase();
-        return columnOrder.reduce((acc, colId) => {
-            acc[colId] = columns[colId].filter(c =>
-                c.name.toLowerCase().includes(q) ||
-                c.company.toLowerCase().includes(q) ||
-                c.phone.toLowerCase().includes(q) ||
-                (c.email && c.email.toLowerCase().includes(q)) ||
-                (c.notes && c.notes.toLowerCase().includes(q)) ||
-                (c.assignedAgent && c.assignedAgent.toLowerCase().includes(q)) ||
-                (c.service && c.service.toLowerCase().includes(q)) ||
-                (c.propertyTitle && c.propertyTitle.toLowerCase().includes(q))
-            );
-            return acc;
-        }, {} as Record<string, CrmContact[]>);
+        try {
+            if (!search.trim()) return columns;
+            const q = search.toLowerCase();
+            return columnOrder.reduce((acc, colId) => {
+                acc[colId] = (columns[colId] || []).filter(c =>
+                    (c.name || '').toLowerCase().includes(q) ||
+                    (c.company || '').toLowerCase().includes(q) ||
+                    (c.phone || '').toLowerCase().includes(q) ||
+                    (c.email && c.email.toLowerCase().includes(q)) ||
+                    (c.notes && c.notes.toLowerCase().includes(q)) ||
+                    (c.assignedAgent && c.assignedAgent.toLowerCase().includes(q)) ||
+                    (c.service && c.service.toLowerCase().includes(q)) ||
+                    (c.propertyTitle && c.propertyTitle.toLowerCase().includes(q))
+                );
+                return acc;
+            }, {} as Record<string, CrmContact[]>);
+        } catch (err) {
+            console.error("Error calculating filteredColumns:", err);
+            return columns;
+        }
     }, [columns, search]);
 
     const filteredTotal = Object.values(filteredColumns).reduce((s, arr) => s + arr.length, 0);
