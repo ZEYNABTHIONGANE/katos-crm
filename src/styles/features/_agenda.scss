@@ -1,0 +1,275 @@
+@use '../abstracts/variables' as v;
+
+.field-agenda {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 100px);
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+    margin: 10px;
+
+    // ── Header (Navigation) ──
+    .agenda-header {
+        padding: 12px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #eee;
+        background: #fff;
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+
+            h1 {
+                font-size: 1.25rem;
+                font-weight: 600;
+                color: #3c4043;
+                margin: 0;
+            }
+
+            .nav-controls {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+
+                .btn-today {
+                    padding: 6px 16px;
+                    border: 1px solid #dadce0;
+                    border-radius: 4px;
+                    background: #fff;
+                    color: #3c4043;
+                    font-weight: 500;
+                    font-size: 0.875rem;
+                    cursor: pointer;
+                    &:hover { background: #f1f3f4; }
+                }
+
+                .nav-arrows {
+                    display: flex;
+                    gap: 4px;
+                    button {
+                        padding: 6px;
+                        border-radius: 50%;
+                        border: none;
+                        background: transparent;
+                        color: #5f6368;
+                        cursor: pointer;
+                        &:hover { background: #f1f3f4; }
+                    }
+                }
+            }
+
+            .current-date {
+                font-size: 1.15rem;
+                color: #3c4043;
+                font-weight: 500;
+            }
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+    }
+
+    // ── Main Layout ──
+    .agenda-body {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+    }
+
+    // ── Sidebar (Mini-view / Filters) ──
+    .agenda-sidebar {
+        width: 260px;
+        border-right: 1px solid #eee;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 30px;
+        overflow-y: auto;
+
+        .btn-create {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 24px;
+            background: #fff;
+            border-radius: 28px;
+            box-shadow: 0 1px 3px rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15);
+            color: #3c4043;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: box-shadow 0.2s;
+            &:hover { box-shadow: 0 1px 3px rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.1); background: #f8f9fa; }
+        }
+
+        .calendar-filters {
+            h3 {
+                font-size: 0.85rem;
+                font-weight: 600;
+                color: #3c4043;
+                text-transform: uppercase;
+                margin-bottom: 12px;
+                letter-spacing: 0.5px;
+            }
+
+            .filter-item {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 6px 0;
+                font-size: 0.9rem;
+                color: #3c4043;
+                cursor: pointer;
+                input { cursor: pointer; }
+            }
+        }
+    }
+
+    // ── Grid Container ──
+    .agenda-grid-container {
+        flex: 1;
+        overflow: auto;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+
+    // ── Time Column ──
+    .time-column {
+        width: 60px;
+        flex-shrink: 0;
+        border-right: 1px solid #eee;
+        background: #fff;
+        padding-top: 60px; // Offset for header row
+
+        .time-slot {
+            height: 60px; // 1 hour
+            position: relative;
+            span {
+                position: absolute;
+                top: -8px;
+                right: 8px;
+                font-size: 0.7rem;
+                color: #70757a;
+            }
+        }
+    }
+
+    // ── Content Area ──
+    .agenda-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    // ── Days Header ──
+    .days-header {
+        display: flex;
+        height: 60px;
+        border-bottom: 1px solid #eee;
+        position: sticky;
+        top: 0;
+        background: #fff;
+        z-index: 5;
+
+        .day-label {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-left: 1px solid #eee;
+            
+            .day-name {
+                font-size: 0.75rem;
+                font-weight: 500;
+                color: #70757a;
+                text-transform: uppercase;
+            }
+            .day-number {
+                font-size: 1.5rem;
+                color: #3c4043;
+                font-weight: 400;
+                width: 40px;
+                height: 40px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 50%;
+                margin-top: 2px;
+            }
+
+            &.is-today {
+                .day-name { color: #1a73e8; }
+                .day-number { background: #1a73e8; color: #fff; font-weight: 500; }
+            }
+        }
+    }
+
+    // ── Grid Body ──
+    .grid-body {
+        display: flex;
+        position: relative;
+
+        .day-column {
+            flex: 1;
+            border-left: 1px solid #eee;
+            position: relative;
+            min-height: 1440px; // 24 hours * 60px
+
+            .grid-row {
+                height: 60px;
+                border-bottom: 1px solid #f1f3f4;
+                &:last-child { border-bottom: none; }
+            }
+
+            // ── Event Card ──
+            .agenda-event {
+                position: absolute;
+                left: 4px;
+                right: 4px;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 0.75rem;
+                overflow: hidden;
+                border: 1px solid transparent;
+                cursor: pointer;
+                transition: z-index 0s, transform 0.2s;
+                
+                &.terrain {
+                    background: #e8f0fe;
+                    color: #1967d2;
+                    border-color: #d2e3fc;
+                    &::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #1a73e8; }
+                }
+                &.chantier {
+                    background: #e6f4ea;
+                    color: #137333;
+                    border-color: #ceead6;
+                    &::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #34a853; }
+                }
+
+                &.booked {
+                    box-shadow: 0 1px 2px rgba(60,64,67,0.3);
+                }
+
+                .event-time { font-weight: 700; margin-bottom: 2px; display: block; }
+                .event-title { font-weight: 500; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .event-agent { font-size: 0.65rem; opacity: 0.8; }
+
+                &:hover {
+                    z-index: 10;
+                    box-shadow: 0 1px 3px rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15);
+                }
+            }
+        }
+    }
+}

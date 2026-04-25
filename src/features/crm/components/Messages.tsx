@@ -27,6 +27,7 @@ const Messages = () => {
     // État de la conversation sélectionnée
     const [selectedGroup, setSelectedGroup] = useState<ChatGroup | null>(null);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [messagesCache, setMessagesCache] = useState<Record<string, ChatMessage[]>>({});
 
     // État de saisie
     const [newMessage, setNewMessage] = useState('');
@@ -147,9 +148,23 @@ const Messages = () => {
         else setGroups(trash);
     };
 
-    const loadMessages = async (groupId: string) => {
-        const msgs = await chatApi.fetchMessages(groupId);
-        setMessages(msgs);
+    const loadMessages = async (groupId: string, useCache = true) => {
+        // 1. Essayer de charger depuis le cache pour une réponse instantanée
+        if (useCache && messagesCache[groupId]) {
+            setMessages(messagesCache[groupId]);
+        } else if (!useCache || !messagesCache[groupId]) {
+            // Si pas de cache ou forcé, on peut vider l'écran ou garder l'ancien
+            // setMessages([]); 
+        }
+
+        // 2. Charger les messages frais en arrière-plan
+        try {
+            const msgs = await chatApi.fetchMessages(groupId);
+            setMessages(msgs);
+            setMessagesCache(prev => ({ ...prev, [groupId]: msgs }));
+        } catch (err) {
+            console.error('Erreur chargement messages:', err);
+        }
     };
 
     const handleSendMessage = async (e: React.FormEvent) => {
@@ -203,6 +218,19 @@ const Messages = () => {
         }
     };
 
+    const handleToggleStar = async (groupId: string, newState: boolean) => {
+        if (!user) return;
+        try {
+            await chatApi.toggleStar(groupId, user.id, newState);
+            await loadGroups();
+            if (selectedGroup?.id === groupId) {
+                setSelectedGroup(prev => prev ? { ...prev, is_important: newState } : null);
+            }
+        } catch (err: any) {
+            showToast('Erreur lors de la mise à jour des favoris', 'error');
+        }
+    };
+
     const handleTrash = async (group: ChatGroup, e: React.MouseEvent) => {
         e.stopPropagation();
         if (!user) return;
@@ -231,14 +259,6 @@ const Messages = () => {
         await chatApi.permanentlyDeleteThread(group.id, user.id);
         showToast('Discussion supprimée définitivement', 'success');
         if (selectedGroup?.id === group.id) setSelectedGroup(null);
-        loadGroups();
-    };
-
-    const handleToggleStar = async (group: ChatGroup, e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!user) return;
-        const newState = !group.is_important;
-        await chatApi.toggleStar(group.id, user.id, newState);
         loadGroups();
     };
 
@@ -283,6 +303,7 @@ const Messages = () => {
                     <span>Nouveau message</span>
                 </button>
 
+                <div className="sidebar-section-label">Dossiers</div>
                 <nav className="mailbox-folders">
                     {folderConfig.map(f => (
                         <button
@@ -348,35 +369,50 @@ const Messages = () => {
                                         <span className="thread-title">{title}</span>
                                         <span className="thread-date">{formatTime(group.last_message_at)}</span>
                                     </div>
-                                    <div className="thread-bottom">
+                                    <div className="thread-content-row">
                                         <span className="thread-preview">
                                             {group.last_sender ? <strong>{group.last_sender.split(' ')[0]}: </strong> : ''}
                                             {group.last_message || 'Nouvelle discussion'}
                                         </span>
-                                        <div className="thread-meta">
-                                            {hasUnread && <span className="unread-dot">{group.unread_count}</span>}
+                                        {hasUnread && <div className="unread-dot" />}
+                                    </div>
+                                    <div className="thread-actions" style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                                        <button 
+                                            className={`star-icon ${group.is_important ? 'active' : ''}`}
+                                            onClick={(e) => { e.stopPropagation(); handleToggleStar(group.id, !group.is_important); }}
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                                        >
+                                            <Star size={14} fill={group.is_important ? "#fbbf24" : "none"} stroke={group.is_important ? "#fbbf24" : "#94a3b8"} />
+                                        </button>
+
+                                        {folder !== 'trash' && group.type !== 'public' && (
                                             <button 
-                                                className={`thread-star-btn ${group.is_important ? 'active' : ''}`}
-                                                onClick={e => handleToggleStar(group, e)}
+                                                className="thread-del-btn" 
+                                                onClick={e => { e.stopPropagation(); handleTrash(group, e); }}
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#94a3b8' }}
                                             >
-                                                <Star size={14} fill={group.is_important ? "currentColor" : "none"} />
+                                                <Trash2 size={13} />
                                             </button>
-                                            {folder !== 'trash' && group.type !== 'public' && (
-                                                <button className="thread-del-btn" onClick={e => handleTrash(group, e)} title="Mettre à la corbeille">
+                                        )}
+                                        
+                                        {folder === 'trash' && (
+                                            <>
+                                                <button 
+                                                    className="thread-restore-btn" 
+                                                    onClick={e => { e.stopPropagation(); handleRestore(group, e); }}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#94a3b8' }}
+                                                >
+                                                    <ArrowLeft size={13} />
+                                                </button>
+                                                <button 
+                                                    className="thread-del-btn danger" 
+                                                    onClick={e => { e.stopPropagation(); handlePermanentDelete(group, e); }}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#ef4444' }}
+                                                >
                                                     <Trash2 size={13} />
                                                 </button>
-                                            )}
-                                            {folder === 'trash' && (
-                                                <>
-                                                    <button className="thread-restore-btn" onClick={e => handleRestore(group, e)} title="Restaurer">
-                                                        <ArrowLeft size={13} />
-                                                    </button>
-                                                    <button className="thread-del-btn danger" onClick={e => handlePermanentDelete(group, e)} title="Supprimer définitivement">
-                                                        <Trash2 size={13} />
-                                                    </button>
-                                                </>
-                                            )}
-                                        </div>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -402,6 +438,15 @@ const Messages = () => {
                             <div className="detail-info">
                                 <h3>{getGroupTitle(selectedGroup)}</h3>
                                 <span>{selectedGroup.type === 'public' ? 'Canal ouvert' : 'Privé'}</span>
+                            </div>
+                            <div className="detail-actions" style={{ marginLeft: 'auto', display: 'flex', gap: '10px' }}>
+                                <button 
+                                    className={`icon-btn ${selectedGroup.is_important ? 'active' : ''}`}
+                                    onClick={() => handleToggleStar(selectedGroup.id, !selectedGroup.is_important)}
+                                    title={selectedGroup.is_important ? "Retirer des favoris" : "Marquer comme important"}
+                                >
+                                    <Star size={20} fill={selectedGroup.is_important ? "#fbbf24" : "none"} stroke={selectedGroup.is_important ? "#fbbf24" : "currentColor"} />
+                                </button>
                             </div>
                         </div>
 

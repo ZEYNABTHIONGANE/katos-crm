@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { Eye, EyeOff } from 'lucide-react';
 import logo from '@/assets/LOGO-KATOS (2).png';
 
 const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isTakingLong, setIsTakingLong] = useState(false);
@@ -75,14 +77,24 @@ const Login = () => {
                     </div>
                     <div>
                         <label className="login-label">Mot de passe</label>
-                        <input
-                            className="login-input"
-                            type="password"
-                            placeholder="••••••••"
-                            value={password}
-                            onChange={e => { setPassword(e.target.value); setError(''); }}
-                            required
-                        />
+                        <div className="password-input-wrapper">
+                            <input
+                                className="login-input"
+                                type={showPassword ? 'text' : 'password'}
+                                placeholder="••••••••"
+                                value={password}
+                                onChange={e => { setPassword(e.target.value); setError(''); }}
+                                required
+                            />
+                            <button
+                                type="button"
+                                className="password-toggle"
+                                onClick={() => setShowPassword(!showPassword)}
+                                tabIndex={-1}
+                            >
+                                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                            </button>
+                        </div>
                     </div>
                     {error && <div className="login-error">⚠️ {error}</div>}
                     <button 
