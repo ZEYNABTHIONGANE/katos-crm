@@ -1,23 +1,28 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { Eye, EyeOff } from 'lucide-react';
 import logo from '@/assets/LOGO-KATOS (2).png';
 
 const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
     const { login } = useAuth();
     const navigate = useNavigate();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setLoading(true);
         setError('');
         const { error } = await login(email, password);
         if (!error) navigate('/');
         else {
             if (error.status === 400) setError('Identifiants invalides.');
             else setError(error.message || 'Une erreur est survenue lors de la connexion.');
+            setLoading(false);
         }
     };
 
@@ -46,17 +51,29 @@ const Login = () => {
                     </div>
                     <div>
                         <label className="login-label">Mot de passe</label>
-                        <input
-                            className="login-input"
-                            type="password"
-                            placeholder="••••••••"
-                            value={password}
-                            onChange={e => { setPassword(e.target.value); setError(''); }}
-                            required
-                        />
+                        <div className="password-input-wrapper">
+                            <input
+                                className="login-input"
+                                type={showPassword ? 'text' : 'password'}
+                                placeholder="••••••••"
+                                value={password}
+                                onChange={e => { setPassword(e.target.value); setError(''); }}
+                                required
+                            />
+                            <button
+                                type="button"
+                                className="password-toggle"
+                                onClick={() => setShowPassword(!showPassword)}
+                                tabIndex={-1}
+                            >
+                                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                            </button>
+                        </div>
                     </div>
                     {error && <div className="login-error">⚠️ {error}</div>}
-                    <button className="login-btn" type="submit">Se connecter →</button>
+                    <button className="login-btn" type="submit" disabled={loading}>
+                        {loading ? <span className="loader"></span> : 'Se connecter →'}
+                    </button>
                 </form>
             </div>
         </div>

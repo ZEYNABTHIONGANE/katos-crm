@@ -31,6 +31,14 @@
     border: 1px solid color.change($clr-white, $alpha: 0.5);
 }
 
+.modal-glassy {
+    background: rgba(255, 255, 255, 0.8) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.4) !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+}
+
 @keyframes modalIn {
     from {
         opacity: 0;

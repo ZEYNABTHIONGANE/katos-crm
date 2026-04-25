@@ -58,15 +58,15 @@ const AgentSelectorModal = ({ onClose, onSelect, excludeUserId }: AgentSelectorM
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px' }}>
+            <div className="modal-container modal-glassy" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px' }}>
                 <div className="modal-header">
                     <h3>Nouveau message</h3>
-                    <button className="close-btn" onClick={onClose}><X size={20} /></button>
+                    <button className="modal-close" onClick={onClose}><X size={20} /></button>
                 </div>
 
                 <div className="modal-body">
-                    <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '14px' }}>
-                        Sélectionnez un ou plusieurs destinataires
+                    <p style={{ fontSize: '0.875rem', color: '#334155', marginBottom: '16px', fontWeight: 500 }}>
+                        Sélectionnez un ou plusieurs destinataires pour démarrer une discussion
                     </p>
                     <div className="search-bar">
                         <Search size={18} />
@@ -81,8 +81,9 @@ const AgentSelectorModal = ({ onClose, onSelect, excludeUserId }: AgentSelectorM
 
                     {selectedIds.length > 0 && (
                         <div style={{
-                            background: 'rgba(43,46,131,0.06)', borderRadius: '10px',
-                            padding: '8px 12px', marginBottom: '10px', fontSize: '0.82rem', color: '#2B2E83'
+                            background: 'rgba(43,46,131,0.1)', borderRadius: '12px',
+                            padding: '10px 14px', marginBottom: '14px', fontSize: '0.85rem', 
+                            color: '#1e1b4b', fontWeight: 600, border: '1px solid rgba(43,46,131,0.15)'
                         }}>
                             {selectedIds.length} destinataire(s) sélectionné(s)
                         </div>
@@ -90,9 +91,9 @@ const AgentSelectorModal = ({ onClose, onSelect, excludeUserId }: AgentSelectorM
 
                     <div className="agents-list">
                         {isLoading ? (
-                            <p style={{ textAlign: 'center', color: '#64748b', padding: '20px' }}>Chargement...</p>
+                            <p style={{ textAlign: 'center', color: '#475569', padding: '20px' }}>Chargement...</p>
                         ) : filteredAgents.length === 0 ? (
-                            <p style={{ textAlign: 'center', color: '#64748b', padding: '20px' }}>Aucun collaborateur trouvé</p>
+                            <p style={{ textAlign: 'center', color: '#475569', padding: '20px' }}>Aucun collaborateur trouvé</p>
                         ) : filteredAgents.map(agent => {
                             const isSelected = selectedIds.includes(agent.id);
                             return (
@@ -116,18 +117,20 @@ const AgentSelectorModal = ({ onClose, onSelect, excludeUserId }: AgentSelectorM
 
                 <div className="modal-footer" style={{
                     padding: '16px 20px', display: 'flex',
-                    justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #eee'
+                    justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid rgba(0,0,0,0.05)'
                 }}>
                     <button className="btn-secondary" onClick={onClose}>Annuler</button>
                     <button
+                        className="btn-primary"
                         onClick={() => { if (selectedIds.length > 0) onSelect(selectedIds); }}
                         disabled={selectedIds.length === 0}
                         style={{
-                            padding: '10px 22px', borderRadius: '10px',
+                            padding: '12px 24px', borderRadius: '12px',
                             background: selectedIds.length === 0 ? '#94a3b8' : '#2B2E83',
                             color: 'white', border: 'none',
                             cursor: selectedIds.length === 0 ? 'not-allowed' : 'pointer',
-                            fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s'
+                            fontWeight: 700, fontSize: '0.95rem', transition: 'all 0.2s',
+                            boxShadow: selectedIds.length > 0 ? '0 4px 12px rgba(43,46,131,0.2)' : 'none'
                         }}
                     >
                         Démarrer la discussion

@@ -70,12 +70,33 @@
         }
 
         &.selected {
-            background: rgba(v.$clr-primary, 0.08);
-            border-color: rgba(v.$clr-primary, 0.2);
+            background: rgba(v.$clr-primary, 0.1);
+            border-color: rgba(v.$clr-primary, 0.3);
             .agent-avatar-sm {
                 background: v.$clr-primary;
                 color: white;
             }
+            .agent-name {
+                color: v.$clr-primary;
+            }
+        }
+    }
+
+    .agent-info-sm {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+
+        .agent-name {
+            font-weight: 700;
+            color: v.$clr-grey-800;
+            font-size: 0.95rem;
+        }
+
+        .agent-role {
+            font-size: 0.75rem;
+            color: v.$clr-grey-500;
+            font-weight: 500;
         }
     }
 }
@@ -96,22 +117,27 @@
     margin: 16px 20px;
     border: 1px solid rgba(255, 255, 255, 0.5);
 
-    // ──Sidebar Dossiers ──
+    // ──Sidebar Dossiers (Style Slack Moderne / Light) ──
     .mailbox-sidebar {
-        width: 230px;
+        width: 240px;
         display: flex;
         flex-direction: column;
-        background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-        padding: 24px 14px;
-        gap: 10px;
+        background: rgba(248, 250, 252, 0.5); // Très clair et glassy
+        backdrop-filter: blur(10px);
+        padding: 24px 16px;
+        gap: 8px;
         flex-shrink: 0;
+        border-right: 1px solid rgba(0, 0, 0, 0.05);
 
         .mailbox-sidebar-header h2 {
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             font-weight: 800;
-            color: white;
-            margin: 0 0 20px 10px;
+            color: v.$clr-grey-900;
+            margin: 0 0 20px 8px;
             letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .mailbox-compose-btn {
@@ -121,79 +147,101 @@
             gap: 10px;
             width: 100%;
             padding: 12px;
-            background: linear-gradient(135deg, v.$clr-primary, v.$clr-accent);
+            background: v.$clr-primary;
             color: white;
             border: none;
-            border-radius: 14px;
+            border-radius: 12px;
             font-weight: 700;
             cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            margin-bottom: 12px;
-            box-shadow: 0 8px 20px rgba(v.$clr-primary, 0.3);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(v.$clr-primary, 0.2);
 
             &:hover {
-                transform: translateY(-2px) scale(1.02);
-                box-shadow: 0 12px 24px rgba(v.$clr-primary, 0.4);
+                transform: translateY(-2px);
+                box-shadow: 0 6px 16px rgba(v.$clr-primary, 0.3);
+                background: v.$clr-accent;
             }
+        }
+
+        .sidebar-section-label {
+            font-size: 0.7rem;
+            font-weight: 800;
+            color: v.$clr-grey-400;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin: 10px 0 8px 10px;
         }
 
         .mailbox-folder-btn {
             display: flex;
             align-items: center;
             gap: 12px;
-            padding: 11px 14px;
-            border-radius: 12px;
+            padding: 10px 14px;
+            border-radius: 10px;
             border: none;
             background: transparent;
             cursor: pointer;
-            color: rgba(255, 255, 255, 0.5);
+            color: v.$clr-grey-600;
             font-size: 0.9rem;
-            font-weight: 500;
+            font-weight: 600;
             transition: all 0.2s;
             width: 100%;
 
+            .folder-icon {
+                opacity: 0.7;
+                transition: all 0.2s;
+            }
+
             &:hover {
-                background: rgba(255, 255, 255, 0.08);
-                color: rgba(255, 255, 255, 0.9);
+                background: rgba(v.$clr-primary, 0.05);
+                color: v.$clr-primary;
+                .folder-icon { opacity: 1; }
             }
 
             &.active {
-                background: rgba(255, 255, 255, 0.15);
+                background: v.$clr-primary;
                 color: white;
-                font-weight: 600;
-                box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+                box-shadow: 0 4px 12px rgba(v.$clr-primary, 0.15);
+                .folder-icon { opacity: 1; color: white; }
+                .folder-badge { background: white; color: v.$clr-primary; }
             }
 
             .folder-badge {
                 background: v.$clr-accent;
                 color: white;
-                border-radius: 50px;
+                border-radius: 6px;
                 font-size: 0.7rem;
-                font-weight: 700;
-                padding: 2px 9px;
+                font-weight: 800;
+                padding: 2px 6px;
                 margin-left: auto;
-                box-shadow: 0 4px 10px rgba(v.$clr-accent, 0.3);
+                transition: all 0.2s;
             }
         }
     }
 
-    // ── Liste des discussions ──
+    // ── Liste des discussions (Thread List) ──
     .mailbox-list {
-        width: 340px;
+        width: 360px;
         display: flex;
         flex-direction: column;
-        border-right: 1px solid rgba(0, 0, 0, 0.04);
-        background: rgba(255, 255, 255, 0.4);
+        border-right: 1px solid rgba(0, 0, 0, 0.06);
+        background: #f8fafc; // Subtle tint to separate from detail panel
         flex-shrink: 0;
+        z-index: 1;
 
         .mailbox-list-header {
-            padding: 20px 22px;
+            padding: 24px 22px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
             h3 { 
                 margin: 0; 
-                font-size: 1.1rem; 
+                font-size: 1.15rem; 
                 font-weight: 800;
-                color: v.$clr-grey-800; 
-                letter-spacing: -0.2px;
+                color: v.$clr-grey-900; 
+                letter-spacing: -0.3px;
             }
         }
 
@@ -203,35 +251,36 @@
             input {
                 width: 100%;
                 padding: 10px 14px 10px 40px;
-                background: rgba(0, 0, 0, 0.04);
-                border: 1px solid transparent;
+                background: white; // White input on grey background
+                border: 1px solid rgba(0,0,0,0.05);
                 border-radius: 12px;
                 outline: none;
                 font-size: 0.9rem;
                 transition: all 0.2s;
-                &:focus { background: white; border-color: v.$clr-primary; box-shadow: 0 4px 12px rgba(0,0,0,0.04); }
+                color: v.$clr-grey-800;
+                &:focus { border-color: v.$clr-primary; box-shadow: 0 4px 12px rgba(v.$clr-primary, 0.08); }
             }
-            svg { position: absolute; left: 32px; top: 38%; transform: translateY(-50%); color: v.$clr-grey-400; }
+            svg { position: absolute; left: 32px; top: 50%; transform: translateY(-50%); color: v.$clr-grey-400; }
         }
 
         .mailbox-thread-list {
             flex: 1;
             overflow-y: auto;
-            padding: 10px;
+            padding: 8px;
 
             .mailbox-thread {
                 display: flex;
                 gap: 14px;
-                padding: 14px;
+                padding: 16px;
                 border-radius: 16px;
                 cursor: pointer;
-                transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-                margin-bottom: 6px;
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                margin-bottom: 4px;
                 border: 1px solid transparent;
 
                 .thread-avatar-lg {
-                    width: 46px;
-                    height: 46px;
+                    width: 48px;
+                    height: 48px;
                     background: white;
                     border-radius: 14px;
                     display: flex;
@@ -241,18 +290,27 @@
                     font-size: 1.1rem;
                     color: v.$clr-primary;
                     flex-shrink: 0;
-                    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
+                    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
                 }
 
                 .thread-body { flex: 1; overflow: hidden; }
-                .thread-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-                .thread-title { font-weight: 700; font-size: 0.95rem; color: v.$clr-grey-800; }
-                .thread-date { font-size: 0.75rem; color: v.$clr-grey-400; }
-                .thread-preview { font-size: 0.85rem; color: v.$clr-grey-500; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .thread-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+                .thread-title { font-weight: 800; font-size: 0.95rem; color: v.$clr-grey-900; }
+                .thread-date { font-size: 0.75rem; color: v.$clr-grey-500; font-weight: 600; }
+                .thread-preview { 
+                    font-size: 0.85rem; 
+                    color: v.$clr-grey-600; 
+                    display: block; 
+                    white-space: nowrap; 
+                    overflow: hidden; 
+                    text-overflow: ellipsis; 
+                    line-height: 1.4;
+                }
 
                 &:hover {
-                    background: rgba(v.$clr-primary, 0.03);
-                    transform: translateX(4px);
+                    background: white;
+                    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+                    transform: translateY(-1px);
                 }
 
                 &.active {
@@ -263,7 +321,10 @@
                     .thread-avatar-lg { background: rgba(255, 255, 255, 0.2); color: white; }
                 }
 
-                &.unread .thread-title { color: v.$clr-primary; }
+                &.unread {
+                    .thread-title { color: v.$clr-primary; }
+                    .thread-preview { color: v.$clr-grey-900; font-weight: 600; }
+                }
             }
         }
     }

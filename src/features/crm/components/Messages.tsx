@@ -283,6 +283,7 @@ const Messages = () => {
                     <span>Nouveau message</span>
                 </button>
 
+                <div className="sidebar-section-label">Dossiers</div>
                 <nav className="mailbox-folders">
                     {folderConfig.map(f => (
                         <button
