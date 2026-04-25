@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, UserPlus, ClipboardCheck, LogOut, Home, Building2, HardHat, PieChart, History, Folders, Calendar, HelpCircle, MessageSquare, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, ClipboardCheck, LogOut, Home, Building2, HardHat, PieChart, History, Calendar, HelpCircle, MessageSquare, ShieldAlert } from 'lucide-react';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { useChat } from '@/app/providers/ChatProvider';
 import { useContactStore } from '@/stores/contactStore';

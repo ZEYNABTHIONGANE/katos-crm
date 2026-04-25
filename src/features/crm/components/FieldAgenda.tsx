@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, User, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import { Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { useToast } from '@/app/providers/ToastProvider';
 import { fetchAgentSlots, createFieldSlot, cancelFieldSlot, type FieldSlot } from '../api/fieldApi';
