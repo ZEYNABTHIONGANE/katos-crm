@@ -340,7 +340,7 @@
 .dash-hero {
     background: linear-gradient(135deg, #0b0e21 0%, $clr-primary 100%);
     border-radius: $radius-xl;
-    padding: clamp($space-6, 5vw, $space-10);
+    padding: $space-6;
     position: relative;
     overflow: hidden;
     box-shadow: $shadow-xl;
@@ -348,6 +348,15 @@
     flex-direction: column;
     gap: $space-6;
     border: 1px solid rgba(255, 255, 255, 0.05);
+
+    @media (min-width: 1024px) {
+        padding: $space-10;
+    }
+
+    @media (max-width: 480px) {
+        padding: $space-4;
+        border-radius: $radius-lg;
+    }
 }
 
 /* Bulles décoratives animées - Plus subtiles */
@@ -398,7 +407,6 @@
 }
 
 @media (min-width: 1024px) {
-    .dash-hero { padding: $space-10; }
     .hero-stats { flex-direction: row; gap: $space-8; }
 }
 
@@ -409,6 +417,12 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 1rem;
+
+    @media (max-width: 640px) {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
 }
 
 /* ================================================================
@@ -521,6 +535,10 @@
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 1.25rem;
     width: 100%;
+
+    @media (max-width: 500px) {
+        grid-template-columns: 1fr;
+    }
 }
 
 .stat-card-v2 {
@@ -4349,3 +4367,85 @@
         cursor: not-allowed;
     }
 }
+
+/* ================================================================
+   KANBAN & PIPELINE RESPONSIVE
+   ================================================================ */
+.pipeline-toolbar {
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+
+    @media (max-width: 768px) {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+        padding: 0.75rem;
+
+        .search-box {
+            width: 100% !important;
+            min-width: 0 !important;
+        }
+
+        .filter-group {
+            width: 100% !important;
+            
+            select {
+                width: 100% !important;
+                flex: 1;
+            }
+        }
+    }
+}
+
+.kanban-board {
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+    padding: 0.5rem 0.25rem 2rem;
+    min-height: calc(100vh - 280px);
+    -webkit-overflow-scrolling: touch;
+    @include custom-scrollbar(6px, var(--border-color));
+
+    @media (max-width: 768px) {
+        padding-top: 0;
+        gap: 0.75rem;
+    }
+}
+
+.kanban-column {
+    min-width: 280px;
+    width: 280px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    
+    .column-header {
+        padding: 0.75rem 1rem;
+        h3 {
+            font-size: 0.85rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    }
+}
+
+.kcard-footer {
+    @media (max-width: 768px) {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 6px;
+        
+        .kcard-since {
+            font-size: 0.65rem;
+        }
+    }
+}
+

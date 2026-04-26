@@ -8,6 +8,10 @@
     padding: 0 2rem;
     box-shadow: var(--shadow-sm);
     z-index: 10;
+
+    @media (max-width: 768px) {
+        padding: 0 1rem;
+    }
 }
 
 .header-left {
@@ -157,4 +161,8 @@
     font-weight: 500;
     font-size: 0.875rem;
     color: var(--text-main);
+
+    @media (max-width: 768px) {
+        display: none;
+    }
 }

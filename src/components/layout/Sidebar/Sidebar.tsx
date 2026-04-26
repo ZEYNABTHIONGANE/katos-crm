@@ -5,7 +5,7 @@ import { useChat } from '@/app/providers/ChatProvider';
 import { useContactStore } from '@/stores/contactStore';
 import logo from '@/assets/LOGO-KATOS (2).png';
 
-const Sidebar = ({ isCollapsed }: { isCollapsed: boolean }) => {
+const Sidebar = ({ isCollapsed, isMobileActive }: { isCollapsed: boolean, isMobileActive?: boolean }) => {
     const { user, logout } = useAuth();
     const { totalUnreadCount } = useChat();
     const { followUps } = useContactStore();
@@ -166,7 +166,7 @@ const Sidebar = ({ isCollapsed }: { isCollapsed: boolean }) => {
     })).filter(section => section.items.length > 0);
 
     return (
-        <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
+        <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''} ${isMobileActive ? 'active-mobile' : ''}`}>
             <div className="sidebar-logo">
                 <img src={logo} alt="Katos CRM" className="logo-img" />
             </div>

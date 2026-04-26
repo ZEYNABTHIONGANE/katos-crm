@@ -29,6 +29,12 @@
     animation: modalIn $trans-base;
     overflow: hidden;
     border: 1px solid color.change($clr-white, $alpha: 0.5);
+
+    @media (max-width: 768px) {
+        max-height: 95vh;
+        margin: 0 10px;
+        width: calc(100% - 20px);
+    }
 }
 
 .modal-glassy {
@@ -96,6 +102,10 @@
     padding: $space-8;
     overflow-y: auto;
     flex: 1;
+
+    @media (max-width: 768px) {
+        padding: $space-6;
+    }
     
     // Custom scrollbar for modal body
     scrollbar-width: thin;

@@ -241,7 +241,7 @@ const FieldAgenda = () => {
             </div>
 
             <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="Ouvrir un créneau de disponibilité" size="md">
-                <div className="modal-body">
+                <div>
                     <div className="form-grid">
                         <div className="form-group">
                             <label className="form-label">Date d&apos;intervention</label>
@@ -283,7 +283,7 @@ const FieldAgenda = () => {
                         </div>
                     </div>
 
-                    <div className="form-actions" style={{ marginTop: '24px' }}>
+                    <div className="form-actions" style={{ marginTop: '24px', paddingBottom: '10px' }}>
                         <button className="btn-secondary" onClick={() => setShowAddModal(false)} disabled={isCreating}>
                             Annuler
                         </button>

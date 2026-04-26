@@ -272,4 +272,83 @@
             }
         }
     }
+    // ── Responsive Adjustments ──
+    @media (max-width: 768px) {
+        height: auto;
+        min-height: calc(100vh - 120px);
+        margin: 5px;
+
+        .agenda-header {
+            flex-direction: column;
+            padding: 1rem;
+            gap: 1rem;
+            align-items: stretch;
+
+            .header-left {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.75rem;
+
+                .nav-controls {
+                    width: 100%;
+                    justify-content: space-between;
+                }
+            }
+
+            .header-right {
+                display: none; // Hide view switches on mobile for now or stack them
+            }
+        }
+
+        .agenda-body {
+            flex-direction: column;
+        }
+
+        .agenda-sidebar {
+            width: 100%;
+            border-right: none;
+            border-bottom: 1px solid #eee;
+            padding: 1rem;
+            gap: 1rem;
+
+            .btn-create {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            // Optionally hide filters on mobile to save space
+            .calendar-filters {
+                display: flex;
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 1rem;
+                h3 { width: 100%; margin-bottom: 0.5rem; }
+            }
+        }
+
+        .agenda-grid-container {
+            overflow-x: auto;
+        }
+
+        .time-column {
+            width: 50px;
+        }
+
+        .days-header {
+            .day-label {
+                min-width: 80px;
+                .day-number {
+                    width: 32px;
+                    height: 32px;
+                    font-size: 1.1rem;
+                }
+            }
+        }
+
+        .grid-body {
+            .day-column {
+                min-width: 80px;
+            }
+        }
+    }
 }

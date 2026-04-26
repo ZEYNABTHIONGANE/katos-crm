@@ -340,8 +340,8 @@ const Pipeline = () => {
                 </div>
             </div>
 
-            <div className="pipeline-toolbar card-premium mb-4" style={{ display: 'flex', gap: '1rem', padding: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div className="search-box" style={{ flex: 1, minWidth: '250px' }}>
+            <div className="pipeline-toolbar mb-4">
+                <div className="search-box">
                     <Search size={18} className="text-muted" />
                     <input type="text" placeholder="Rechercher (nom, commercial, tel...)" value={search} onChange={(e) => setSearch(e.target.value)} />
                 </div>
@@ -372,7 +372,7 @@ const Pipeline = () => {
                         const meta = COLUMN_META[colId];
                         const cards = filteredColumns[colId] ?? [];
                         return (
-                            <div key={colId} className="kanban-column" style={{ minWidth: '280px', background: 'var(--bg-app)', border: 'none' }}>
+                            <div key={colId} className="kanban-column">
                                 <div className="column-header" style={{ borderTopColor: meta.color, borderRadius: '12px 12px 0 0', background: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                                     <div className="column-title">
                                         <span style={{ color: meta.color }}>{meta.icon}</span>

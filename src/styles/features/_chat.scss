@@ -563,21 +563,40 @@
                 flex: 1;
                 background: #f1f5f9;
                 border-radius: 18px;
-                padding: 6px 12px;
+                padding: 4px 14px;
                 display: flex;
-                flex-direction: column;
+                align-items: center; // Align items horizontally
+                gap: 8px;
                 transition: all 0.2s;
 
                 &:focus-within { background: #eef2f7; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); }
 
                 textarea {
-                    width: 100%;
+                    flex: 1;
                     border: none;
                     background: transparent;
-                    padding: 8px 0;
+                    padding: 10px 0;
                     resize: none;
                     outline: none;
                     font-size: 0.95rem;
+                    line-height: 1.4;
+                    max-height: 120px;
+
+                    &::placeholder {
+                        font-size: 0.85rem;
+                        color: v.$clr-grey-400;
+                    }
+
+                    @media (max-width: 768px) {
+                        font-size: 0.9rem;
+                        &::placeholder { font-size: 0.8rem; }
+                    }
+                }
+
+                .input-toolbar {
+                    display: flex;
+                    align-items: center;
+                    padding-bottom: 4px; // Small adjustment for alignment with text baseline
                 }
             }
 
@@ -674,20 +693,52 @@
     }
 
     // ── Responsive States ──
-    &.mobile-mode {
+    @media (max-width: 768px) {
         margin: 0;
         border-radius: 0;
         height: calc(100vh - 64px);
-        .mailbox-sidebar { display: none; }
+        flex-direction: column;
 
-        @media (max-width: 768px) {
-            .mailbox-list { width: 100%; }
-            .mailbox-detail { display: none; }
-            &.has-selection {
-                .mailbox-list { display: none; }
-                .mailbox-detail { display: flex; }
-                .back-to-list-mobile { display: flex; }
-                .close-detail-desktop { display: none; }
+        .mailbox-sidebar { display: none; }
+        .mailbox-list { width: 100%; border-right: none; }
+        .mailbox-detail { display: none; }
+        .back-to-list-mobile { display: none; }
+        .close-detail-desktop { display: flex; }
+
+        &.has-selection {
+            .mailbox-list { display: none; }
+            .mailbox-detail { 
+                display: flex;
+                width: 100%;
+                height: 100%;
+            }
+            .back-to-list-mobile { display: flex; }
+            .close-detail-desktop { display: none; }
+        }
+
+        .detail-header {
+            padding: 0 1rem;
+            height: 60px;
+        }
+
+        .detail-messages {
+            padding: 1rem;
+            gap: 12px;
+        }
+
+        .detail-input {
+            padding: 12px 1rem;
+            gap: 8px;
+            
+            .input-wrapper {
+                padding: 4px 10px;
+                textarea { font-size: 0.9rem; }
+            }
+
+            .send-btn {
+                padding: 10px 14px;
+                span { display: none; } // Hide "Envoyer" text on very small screens
+                svg { margin: 0; }
             }
         }
     }

@@ -221,3 +221,19 @@
     align-items: center;
     justify-content: center;
 }
+
+@media (max-width: 480px) {
+    .login-card {
+        padding: 2rem 1.5rem;
+        margin: 0 1.25rem;
+        border-radius: 1.25rem;
+        width: calc(100% - 2.5rem);
+    }
+
+    .login-brand {
+        margin-bottom: 2rem;
+        .login-logo {
+            max-width: 140px;
+        }
+    }
+}
