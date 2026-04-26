@@ -4,13 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import {
     MoreVertical, FileText, MessageSquare, Bookmark, FileSignature, CreditCard, Folder, Wrench,
     Circle, Clock, CheckCircle2, Star, Link as LinkIcon, Megaphone, User,
-    Search, ArrowRight, Trash2, Calendar
+    Search, ArrowRight, Trash2, Calendar, GripVertical
 } from 'lucide-react';
 import { useContactStore, STATUS_TO_COLUMN, type CrmContact } from '@/stores/contactStore';
 import { useToast } from '@/app/providers/ToastProvider';
 import { fetchCommercials } from '../api/contactApi';
 import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
 import Modal from '@/components/ui/Modal';
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 
 // ---------- Types ----------
 const COLUMN_META: Record<string, { title: string; color: string; icon: React.ReactNode }> = {
@@ -68,32 +69,46 @@ const SERVICE_LABELS: Record<string, { label: string; color: string }> = {
 
 // ---------- KanbanCard ----------
 const KanbanCard = ({
-    contact, colId, colColor, onMove, onDelete, userRole
+    contact, colId, colColor, onMove, onDelete, userRole, provided, isDragging
 }: {
     contact: CrmContact; colId: string; colColor: string;
     onMove: (id: number, toColId: string) => void;
     onDelete: (id: number) => void;
     userRole?: string;
+    provided: any;
+    isDragging: boolean;
 }) => {
     const navigate = useNavigate();
     const [menuOpen, setMenuOpen] = useState(false);
-    const curIdx = columnOrder.indexOf(colId);
-    const nextCol = columnOrder.slice(curIdx + 1).find(c => c !== 'pas_interesse');
     const svc = contact.service ? SERVICE_LABELS[contact.service] : null;
 
     return (
         <div
-            className="kanban-card"
-            style={{ cursor: 'pointer', padding: '0.6rem', borderRadius: '8px', marginBottom: '0.5rem' }}
+            className={`kanban-card ${isDragging ? 'dragging' : ''}`}
+            ref={provided.innerRef}
+            {...provided.draggableProps}
+            {...provided.dragHandleProps}
+            style={{ 
+                ...provided.draggableProps.style,
+                cursor: 'grab', 
+                padding: '0.8rem', 
+                borderRadius: '12px', 
+                marginBottom: '0.75rem',
+                borderLeft: `4px solid ${colColor}`,
+                boxShadow: isDragging ? '0 10px 25px rgba(0,0,0,0.1)' : 'var(--shadow-sm)'
+            }}
             onClick={() => navigate(`/prospects/${contact.id}`)}
         >
-            <div className="kcard-header" style={{ marginBottom: '0.5rem' }}>
-                <div className="kcard-avatar" style={{ width: '28px', height: '28px', fontSize: '0.8rem' }}>
+            <div className="kcard-header" style={{ marginBottom: '0.6rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="drag-handle" style={{ color: 'var(--text-muted)', display: 'flex', opacity: 0.5 }}>
+                    <GripVertical size={14} />
+                </div>
+                <div className="kcard-avatar" style={{ width: '32px', height: '32px', fontSize: '0.85rem', backgroundColor: colColor + '22', color: colColor }}>
                     {contact.name.charAt(0)}
                 </div>
-                <div className="kcard-info">
-                    <span className="kcard-name" style={{ fontSize: '0.813rem', fontWeight: 600 }}>{contact.name}</span>
-                    {contact.company && <span className="kcard-company" style={{ fontSize: '0.7rem' }}>{contact.company}</span>}
+                <div className="kcard-info" style={{ flex: 1 }}>
+                    <span className="kcard-name" style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)' }}>{contact.name}</span>
+                    {contact.company && <span className="kcard-company" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{contact.company}</span>}
                 </div>
                 <div className="kcard-menu-wrap" onClick={e => e.stopPropagation()}>
                     <button className="btn-icon-sm" onClick={() => setMenuOpen(!menuOpen)}>
@@ -101,11 +116,6 @@ const KanbanCard = ({
                     </button>
                     {menuOpen && (
                         <div className="kcard-dropdown">
-                            {nextCol && ['commercial', 'admin', 'dir_commercial'].includes(userRole || '') && (
-                                <button onClick={() => { onMove(contact.id, nextCol); setMenuOpen(false); }}>
-                                    <ArrowRight size={13} /> Avancer l'étape
-                                </button>
-                            )}
                             <button onClick={() => { navigate(`/prospects/${contact.id}`); setMenuOpen(false); }}>
                                 <FileText size={13} /> Voir la fiche
                             </button>
@@ -124,46 +134,45 @@ const KanbanCard = ({
                 </div>
             </div>
 
-            <div className="kcard-meta" style={{ gap: '4px', flexWrap: 'wrap', marginBottom: '4px' }}>
+            <div className="kcard-meta" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
                 {svc && (
                     <span className="kcard-tag" style={{
-                        fontSize: '0.65rem', padding: '1px 6px', color: svc.color,
-                        borderColor: svc.color + '33', background: svc.color + '0a'
+                        fontSize: '0.7rem', padding: '2px 8px', color: svc.color,
+                        borderColor: svc.color + '33', background: svc.color + '11',
+                        borderRadius: '4px', fontWeight: 600
                     }}>
                         {svc.label}
                     </span>
                 )}
                 {contact.source && (
-                    <span className="kcard-tag" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>
-                        <Megaphone size={9} /> {contact.source}
+                    <span className="kcard-tag" style={{ 
+                        fontSize: '0.7rem', padding: '2px 8px', 
+                        background: 'var(--bg-app)', border: '1px solid var(--border-color)',
+                        borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px'
+                    }}>
+                        <Megaphone size={10} /> {contact.source}
                     </span>
                 )}
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 {contact.propertyTitle && (
-                    <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <LinkIcon size={10} /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.propertyTitle}</span>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <LinkIcon size={12} /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.propertyTitle}</span>
                     </div>
                 )}
-                <div style={{ fontSize: '0.68rem', color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <User size={10} /> {contact.assignedAgent || 'Non assigné'}
+                <div style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <User size={12} /> {contact.assignedAgent || 'Non assigné'}
                 </div>
             </div>
 
-            <div className="kcard-footer" style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-                <span className="kcard-since" style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+            <div className="kcard-footer" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+                <span className="kcard-since" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                     #{contact.id} · {contact.phone}
                 </span>
-                {nextCol && ['commercial', 'admin', 'dir_commercial'].includes(userRole || '') && (
-                    <button
-                        className="kcard-advance-btn"
-                        style={{ borderColor: colColor, color: colColor, padding: '2px 8px', fontSize: '0.65rem' }}
-                        onClick={() => onMove(contact.id, nextCol)}
-                    >
-                        Avancer <ArrowRight size={10} />
-                    </button>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                    <Clock size={10} /> {contact.lastAction || 'Récemment'}
+                </div>
             </div>
         </div>
     );
@@ -273,6 +282,24 @@ const Pipeline = () => {
         }
     };
 
+    const onDragEnd = (result: DropResult) => {
+        const { destination, source, draggableId } = result;
+
+        if (!destination) return;
+        if (destination.droppableId === source.droppableId && destination.index === source.index) return;
+
+        const contactId = parseInt(draggableId);
+        const targetStatusId = destination.droppableId;
+        const newStatus = COLUMN_TO_STATUS[targetStatusId];
+        const contact = contacts.find(c => c.id === contactId);
+
+        if (newStatus && contact) {
+            setMoveModal({ contactId, targetStatus: newStatus, contactName: contact.name });
+            setTransitionNote('');
+            setSelectedRefusal('');
+        }
+    };
+
     const confirmMove = async () => {
         if (!moveModal) return;
         setIsMoving(true);
@@ -294,7 +321,7 @@ const Pipeline = () => {
                 selectedRefusal || undefined
             );
             if (success) {
-                showToast(`Passage à l'étape : ${moveModal.targetStatus}`);
+                showToast(`Mise à jour : ${moveModal.targetStatus}`);
                 setMoveModal(null);
             } else {
                 showToast(`Erreur lors de la mise à jour`, 'error');
@@ -309,7 +336,7 @@ const Pipeline = () => {
             <div className="page-header d-flex-between">
                 <div>
                     <h1>Pipeline Commercial</h1>
-                    <p className="subtitle">Suivi visuel du cycle de vente ({filteredTotal} prospects)</p>
+                    <p className="subtitle">Gérez vos prospects par glisser-déposer ({filteredTotal} prospects)</p>
                 </div>
             </div>
 
@@ -339,45 +366,89 @@ const Pipeline = () => {
                 )}
             </div>
 
-            <div className="kanban-board">
-                {columnOrder.map(colId => {
-                    const meta = COLUMN_META[colId];
-                    const cards = filteredColumns[colId] ?? [];
-                    return (
-                        <div key={colId} className="kanban-column">
-                            <div className="column-header" style={{ borderTopColor: meta.color }}>
-                                <div className="column-title">
-                                    <span>{meta.icon}</span>
-                                    <h3>{meta.title}</h3>
-                                    <span className="column-count" style={{ backgroundColor: meta.color }}>{cards.length}</span>
-                                </div>
-                            </div>
-                            <div className="column-body">
-                                {cards.length > 0 ? cards.map(contact => (
-                                    <KanbanCard key={contact.id} contact={contact} colId={colId} colColor={meta.color} onMove={moveCard} onDelete={deleteContact} userRole={user?.role} />
-                                )) : (
-                                    <div className="empty-column">
-                                        <Circle size={16} style={{ color: 'var(--text-muted)', opacity: 0.3 }} /> {search ? 'Aucun résultat' : 'Colonne vide'}
+            <DragDropContext onDragEnd={onDragEnd}>
+                <div className="kanban-board" style={{ paddingBottom: '2rem' }}>
+                    {columnOrder.map(colId => {
+                        const meta = COLUMN_META[colId];
+                        const cards = filteredColumns[colId] ?? [];
+                        return (
+                            <div key={colId} className="kanban-column" style={{ minWidth: '280px', background: 'var(--bg-app)', border: 'none' }}>
+                                <div className="column-header" style={{ borderTopColor: meta.color, borderRadius: '12px 12px 0 0', background: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                    <div className="column-title">
+                                        <span style={{ color: meta.color }}>{meta.icon}</span>
+                                        <h3 style={{ fontSize: '0.9rem', fontWeight: 700 }}>{meta.title}</h3>
+                                        <span className="column-count" style={{ backgroundColor: meta.color + '22', color: meta.color, fontSize: '0.75rem' }}>{cards.length}</span>
                                     </div>
-                                )}
+                                </div>
+                                <Droppable droppableId={colId}>
+                                    {(provided, snapshot) => (
+                                        <div 
+                                            className={`column-body ${snapshot.isDraggingOver ? 'dragging-over' : ''}`}
+                                            ref={provided.innerRef}
+                                            {...provided.droppableProps}
+                                            style={{ 
+                                                background: snapshot.isDraggingOver ? meta.color + '08' : 'transparent',
+                                                transition: 'background 0.2s ease',
+                                                minHeight: '200px',
+                                                padding: '1rem 0.75rem'
+                                            }}
+                                        >
+                                            {cards.length > 0 ? cards.map((contact, index) => (
+                                                <Draggable key={contact.id} draggableId={contact.id.toString()} index={index}>
+                                                    {(provided, snapshot) => (
+                                                        <KanbanCard 
+                                                            contact={contact} 
+                                                            colId={colId} 
+                                                            colColor={meta.color} 
+                                                            onMove={moveCard}
+                                                            onDelete={deleteContact} 
+                                                            userRole={user?.role} 
+                                                            provided={provided}
+                                                            isDragging={snapshot.isDragging}
+                                                        />
+                                                    )}
+                                                </Draggable>
+                                            )) : (
+                                                <div className="empty-column" style={{ border: '2px dashed var(--border-color)', borderRadius: '12px', margin: '0.5rem 0' }}>
+                                                    <Circle size={16} style={{ color: 'var(--text-muted)', opacity: 0.3 }} /> 
+                                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{search ? 'Aucun résultat' : 'Déposez ici'}</span>
+                                                </div>
+                                            )}
+                                            {provided.placeholder}
+                                        </div>
+                                    )}
+                                </Droppable>
                             </div>
-                        </div>
-                    );
-                })}
-            </div>
+                        );
+                    })}
+                </div>
+            </DragDropContext>
 
-            <Modal isOpen={!!moveModal} onClose={() => setMoveModal(null)} title={`Avancement : ${moveModal?.contactName}`} size="md">
+            <Modal isOpen={!!moveModal} onClose={() => setMoveModal(null)} title={`Changement d'étape : ${moveModal?.contactName}`} size="md">
                 <div style={{ marginBottom: '1.5rem' }}>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>
-                        Vous déplacez ce prospect vers l'étape : <strong>{moveModal?.targetStatus}</strong>
-                    </p>
+                    <div style={{ background: 'var(--bg-app)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 700 }}>
+                             {moveModal?.contactName.charAt(0)}
+                        </div>
+                        <div>
+                            <p style={{ margin: 0, fontWeight: 600 }}>{moveModal?.contactName}</p>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                Nouvelle étape : <strong style={{ color: 'var(--primary)' }}>{moveModal?.targetStatus}</strong>
+                            </p>
+                        </div>
+                    </div>
 
                     {moveModal?.targetStatus === 'Pas intéressé' ? (
                         <div className="refusal-selection mb-15">
-                            <label className="form-label" style={{ fontWeight: 700 }}>Motif du refus</label>
+                            <label className="form-label" style={{ fontWeight: 700 }}>Motif du refus <span style={{ color: 'var(--danger)' }}>*</span></label>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
                                 {REFUSAL_REASONS.map(reason => (
-                                    <label key={reason} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem', cursor: 'pointer', padding: '8px', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                                    <label key={reason} style={{ 
+                                        display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem', 
+                                        cursor: 'pointer', padding: '10px 12px', background: selectedRefusal === reason ? 'var(--primary-light)' : '#f8fafc', 
+                                        borderRadius: '8px', border: '1px solid', borderColor: selectedRefusal === reason ? 'var(--primary)' : '#e2e8f0',
+                                        transition: 'all 0.2s'
+                                    }}>
                                         <input 
                                             type="radio" 
                                             name="refusal_reason" 
@@ -385,7 +456,7 @@ const Pipeline = () => {
                                             checked={selectedRefusal === reason}
                                             onChange={e => setSelectedRefusal(e.target.value)}
                                         />
-                                        {reason}
+                                        <span style={{ fontWeight: selectedRefusal === reason ? 600 : 400 }}>{reason}</span>
                                     </label>
                                 ))}
                             </div>
@@ -397,6 +468,7 @@ const Pipeline = () => {
                                         placeholder="Détaillez la raison du refus..." 
                                         value={transitionNote} 
                                         onChange={e => setTransitionNote(e.target.value)} 
+                                        style={{ borderRadius: '8px' }}
                                     />
                                 </div>
                             )}
@@ -404,14 +476,25 @@ const Pipeline = () => {
                     ) : (
                         <div className="form-group">
                             <label className="form-label">Note de suivi (facultatif)</label>
-                            <textarea className="form-textarea" rows={4} placeholder="Décrivez la situation..." value={transitionNote} onChange={e => setTransitionNote(e.target.value)} />
+                            <textarea 
+                                className="form-textarea" rows={4} 
+                                placeholder="Ajoutez un commentaire sur ce changement d'étape..." 
+                                value={transitionNote} 
+                                onChange={e => setTransitionNote(e.target.value)} 
+                                style={{ borderRadius: '8px' }}
+                            />
                         </div>
                     )}
                 </div>
-                <div className="form-actions">
-                    <button className="btn-secondary" onClick={() => setMoveModal(null)} disabled={isMoving}>Annuler</button>
-                    <button className="btn-primary" onClick={confirmMove} disabled={isMoving || (moveModal?.targetStatus === 'Pas intéressé' && !selectedRefusal)}>
-                        {isMoving ? 'Mise à jour...' : 'Confirmer le changement'}
+                <div className="form-actions" style={{ gap: '12px' }}>
+                    <button className="btn-secondary" onClick={() => setMoveModal(null)} disabled={isMoving} style={{ borderRadius: '8px', flex: 1 }}>Annuler</button>
+                    <button 
+                        className="btn-primary" 
+                        onClick={confirmMove} 
+                        disabled={isMoving || (moveModal?.targetStatus === 'Pas intéressé' && !selectedRefusal)}
+                        style={{ borderRadius: '8px', flex: 2 }}
+                    >
+                        {isMoving ? 'Mise à jour...' : 'Confirmer le déplacement'}
                     </button>
                 </div>
             </Modal>
@@ -420,3 +503,4 @@ const Pipeline = () => {
 };
 
 export default Pipeline;
+
