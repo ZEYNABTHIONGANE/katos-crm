@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     MoreVertical, FileText, MessageSquare, Bookmark, FileSignature, CreditCard, Folder, Wrench,
     Circle, Clock, CheckCircle2, Star, Link as LinkIcon, Megaphone, User,
-    Search, ArrowRight, Trash2, Calendar, GripVertical
+    Search, Trash2, Calendar, GripVertical
 } from 'lucide-react';
 import { useContactStore, STATUS_TO_COLUMN, type CrmContact } from '@/stores/contactStore';
 import { useToast } from '@/app/providers/ToastProvider';
