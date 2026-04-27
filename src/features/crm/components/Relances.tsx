@@ -184,6 +184,7 @@ const Relances = () => {
                     note: `[${(v.type || '').toUpperCase()}] ${v.title || ''}`,
                     type: v.type === 'bureau' ? 'rdv' : 'visite',
                     statut: getDynamicStatut(v.date, v.statut),
+                    heure: v.heure || '09:00',
                     priorite: 'normale' as const,
                     category: 'visit' as const,
                     originalVisit: v
@@ -199,6 +200,7 @@ const Relances = () => {
                     note: `[${(v.type || '').toUpperCase()}] ${v.title || ''}`,
                     type: v.type === 'bureau' ? 'rdv' : 'visite',
                     statut: 'done' as const,
+                    heure: v.heure || '09:00',
                     priorite: 'normale' as const,
                     category: 'visit' as const,
                     originalVisit: v
