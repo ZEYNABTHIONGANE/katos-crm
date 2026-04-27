@@ -37,7 +37,7 @@ const Relances = () => {
     // Prospects filtrés pour la création de tâche : uniquement les miens si je suis commercial
     const allContactsSorted = useMemo(() => {
         let list = [...contacts];
-        if (user?.role === 'commercial') {
+        if (user?.role === 'commercial' || user?.role === 'conformite') {
             const userNameNorm = (user?.name || '').trim().toLowerCase();
             list = list.filter(c => (c.assignedAgent || '').trim().toLowerCase() === userNameNorm);
         }
@@ -98,7 +98,7 @@ const Relances = () => {
     // Restriction d'accès : Seuls les commerciaux ont accès à "Mes Tâches"
     // Les admins et managers voient l'Historique global à la place.
     useEffect(() => {
-        if (user && !['commercial'].includes(user.role)) {
+        if (user && !['commercial', 'conformite'].includes(user.role)) {
             showToast("Accès restreint : Les administrateurs et managers consultent l'Historique global.", 'info');
             navigate('/historique');
         }

@@ -10,7 +10,6 @@ import {
 import { Users, User, ArrowUpRight, ArrowDownRight, Star, LayoutDashboard, TrendingUp, Plus, Phone, Mail, Home, Calendar } from 'lucide-react';
 import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
 import { SALE_STATUSES, PIPELINE_STATUSES } from '../utils/crmConstants';
-import ComplianceDashboard from './ComplianceDashboard';
 
 const SERVICE_LABELS: Record<string, string> = {
     foncier: 'Foncier',
@@ -38,9 +37,9 @@ const Dashboard = () => {
     const { contacts, interactions, visits, commercials, followUps } = useContactStore();
     const navigate = useNavigate();
 
-    if (user?.role === 'conformite') {
-        return <ComplianceDashboard />;
-    }
+    // On affiche désormais le dashboard commercial par défaut pour tous, 
+    // y compris la conformité qui gère aussi des prospects.
+    // Le dashboard de conformité reste accessible via le menu latéral.
 
     const [agentFilter, setAgentFilter] = useState('all');
 

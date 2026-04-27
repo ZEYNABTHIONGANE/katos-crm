@@ -24,7 +24,7 @@ export const getSupervisedAgentNames = (
     const role = currentUser.role || '';
 
     // 1. Full access roles
-    if (['admin', 'dir_commercial', 'superviseur', 'conformite'].includes(role)) {
+    if (['admin', 'dir_commercial', 'superviseur'].includes(role)) {
         return null; // Signals total visibility
     }
 

@@ -32,23 +32,23 @@ const Sidebar = ({ isCollapsed }: { isCollapsed: boolean }) => {
                     allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'assistante', 'conformite']
                 },
                 {
-                    path: '/prospects',
-                    name: 'Prospects & Clients',
-                    icon: <Users size={18} />,
-                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'assistante']
-                },
-                {
                     path: '/pipeline',
                     name: 'Pipeline Commercial',
                     icon: <UserPlus size={18} />,
-                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial']
+                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'conformite']
+                },
+                {
+                    path: '/prospects',
+                    name: 'Prospects & Clients',
+                    icon: <Users size={18} />,
+                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'conformite']
                 },
                 {
                     path: '/relances',
                     name: 'Mes Tâches',
                     icon: <ClipboardCheck size={18} />,
                     badge: urgentCount,
-                    allowedRoles: ['commercial']
+                    allowedRoles: ['commercial', 'conformite']
                 },
             ]
         },
@@ -60,21 +60,21 @@ const Sidebar = ({ isCollapsed }: { isCollapsed: boolean }) => {
                     name: 'Vente Terrains',
                     icon: <Home size={18} />,
                     allowedServices: ['foncier'],
-                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial']
+                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'conformite']
                 },
                 {
                     path: '/gestion',
                     name: 'Gest. Immobilière',
                     icon: <Building2 size={18} />,
                     allowedServices: ['gestion'],
-                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial']
+                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'conformite']
                 },
                 {
                     path: '/construction',
                     name: 'Construction',
                     icon: <HardHat size={18} />,
                     allowedServices: ['construction'],
-                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial']
+                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'conformite']
                 },
             ]
         },
@@ -115,20 +115,20 @@ const Sidebar = ({ isCollapsed }: { isCollapsed: boolean }) => {
                     path: '/agenda-terrain',
                     name: 'Agenda',
                     icon: <Calendar size={18} />,
-                    allowedRoles: ['admin', 'technicien_terrain', 'technicien_chantier', 'commercial', 'dir_commercial', 'resp_commercial']
+                    allowedRoles: ['admin', 'technicien_terrain', 'technicien_chantier', 'commercial', 'dir_commercial', 'resp_commercial', 'conformite']
                 },
                 {
                     path: '/faq',
                     name: 'FAQ / Procédures',
                     icon: <HelpCircle size={18} />,
-                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'assistante']
+                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'assistante', 'conformite']
                 },
                 {
                     path: '/messages',
                     name: 'Messagerie',
                     icon: <MessageSquare size={18} />,
                     badge: totalUnreadCount,
-                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'assistante']
+                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'assistante', 'conformite']
                 },
             ]
         }
@@ -143,8 +143,8 @@ const Sidebar = ({ isCollapsed }: { isCollapsed: boolean }) => {
     const filteredSections = menuSections.map(section => ({
         ...section,
         items: section.items.filter(item => {
-            // "Mes Tâches" : visible UNIQUEMENT par les commerciaux
-            if (item.path === '/relances' && user?.role !== 'commercial') return false;
+            // "Mes Tâches" : visible par les commerciaux et la conformité
+            if (item.path === '/relances' && !['commercial', 'conformite'].includes(user?.role || '')) return false;
 
             // Un admin ou dir_commercial voit tout (sauf Mes Tâches réservé aux commerciaux)
             if (user?.role === 'admin' || user?.role === 'dir_commercial') return true;
