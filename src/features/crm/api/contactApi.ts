@@ -600,6 +600,7 @@ export const fetchFollowUps = async (contactId?: number): Promise<FollowUp[]> =>
         contactId: d.contact_id,
         agent: d.agent,
         dateRelance: d.date_relance,
+        heure: d.heure || '09:00',
         note: d.note || '',
         statut: d.statut,
         priorite: d.priorite,
@@ -612,6 +613,7 @@ export const createFollowUpApi = async (followUp: Omit<FollowUp, 'id'>): Promise
         contact_id: followUp.contactId,
         agent: followUp.agent,
         date_relance: followUp.dateRelance,
+        heure: followUp.heure,
         note: followUp.note,
         statut: followUp.statut,
         priorite: followUp.priorite,
@@ -626,6 +628,7 @@ export const createFollowUpApi = async (followUp: Omit<FollowUp, 'id'>): Promise
         contactId: data.contact_id,
         agent: data.agent,
         dateRelance: data.date_relance,
+        heure: data.heure || '09:00',
         note: data.note || '',
         statut: data.statut,
         priorite: data.priorite,
@@ -642,6 +645,7 @@ export const updateFollowUpStatusApi = async (id: string, statut: 'upcoming' | '
 export const updateFollowUpApi = async (id: string, updates: any): Promise<boolean> => {
     const dbUpdates: any = {};
     if (updates.dateRelance) dbUpdates.date_relance = updates.dateRelance;
+    if (updates.heure) dbUpdates.heure = updates.heure;
     if (updates.note !== undefined) dbUpdates.note = updates.note;
     if (updates.statut) dbUpdates.statut = updates.statut;
     if (updates.priorite) dbUpdates.priorite = updates.priorite;

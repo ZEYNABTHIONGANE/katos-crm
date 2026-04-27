@@ -1,5 +1,5 @@
  import { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ClipboardCheck, Clock, AlertTriangle, CheckCircle2, ArrowRight, Calendar, Phone, ChevronDown, Search, X, Edit2, Trash2, Mail, FileText, MapPin, Plus } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import { useContactStore } from '@/stores/contactStore';
@@ -26,6 +26,7 @@ const Relances = () => {
         contactId: '' as string | number,
         note: '',
         dateRelance: new Date().toISOString().split('T')[0],
+        heure: '09:00',
         priorite: 'normale' as 'haute' | 'normale' | 'basse',
         type: 'note' as string,
     });
@@ -33,10 +34,15 @@ const Relances = () => {
     const [contactSearch, setContactSearch] = useState('');
     const [showContactDropdown, setShowContactDropdown] = useState(false);
 
-    // Tous les prospects (pas seulement les miens) pour la création de tâche
+    // Prospects filtrés pour la création de tâche : uniquement les miens si je suis commercial
     const allContactsSorted = useMemo(() => {
-        return [...contacts].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
-    }, [contacts]);
+        let list = [...contacts];
+        if (user?.role === 'commercial') {
+            const userNameNorm = (user?.name || '').trim().toLowerCase();
+            list = list.filter(c => (c.assignedAgent || '').trim().toLowerCase() === userNameNorm);
+        }
+        return list.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    }, [contacts, user]);
 
     const filteredContactOptions = useMemo(() => {
         if (!contactSearch.trim()) return allContactsSorted.slice(0, 50);
@@ -64,6 +70,7 @@ const Relances = () => {
                 contactId: Number(newTaskForm.contactId),
                 agent: user?.name || '',
                 dateRelance: newTaskForm.dateRelance,
+                heure: newTaskForm.heure,
                 // Préfixe le type dans la note pour une détection fiable au filtre
                 note: `[${newTaskForm.type.toUpperCase()}] ${newTaskForm.note.trim()}`,
                 statut,
@@ -75,6 +82,7 @@ const Relances = () => {
                 contactId: '',
                 note: '',
                 dateRelance: new Date().toISOString().split('T')[0],
+                heure: '09:00',
                 priorite: 'normale',
                 type: 'note',
             });
@@ -98,12 +106,14 @@ const Relances = () => {
 
     const [filter, setFilter] = useState<string>('all');
     const [typeFilter, setTypeFilter] = useState<string>('all');
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchParams] = useSearchParams();
+    const initialSearch = searchParams.get('search') || '';
+    const [searchQuery, setSearchQuery] = useState(initialSearch);
     const [showReportModal, setShowReportModal] = useState<null | { id: string, category: 'follow_up' | 'visit', interactionId?: string }>(null);
     const [showEditModal, setShowEditModal] = useState<any | null>(null);
     const [reportDate, setReportDate] = useState('');
     const [reportTime, setReportTime] = useState('09:00');
-    const [editForm, setEditForm] = useState({ note: '', dateRelance: '', priorite: 'normale' });
+    const [editForm, setEditForm] = useState({ note: '', dateRelance: '', heure: '09:00', priorite: 'normale' });
 
     const getStatut = (dateStr: string, current: FollowUp['statut']): FollowUp['statut'] => {
         if (current === 'done') return 'done';
@@ -159,6 +169,7 @@ const Relances = () => {
                     ...f, 
                     type,
                     statut: getDynamicStatut(f.dateRelance, f.statut),
+                    heure: f.heure || '09:00',
                     category: 'follow_up' as const 
                 };
             });
@@ -230,7 +241,9 @@ const Relances = () => {
                     try {
                         const order = { retard: 0, today: 1, upcoming: 2, done: 3 };
                         if (order[a.statut] !== order[b.statut]) return order[a.statut] - order[b.statut];
-                        return new Date(a.dateRelance).getTime() - new Date(b.dateRelance).getTime();
+                        const dateA = new Date(`${a.dateRelance}T${a.heure || '00:00'}`);
+                        const dateB = new Date(`${b.dateRelance}T${b.heure || '00:00'}`);
+                        return dateA.getTime() - dateB.getTime();
                     } catch { return 0; }
                 });
         } catch (err) {
@@ -281,6 +294,7 @@ const Relances = () => {
         setEditForm({
             note: r.note,
             dateRelance: r.dateRelance,
+            heure: r.heure || '09:00',
             priorite: (r as any).priorite || 'normale'
         });
     };
@@ -472,6 +486,7 @@ const Relances = () => {
                                     <span className="relance-company">{contact.company}</span>
                                 </div>
                                 <span className="relance-phone"><Phone size={12} /> {contact.phone}</span>
+                                {r.heure && <span className="relance-time"><Clock size={12} /> {r.heure}</span>}
                             </div>
 
                             <div className="relance-center">
@@ -587,6 +602,15 @@ const Relances = () => {
                             <option value="haute">Haute</option>
                         </select>
                     </div>
+                    <div className="form-group">
+                        <label className="form-label">Heure</label>
+                        <input 
+                            className="form-input" 
+                            type="time" 
+                            value={editForm.heure} 
+                            onChange={e => setEditForm({ ...editForm, heure: e.target.value })} 
+                        />
+                    </div>
                 </div>
                 <div className="form-actions">
                     <button className="btn-secondary" onClick={() => setShowEditModal(null)}>Annuler</button>
@@ -692,6 +716,15 @@ const Relances = () => {
                             min={new Date().toISOString().split('T')[0]}
                         />
                     </div>
+                    <div className="form-group">
+                        <label className="form-label">Heure *</label>
+                        <input
+                            className="form-input"
+                            type="time"
+                            value={newTaskForm.heure}
+                            onChange={e => setNewTaskForm(f => ({ ...f, heure: e.target.value }))}
+                        />
+                    </div>
 
                     <div className="form-group col-2">
                         <label className="form-label">Description / Note *</label>
@@ -775,6 +808,17 @@ const relancesStyles = `
     border-radius: 4px;
     font-size: 0.75rem;
     font-weight: 600;
+}
+.relance-time {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(233, 108, 46, 0.1);
+    color: #E96C2E;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
 }
 `;
 

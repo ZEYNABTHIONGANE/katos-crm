@@ -161,6 +161,7 @@ const ContactDetail = () => {
         technician: '',
         scheduleFollowUp: false,
         followUpDate: '',
+        followUpTime: '09:00',
         followUpNote: '',
         followUpPriority: 'normale' as 'haute' | 'normale' | 'basse'
     });
@@ -386,6 +387,7 @@ const ContactDetail = () => {
                     contactId: contact.id,
                     agent: (contact.assignedAgent || 'Katos Admin').trim(),
                     dateRelance: interactionForm.followUpDate,
+                    heure: interactionForm.followUpTime,
                     note: interactionForm.followUpNote || `Relance suite à: ${interactionForm.title}`,
                     statut: 'upcoming',
                     priorite: interactionForm.followUpPriority
@@ -429,6 +431,7 @@ const ContactDetail = () => {
                 technician: '',
                 scheduleFollowUp: false,
                 followUpDate: '',
+                followUpTime: '09:00',
                 followUpNote: '',
                 followUpPriority: 'normale'
             });
@@ -466,6 +469,7 @@ const ContactDetail = () => {
             technician: item.technician || '',
             scheduleFollowUp: false,
             followUpDate: '',
+            followUpTime: '09:00',
             followUpNote: '',
             followUpPriority: 'normale'
         });
@@ -945,6 +949,15 @@ const ContactDetail = () => {
                                     <option value="normale">Normale</option>
                                     <option value="haute">Haute</option>
                                 </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Heure du rappel *</label>
+                                <input 
+                                    className="form-input" 
+                                    type="time" 
+                                    value={interactionForm.followUpTime} 
+                                    onChange={e => setInteractionForm({ ...interactionForm, followUpTime: e.target.value })}
+                                />
                             </div>
                             <div className="form-group col-2">
                                 <label className="form-label">Note pour le rappel</label>

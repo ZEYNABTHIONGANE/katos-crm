@@ -89,11 +89,16 @@ const Visites = () => {
 
     const filteredContacts = useMemo(() => {
         if (!contactSearch.trim()) return [];
-        return contacts.filter((c: any) =>
+        let list = contacts;
+        if (user?.role === 'commercial') {
+            const userNameNorm = (user?.name || '').trim().toLowerCase();
+            list = list.filter((c: any) => (c.assignedAgent || '').trim().toLowerCase() === userNameNorm);
+        }
+        return list.filter((c: any) =>
             c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
             c.company.toLowerCase().includes(contactSearch.toLowerCase())
         ).slice(0, 5);
-    }, [contacts, contactSearch]);
+    }, [contacts, contactSearch, user]);
 
     const handleSave = async () => {
         if (!form.title.trim() || !form.contactId) {

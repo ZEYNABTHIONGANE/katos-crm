@@ -780,13 +780,20 @@ const Dashboard = () => {
                                         const typeColor = item.type === 'rdv' ? '#2B2E83' : item.type === 'visite' ? '#059669' : '#f59e0b';
                                         return (
                                             <div key={item.id + idx}
-                                                onClick={() => contact && navigate(`/prospects/${contact.id}`)}
+                                                onClick={() => {
+                                                    if (item.type === 'relance') {
+                                                        const contactName = contact?.name || '';
+                                                        navigate(`/relances?search=${encodeURIComponent(contactName)}`);
+                                                    } else {
+                                                        navigate('/visites');
+                                                    }
+                                                }}
                                                 style={{
                                                     display: 'flex', alignItems: 'center', gap: '0.75rem',
                                                     padding: '0.55rem 0.75rem', borderRadius: 8,
                                                     background: isToday ? 'rgba(43,46,131,0.06)' : 'var(--bg-soft,#f8f9fa)',
                                                     border: `1px solid ${isToday ? 'rgba(43,46,131,0.2)' : 'var(--border-soft,#eee)'}`,
-                                                    cursor: contact ? 'pointer' : 'default'
+                                                    cursor: 'pointer'
                                                 }}
                                             >
                                                 <div style={{

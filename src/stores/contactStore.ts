@@ -72,6 +72,7 @@ export interface FollowUp {
     contactId: number;
     agent: string;
     dateRelance: string; // ISO string YYYY-MM-DD
+    heure: string;       // HH:mm
     note: string;
     statut: 'retard' | 'today' | 'upcoming' | 'done';
     priorite: 'haute' | 'normale' | 'basse';

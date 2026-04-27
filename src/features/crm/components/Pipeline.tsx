@@ -333,14 +333,14 @@ const Pipeline = () => {
 
     return (
         <div className="pipeline-page">
-            <div className="page-header d-flex-between">
+            <div className="page-header d-flex-between" style={{ marginBottom: '1rem' }}>
                 <div>
                     <h1>Pipeline Commercial</h1>
-                    <p className="subtitle">Gérez vos prospects par glisser-déposer ({filteredTotal} prospects)</p>
+                    <p className="subtitle">Gérez vos prospects ({filteredTotal} au total)</p>
                 </div>
             </div>
 
-            <div className="pipeline-toolbar card-premium mb-4" style={{ display: 'flex', gap: '1rem', padding: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="pipeline-toolbar card-premium mb-3" style={{ display: 'flex', gap: '0.75rem', padding: '0.75rem 1rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div className="search-box" style={{ flex: 1, minWidth: '250px' }}>
                     <Search size={18} className="text-muted" />
                     <input type="text" placeholder="Rechercher (nom, commercial, tel...)" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -367,12 +367,12 @@ const Pipeline = () => {
             </div>
 
             <DragDropContext onDragEnd={onDragEnd}>
-                <div className="kanban-board" style={{ paddingBottom: '2rem' }}>
+                <div className="kanban-board" style={{ paddingBottom: '1rem' }}>
                     {columnOrder.map(colId => {
                         const meta = COLUMN_META[colId];
                         const cards = filteredColumns[colId] ?? [];
                         return (
-                            <div key={colId} className="kanban-column" style={{ minWidth: '280px', background: 'var(--bg-app)', border: 'none' }}>
+                            <div key={colId} className="kanban-column" style={{ background: 'var(--bg-app)', border: 'none' }}>
                                 <div className="column-header" style={{ borderTopColor: meta.color, borderRadius: '12px 12px 0 0', background: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                                     <div className="column-title">
                                         <span style={{ color: meta.color }}>{meta.icon}</span>

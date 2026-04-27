@@ -1917,7 +1917,8 @@
     flex-direction: column;
     gap: 0.75rem;
     animation: fadeIn 0.4s ease-out;
-    height: calc(100vh - 120px);
+    flex: 1;
+    min-height: 0;
 }
 
 /* ---- Menu contextuel de carte ---- */
@@ -2046,7 +2047,15 @@
 
 /* ---- Colonnes ---- */
 .kanban-column {
-    flex: 0 0 260px;
+    flex: 0 0 300px;
+    
+    @media (max-width: 1024px) {
+        flex: 0 0 260px;
+    }
+    
+    @media (max-width: 640px) {
+        flex: 0 0 85vw;
+    }
     background: var(--bg-app);
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-color);

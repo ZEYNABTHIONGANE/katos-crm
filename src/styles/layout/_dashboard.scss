@@ -16,7 +16,11 @@
 
 .layout-content {
     flex: 1;
-    padding: 2rem;
+    padding: 1.25rem;
     overflow-y: auto;
     background: transparent;
+    
+    @media (max-width: 768px) {
+        padding: 0.75rem;
+    }
 }
