@@ -118,7 +118,7 @@ const ContactsList = () => {
             const header = splitCsvLine(rows[0], delimiter).map(h => normalize(h));
             const noteIdx = header.findIndex(h => h.includes('note') || h.includes('comment') || h.includes('obs') || h.includes('deta'));
             
-            const data = rows.slice(1).map((row, rowIdx) => {
+            const data = rows.slice(1).map((row) => {
                 let values = splitCsvLine(row, delimiter);
                 
                 // --- Smart Merge: handle rows with extra columns due to unquoted commas in notes ---
