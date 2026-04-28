@@ -5,7 +5,8 @@ import {
     Search, User, Filter, Layout, Phone, 
     Calendar, ArrowRight, MoreVertical, Trash2, 
     Circle, Folder, GripVertical, FileText, Megaphone, MapPin,
-    CreditCard, FileCheck, Truck, Heart, XCircle, Settings, ClipboardList
+    CreditCard, FileCheck, Truck, Heart, XCircle, Settings, ClipboardList,
+    Upload, Plus
 } from 'lucide-react';
 import { useContactStore } from '@/stores/contactStore';
 import type { CrmContact } from '@/stores/contactStore';
@@ -50,7 +51,7 @@ const STATUS_TO_COLUMN: Record<string, string> = {
     'Négociation': 'negociation',
     'Réservation': 'reservation',
     'Contrat': 'contrat',
-    'Paiement': 'contrat', // Some maps say Paiement -> contrat, others say Paiement -> paiement. Let's align with store.
+    'Paiement': 'paiement',
     'Transfert de dossier technique': 'transfert_technique',
     'Suivi Chantier': 'suivi_chantier',
     'Livraison Client': 'livraison',
@@ -120,12 +121,12 @@ const KanbanCard = ({
             data-col-id={colId}
             style={{ 
                 ...provided.draggableProps.style,
-                cursor: 'grab', 
                 padding: '0.8rem', 
                 borderRadius: '12px', 
                 marginBottom: '0.75rem',
                 borderLeft: `4px solid ${colColor}`,
-                boxShadow: isDragging ? '0 10px 25px rgba(0,0,0,0.1)' : 'var(--shadow-sm)'
+                boxShadow: isDragging ? '0 10px 25px rgba(0,0,0,0.1)' : 'var(--shadow-sm)',
+                cursor: 'grab'
             }}
             onClick={() => navigate(`/prospects/${contact.id}`)}
         >
@@ -145,6 +146,12 @@ const KanbanCard = ({
                         <div className="kcard-dropdown" style={{ position: 'absolute', right: 0, top: '100%', zIndex: 100, backgroundColor: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', boxShadow: 'var(--shadow-md)', minWidth: '150px' }}>
                             <button onClick={() => { navigate(`/prospects/${contact.id}`); setMenuOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', width: '100%', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '0.8rem' }}>
                                 <FileText size={13} /> Voir la fiche
+                            </button>
+                            <button onClick={() => { onMove(contact); setMenuOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', width: '100%', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '0.8rem' }}>
+                                <ArrowRight size={13} /> Avancer l'étape
+                            </button>
+                            <button onClick={() => { onMove({ ...contact, targetStatusOverride: 'Pas intéressé' } as any); setMenuOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', width: '100%', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--danger)' }}>
+                                <XCircle size={13} /> Pas intéressé
                             </button>
                             {['admin', 'dir_commercial'].includes(userRole || '') && (
                                 <button className="danger" onClick={() => { if(window.confirm('Supprimer ce prospect ?')) onDelete(contact.id); setMenuOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', width: '100%', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--danger)' }}>
@@ -177,7 +184,7 @@ const KanbanCard = ({
                 )}
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
                 {contact.phone && (
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Phone size={12} /> <span>{contact.phone}</span>
@@ -209,9 +216,19 @@ const KanbanCard = ({
             </div>
 
             <div className="kcard-footer" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-                <span className="kcard-since" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                    #{contact.id}
-                </span>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button 
+                        className="btn-icon-sm danger" 
+                        title="Pas intéressé"
+                        style={{ width: '24px', height: '24px', padding: 0 }}
+                        onClick={() => onMove({ ...contact, targetStatusOverride: 'Pas intéressé' } as any)}
+                    >
+                        <XCircle size={14} />
+                    </button>
+                    <span className="kcard-since" style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                        #{contact.id}
+                    </span>
+                </div>
                 <button 
                     className="kcard-advance-btn" 
                     style={{ color: colColor, border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
@@ -228,6 +245,7 @@ const Pipeline = () => {
     const { contacts, commercials, moveContactStatus, deleteContact } = useContactStore();
     const { user } = useAuth();
     const { showToast } = useToast();
+    const navigate = useNavigate();
 
     const [search, setSearch] = useState('');
     const [agentFilter, setAgentFilter] = useState('');
@@ -252,12 +270,12 @@ const Pipeline = () => {
         }
     }, [commercials, user, contacts]);
 
-    const filteredColumns = useMemo(() => {
+    const filteredContacts = useMemo(() => {
         try {
             const supervisedNames = getSupervisedAgentNames(user, commercials);
             const lowerSupervised = supervisedNames ? supervisedNames.map(n => n?.trim().toLowerCase()) : null;
 
-            const baseList = (contacts || []).filter(c => {
+            return (contacts || []).filter(c => {
                 const matchesSearch = !search || 
                     c.name.toLowerCase().includes(search.toLowerCase()) ||
                     (c.company || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -273,32 +291,48 @@ const Pipeline = () => {
                 let isAllowed = true;
                 if (lowerSupervised !== null) {
                     if (user?.role === 'assistante') {
-                        isAllowed = c.createdBy === user?.name || !c.assignedAgent;
+                        isAllowed = !!(c.createdBy === user?.name || !c.assignedAgent);
+                    } else if (user?.role === 'resp_commercial') {
+                        // Un responsable ne voit QUE ses agents supervisés (pas les non assignés)
+                        isAllowed = !!(c.assignedAgent && lowerSupervised.includes((c.assignedAgent || '').trim().toLowerCase()));
+                    } else if (user?.role === 'commercial') {
+                        // Un commercial ne voit QUE ses propres prospects
+                        isAllowed = (c.assignedAgent || '').trim().toLowerCase() === (user?.name || '').trim().toLowerCase();
                     } else {
-                        // Un responsable/directeur peut voir ses agents supervisés ET les prospects non assignés
-                        isAllowed = !c.assignedAgent || lowerSupervised.includes((c.assignedAgent || '').trim().toLowerCase());
+                        // Pour les autres (Admin, Dir_Com), on autorise tout ce qui est supervisé ou non assigné
+                        isAllowed = !!(!c.assignedAgent || lowerSupervised.includes((c.assignedAgent || '').trim().toLowerCase()));
                     }
                 }
 
                 return matchesSearch && matchesAgent && matchesService && isAllowed;
             });
+        } catch (err) {
+            console.error("Error calculating filteredContacts:", err);
+            return [];
+        }
+    }, [contacts, search, agentFilter, serviceFilter, user, commercials]);
 
-            return columnOrder.reduce((acc, colId) => {
-                acc[colId] = baseList.filter(c => {
-                    const colForStatus = STATUS_TO_COLUMN[c.status];
-                    return colForStatus === colId;
-                });
-                return acc;
-            }, {} as Record<string, any[]>);
+    const filteredTotal = filteredContacts.length;
+
+    const filteredColumns = useMemo(() => {
+        try {
+            const cols: Record<string, any[]> = {
+                prospect: [], qualification: [], rdv: [], visite_terrain: [], proposition: [], negociation: [], 
+                reservation: [], contrat: [], paiement: [], transfert_technique: [], 
+                suivi_chantier: [], livraison: [], fidelisation: [], pas_interesse: []
+            };
+
+            filteredContacts.forEach(c => {
+                const colId = STATUS_TO_COLUMN[c.status] || 'prospect';
+                if (cols[colId]) cols[colId].push(c);
+            });
+
+            return cols;
         } catch (err) {
             console.error("Error calculating filteredColumns:", err);
             return {};
         }
-    }, [contacts, search, agentFilter, serviceFilter, user, commercials]);
-
-    const filteredTotal = useMemo(() => {
-        return Object.values(filteredColumns).reduce((sum, col) => sum + col.length, 0);
-    }, [filteredColumns]);
+    }, [filteredContacts]);
 
     const onDragEnd = (result: any) => {
         const { destination, source, draggableId } = result;
@@ -336,39 +370,66 @@ const Pipeline = () => {
     };
 
     const moveCard = (contact: any) => {
+        if (contact.targetStatusOverride) {
+            handleMoveAttempt(contact, contact.targetStatusOverride);
+            return;
+        }
         const currentIndex = columnOrder.indexOf(STATUS_TO_COLUMN[contact.status] as any);
         if (currentIndex < columnOrder.length - 1) {
             const nextColId = columnOrder[currentIndex + 1];
-            confirmMove(contact.id, FINAL_STATUS_MAP[nextColId]);
+            handleMoveAttempt(contact, FINAL_STATUS_MAP[nextColId]);
         }
     };
 
     return (
         <DragDropContext onDragEnd={onDragEnd}>
             <div className="pipeline-page">
-                <div className="page-header d-flex-between" style={{ marginBottom: '1rem' }}>
+                <div className="page-header d-flex-between" style={{ marginBottom: '1.5rem' }}>
                     <div>
                         <h1>Pipeline Commercial</h1>
-                        <p className="subtitle">Gérez vos prospects ({filteredTotal} au total)</p>
+                        <p className="subtitle">Visualisez et gérez l'avancement de vos dossiers ({filteredTotal} prospects)</p>
+                    </div>
+                    <div className="d-flex gap-2">
+                        {['admin', 'dir_commercial', 'assistante', 'marketing'].includes(user?.role || '') && (
+                            <>
+                                <button className="btn-secondary btn-sm" style={{ height: '38px', gap: '8px', display: 'flex', alignItems: 'center' }} onClick={() => navigate('/prospects?action=import')}>
+                                    <Upload size={16} /> Importer
+                                </button>
+                                <button className="btn-primary btn-sm" style={{ height: '38px', gap: '8px', display: 'flex', alignItems: 'center' }} onClick={() => navigate('/prospects?action=new')}>
+                                    <Plus size={16} /> Nouveau Prospect
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
 
-                <div className="pipeline-toolbar card-premium mb-3" style={{ display: 'flex', gap: '0.75rem', padding: '0.75rem 1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <div className="search-box" style={{ flex: 1, minWidth: '250px' }}>
-                        <Search size={18} className="text-muted" />
-                        <input type="text" placeholder="Rechercher (nom, commercial, tel...)" value={search} onChange={(e) => setSearch(e.target.value)} />
+                <div className="pipeline-toolbar mb-3">
+                    <div className="search-box">
+                        <Search size={16} className="text-muted" />
+                        <input 
+                            type="text" 
+                            placeholder="Rechercher par nom..." 
+                            value={search} 
+                            onChange={(e) => setSearch(e.target.value)} 
+                        />
                     </div>
-                    <div className="filter-group d-flex align-items-center gap-2">
-                        <User size={16} className="text-muted" />
-                        <select className="form-select-sm" value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)} style={{ minWidth: '180px' }}>
+                    <div className="filter-group">
+                        <User size={14} className="text-muted" />
+                        <select 
+                            value={agentFilter} 
+                            onChange={(e) => setAgentFilter(e.target.value)} 
+                        >
                             <option value="">Tous les commerciaux</option>
                             <option value="UNASSIGNED">À dispatcher</option>
                             {agentOptions.map(name => <option key={name} value={name}>{name}</option>)}
                         </select>
                     </div>
-                    <div className="filter-group d-flex align-items-center gap-2">
-                        <Folder size={16} className="text-muted" />
-                        <select className="form-select-sm" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} style={{ minWidth: '150px' }}>
+                    <div className="filter-group">
+                        <Folder size={14} className="text-muted" />
+                        <select 
+                            value={serviceFilter} 
+                            onChange={(e) => setServiceFilter(e.target.value)} 
+                        >
                             <option value="">Tous les services</option>
                             <option value="foncier">Vente Terrains</option>
                             <option value="construction">Construction</option>
@@ -376,7 +437,7 @@ const Pipeline = () => {
                         </select>
                     </div>
                     {(search || agentFilter || serviceFilter) && (
-                        <button className="btn-text-sm text-primary" onClick={() => { setSearch(''); setAgentFilter(''); setServiceFilter(''); }}>Réinitialiser</button>
+                        <button className="btn-text-sm text-primary" onClick={() => { setSearch(''); setAgentFilter(''); setServiceFilter(''); }} style={{ fontSize: '0.75rem', fontWeight: 600 }}>Réinitialiser</button>
                     )}
                 </div>
 

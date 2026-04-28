@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { Download, Printer, Users, Target, Calendar, Filter } from 'lucide-react';
 import { fetchContacts, fetchVisits, fetchCommercials } from '../api/contactApi';
 import type { CrmContact, Visit } from '@/stores/contactStore';
-import { SALE_STATUSES, PIPELINE_STATUSES } from '../utils/crmConstants';
+import { useAuth } from '@/app/providers/AuthProvider';
+import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
 import RapportSkeleton from './RapportSkeleton';
 
 interface AgentPerf {
@@ -22,6 +23,7 @@ interface OriginData {
 const COLORS = ['#2B2E83', '#E96C2E', '#10B981', '#6366F1', '#F59E0B', '#8B5CF6'];
 
 const Rapports = () => {
+    const { user } = useAuth();
     const [period, setPeriod] = useState('ce-mois');
     const [loading, setLoading] = useState(true);
     
@@ -77,38 +79,60 @@ const Rapports = () => {
                 startDate = new Date(now.getFullYear(), 0, 1);
             }
 
-            const filteredContacts = startDate 
-                ? rawData.contacts.filter(c => c.createdAt && new Date(c.createdAt) >= startDate!)
-                : rawData.contacts;
+            // Filtrage hiérarchique : Un responsable ne voit que son groupe
+            const supervisedNames = getSupervisedAgentNames(user, rawData.agents);
+            const lowerSupervised = supervisedNames ? supervisedNames.map(n => (n || '').trim().toLowerCase()) : null;
+
+            const isMine = (agentName: string) => {
+                if (lowerSupervised === null) return true; // Admin/DirCom voit tout
+                return lowerSupervised.includes((agentName || '').trim().toLowerCase());
+            };
+
+            // Filtrage par période (Création)
+            const createdInPeriod = startDate 
+                ? rawData.contacts.filter(c => c.createdAt && new Date(c.createdAt) >= startDate! && isMine(c.assignedAgent || ''))
+                : rawData.contacts.filter(c => isMine(c.assignedAgent || ''));
                 
-            const filteredVisits = startDate
-                ? rawData.visits.filter(v => v.date && new Date(v.date) >= startDate!)
-                : rawData.visits;
+            // Filtrage par période (Visites)
+            const visitsInPeriod = startDate
+                ? rawData.visits.filter(v => v.date && new Date(v.date) >= startDate! && isMine(v.agent))
+                : rawData.visits.filter(v => isMine(v.agent));
+
+            // Filtrage par période (Ventes basées sur convertedAt)
+            const salesInPeriod = startDate
+                ? rawData.contacts.filter(c => c.convertedAt && new Date(c.convertedAt) >= startDate! && isMine(c.assignedAgent || ''))
+                : rawData.contacts.filter(c => !!c.convertedAt && isMine(c.assignedAgent || ''));
 
             // KPI calculations
-            const newProspects = filteredContacts.length;
-            const closedSales = filteredContacts.filter(c => SALE_STATUSES.includes(c.status)).length;
-            const visitsCompleted = filteredVisits.filter(v => v.statut === 'completed').length;
+            const newProspects = createdInPeriod.length;
+            const closedSales = salesInPeriod.length;
+            const visitsCompleted = visitsInPeriod.filter(v => v.statut === 'completed').length;
             const conversionRate = newProspects > 0 ? Math.round((closedSales / newProspects) * 100) : 0;
 
             // Agent Performance
             const agentPerf: AgentPerf[] = rawData.agents
-                .filter(agent => agent.role === 'commercial')
+                .filter(agent => agent.role === 'commercial' && isMine(agent.name))
                 .map(agent => {
                     const agentNameLower = (agent.name || '').trim().toLowerCase();
-                    const agentContacts = filteredContacts.filter(c =>
+                    
+                    // Prospects créés sur la période pour cet agent
+                    const agentNewContacts = createdInPeriod.filter(c =>
                         (c.assignedAgent || '').trim().toLowerCase() === agentNameLower
                     );
                     
-                    const activeProspectsCount = agentContacts.filter(c => PIPELINE_STATUSES.includes(c.status)).length;
-                    const agentSales = agentContacts.filter(c => SALE_STATUSES.includes(c.status)).length;
-                    const conversion = agentContacts.length > 0
-                        ? Math.round((agentSales / agentContacts.length) * 100)
+                    // Ventes réalisées sur la période pour cet agent (peu importe la date de création)
+                    const agentSales = salesInPeriod.filter(c =>
+                        (c.assignedAgent || '').trim().toLowerCase() === agentNameLower
+                    ).length;
+
+                    // Conversion : Ventes réelles sur Prospects reçus
+                    const conversion = agentNewContacts.length > 0
+                        ? Math.round((agentSales / agentNewContacts.length) * 100)
                         : 0;
 
                     return {
                         agent: agent.name || 'Utilisateur inconnu',
-                        prospects: activeProspectsCount,
+                        prospects: agentNewContacts.length,
                         sales: agentSales,
                         conversion: `${conversion}%`
                     };
@@ -118,11 +142,8 @@ const Rapports = () => {
 
             // Origin Analysis
             const originsMap = new Map<string, number>();
-            filteredContacts.forEach(c => {
-                let source = c.source || 'Autre / Inconnu';
-                if (['Facebook', 'Instagram', 'TikTok'].includes(source)) {
-                    source = 'RÉSEAUX SOCIAUX';
-                }
+            createdInPeriod.forEach(c => {
+                const source = c.source || 'Autre / Inconnu';
                 originsMap.set(source, (originsMap.get(source) || 0) + 1);
             });
 
@@ -141,13 +162,13 @@ const Rapports = () => {
                 conversionRate,
                 agentPerformance: agentPerf,
                 originAnalysis,
-                filteredContacts
+                filteredContacts: createdInPeriod
             };
         } catch (err) {
             console.error('[Rapports] Calculation error:', err);
             return null;
         }
-    }, [period, rawData, loading]);
+    }, [period, rawData, loading, user]);
 
     const downloadCSV = () => {
         if (!stats) return;
@@ -306,7 +327,7 @@ const Rapports = () => {
                             <div key={i} className="origin-row">
                                 <div className="origin-info">
                                     <span className="origin-label">{o.label}</span>
-                                    <span className="origin-count">{o.count} ({o.val}%)</span>
+                                    <span className="origin-count">: {o.count} prospect(s) ({o.val}%)</span>
                                 </div>
                                 <div className="origin-bar-bg">
                                     <div className="origin-bar-fill" style={{ width: `${o.val}%`, background: o.color }}></div>

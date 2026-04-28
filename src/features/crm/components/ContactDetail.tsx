@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
     ArrowLeft, Phone, Mail, MapPin, Calendar, Clock, Edit2, CheckCircle2, Plus,
     Megaphone, User, Folder, MessageSquare, ClipboardList, HardHat,
-    ArrowRight, Trash2
+    ArrowRight, Trash2, Download
 } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import DocumentManager from './DocumentManager';
@@ -19,8 +19,10 @@ import { signalComplianceIssue } from '../api/complianceApi';
 import { fetchAvailableSlots, bookFieldSlot, type FieldSlot } from '../api/fieldApi';
 import { ShieldAlert, AlertTriangle } from 'lucide-react';
 
+// External libs for export
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 const SOURCE_OPTIONS = ['Site web', 'Facebook', 'LinkedIn', 'Instagram', 'TikTok', 'Prospection', 'Recommandation', 'Autre'];
-// const AGENTS = ['Abdou Sarr', 'Omar Diallo', 'Katos Admin'];
 
 
 const INTERACTION_CONFIG: Record<InteractionType, { icon: any; label: string; color: string }> = {
@@ -58,8 +60,7 @@ const ContactDetail = () => {
     const [showComplianceModal, setShowComplianceModal] = useState(false);
 
     // Debugging logs
-    console.log('[ContactDetail] Rendering for ID:', id);
-    console.log('[ContactDetail] Contacts in store:', contacts.length);
+
 
     // Find contact in store or fallback to the first one (for demo safety)
     const contact = useMemo(() => {
@@ -90,7 +91,8 @@ const ContactDetail = () => {
             } else if (user.role === 'resp_commercial') {
                 const supervised = getSupervisedAgentNames(user, commercials);
                 const supervisedNorm = supervised ? supervised.map(n => n?.trim().toLowerCase()) : [];
-                hasAccess = supervisedNorm.includes(assignedNorm);
+                // Un responsable peut voir ses agents supervisés ET les prospects non assignés
+                hasAccess = !assignedNorm || supervisedNorm.includes(assignedNorm);
             } else if (user.role === 'commercial') {
                 hasAccess = assignedNorm === userNameNorm;
             } else if (user.role === 'assistante') {
@@ -143,6 +145,46 @@ const ContactDetail = () => {
     }, [id]);
 
     const [editForm, setEditForm] = useState<any>(null);
+
+    const exportHistoryPDF = () => {
+        if (!contact) return;
+        const doc = new jsPDF() as any;
+        doc.setFontSize(18);
+        doc.setTextColor(43, 46, 131);
+        doc.text(`HISTORIQUE : ${contact.name}`, 105, 20, { align: 'center' });
+        
+        doc.setFontSize(10);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Service : ${contact.service} | Commercial : ${contact.assignedAgent || 'Non assigné'}`, 105, 28, { align: 'center' });
+
+        const history = interactions
+            .filter(i => String(i.contactId) === String(id))
+            .sort((a, b) => {
+                const dateA = new Date(a.date + 'T' + (a.heure || '00:00')).getTime();
+                const dateB = new Date(b.date + 'T' + (b.heure || '00:00')).getTime();
+                return dateB - dateA;
+            });
+
+        const tableData = history.map(i => [
+            i.date + ' ' + (i.heure || ''),
+            i.type === 'pipeline_step' ? 'Changement d\'étape' : INTERACTION_CONFIG[i.type as InteractionType]?.label || i.type,
+            i.agent || '—',
+            i.description || i.title || '—'
+        ]);
+
+        autoTable(doc, {
+            startY: 35,
+            head: [['Date/Heure', 'Type', 'Agent', 'Commentaire / Description']],
+            body: tableData,
+            theme: 'striped',
+            headStyles: { fillColor: [43, 46, 131] },
+            columnStyles: {
+                3: { cellWidth: 80 }
+            }
+        });
+
+        doc.save(`Historique_${contact.name.replace(/\s+/g, '_')}.pdf`);
+    };
 
     const availableAgents = useMemo(() => {
         const list = commercials.filter(c => c.role !== 'technicien_terrain' && c.role !== 'technicien_chantier');
@@ -287,8 +329,7 @@ const ContactDetail = () => {
 
     const saveEdit = async () => {
         if (contact && !isSubmittingEdit) {
-            console.log('[DEBUG saveEdit] CONTACT OBJECT:', contact);
-            console.log('[DEBUG saveEdit] EDITFORM BEFORE SAVE:', editForm);
+
             
             setIsSubmittingEdit(true);
             try {
@@ -325,7 +366,7 @@ const ContactDetail = () => {
     const saveInteraction = async () => {
         if (isSubmittingInteraction) return;
         setIsSubmittingInteraction(true);
-        console.log('[saveInteraction] Starting...', interactionForm);
+
         if (!interactionForm.title.trim()) {
             showToast('Le titre est obligatoire', 'error');
             setIsSubmittingInteraction(false);
@@ -525,12 +566,12 @@ const ContactDetail = () => {
                     </div>
                 </div>
                 <div className="header-actions">
-                    {['admin', 'dir_commercial', 'commercial'].includes(user?.role || '') && (
+                    {['admin', 'dir_commercial', 'resp_commercial', 'commercial'].includes(user?.role || '') && (
                         <button className="btn-outline" onClick={() => { setEditForm(contact); setShowEditModal(true); }}>
                             <Edit2 size={16} /> Modifier
                         </button>
                     )}
-                    {user?.role !== 'resp_commercial' && (
+                    {['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'assistante'].includes(user?.role || '') && (
                         <button className="btn-primary" onClick={() => setShowInteractionModal(true)}>
                             <Plus size={16} /> Ajouter une interaction
                         </button>
@@ -658,11 +699,18 @@ const ContactDetail = () => {
                                 <div className="timeline">
                                     <div className="d-flex-between mb-sm">
                                         <h4 className="section-title">Timeline des échanges</h4>
-                                        {user?.role !== 'resp_commercial' && (
-                                            <button className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem' }} onClick={() => setShowInteractionModal(true)}>
-                                                <Plus size={13} /> Ajouter
-                                            </button>
-                                        )}
+                                        <div className="d-flex gap-sm">
+                                            {['admin', 'dir_commercial', 'resp_commercial'].includes(user?.role || '') && (
+                                                <button className="btn-outline btn-sm" style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem' }} onClick={exportHistoryPDF}>
+                                                    <Download size={13} /> Exporter PDF
+                                                </button>
+                                            )}
+                                            {['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'assistante'].includes(user?.role || '') && (
+                                                <button className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem' }} onClick={() => setShowInteractionModal(true)}>
+                                                    <Plus size={13} /> Ajouter
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                     
                                     {unifiedHistory.length === 0 ? (
@@ -712,12 +760,12 @@ const ContactDetail = () => {
 
                                                         <div className="d-flex-between mt-10">
                                                             <div className="d-flex gap-sm">
-                                                                {user?.role !== 'resp_commercial' && (
+                                                                {['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'assistante'].includes(user?.role || '') && (
                                                                     <button className="btn-ghost btn-xs" onClick={() => handleEditItem(item)}>
                                                                         <Edit2 size={12} /> Modifier
                                                                     </button>
                                                                 )}
-                                                                {isReschedulable && user?.role !== 'resp_commercial' && (
+                                                                {isReschedulable && ['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'assistante'].includes(user?.role || '') && (
                                                                     <button 
                                                                         className="btn-ghost btn-xs text-primary" 
                                                                         onClick={() => handleEditItem(item)}
@@ -726,7 +774,7 @@ const ContactDetail = () => {
                                                                     </button>
                                                                 )}
                                                             </div>
-                                                            {user?.role !== 'resp_commercial' && (
+                                                            {['admin', 'dir_commercial'].includes(user?.role || '') && (
                                                                 <button 
                                                                     className="btn-ghost btn-xs text-danger"
                                                                     onClick={() => handleDeleteItem(item)}

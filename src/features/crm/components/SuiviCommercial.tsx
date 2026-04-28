@@ -6,7 +6,7 @@ import {
     Activity, Calendar, Filter, ChevronRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useContactStore, STATUS_PROGRESS, STATUS_TO_COLUMN } from '@/stores/contactStore';
+import { useContactStore, STATUS_PROGRESS, STATUS_TO_COLUMN, type Visit, type FollowUp } from '@/stores/contactStore';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { useToast } from '@/app/providers/ToastProvider';
 import { fetchCommercials } from '../api/contactApi';
@@ -38,7 +38,7 @@ const STAGE_META: Record<string, { title: string; color: string }> = {
 
 const SuiviCommercial = () => {
     const { user } = useAuth();
-    const { contacts, interactions } = useContactStore();
+    const { contacts, interactions, visits, followUps } = useContactStore();
     const { showToast } = useToast();
     const navigate = useNavigate();
 
@@ -357,6 +357,90 @@ const SuiviCommercial = () => {
         doc.save(`Suivi_Commercial_${commercialFilter}.pdf`);
     };
 
+    const exportActivityPDF = () => {
+        const doc = new jsPDF() as any;
+        doc.setFontSize(16);
+        doc.setTextColor(43, 46, 131);
+        doc.text("RAPPORT GÉNÉRAL D'ACTIVITÉ COMMERCIALE", 105, 20, { align: 'center' });
+        doc.setFontSize(10);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Période : ${startDate} au ${endDate} | Commercial : ${commercialFilter === 'all' ? 'Tous les agents' : commercialFilter}`, 105, 28, { align: 'center' });
+
+        const filterAgent = (agentName: string) => {
+            if (commercialFilter === 'all') return true;
+            return (agentName || '').trim().toLowerCase() === commercialFilter.toLowerCase();
+        };
+
+        const filterDate = (dateStr: string) => {
+            if (!dateStr) return false;
+            const d = dateStr.split('T')[0];
+            return d >= startDate && d <= endDate;
+        };
+
+        // 1. Collecter les Interactions (Appels, Pipeline, Notes)
+        const activityLogs: any[] = (interactions || []).filter(i => filterAgent(i.agent) && filterDate(i.date)).map(i => ({
+            date: i.date,
+            agent: i.agent || '—',
+            type: i.type === 'pipeline_step' ? 'PIPELINE' : i.type.toUpperCase(),
+            description: i.description || i.title || '—',
+            contactId: i.contactId
+        }));
+
+        // 2. Ajouter les Visites terminées
+        (visits || []).filter((v: Visit) => v.statut === 'completed' && filterAgent(v.agent) && filterDate(v.date)).forEach((v: Visit) => {
+            activityLogs.push({
+                date: v.date,
+                agent: v.agent || '—',
+                type: 'VISITE',
+                description: `Visite ${v.type} effectuée : ${v.title || v.lieu}`,
+                contactId: v.contactId
+            });
+        });
+
+        // 3. Ajouter les Tâches (Relances) terminées
+        (followUps || []).filter((f: FollowUp) => f.statut === 'done' && filterAgent(f.agent) && filterDate(f.dateRelance)).forEach((f: FollowUp) => {
+            activityLogs.push({
+                date: f.dateRelance,
+                agent: f.agent || '—',
+                type: 'TÂCHE',
+                description: `Tâche terminée : ${f.note}`,
+                contactId: f.contactId
+            });
+        });
+
+        // Trier par date décroissante
+        activityLogs.sort((a, b) => b.date.localeCompare(a.date));
+
+        const tableData = activityLogs.map(log => {
+            const contact = contacts.find(c => c.id === log.contactId);
+            return [
+                log.date,
+                log.agent,
+                contact?.name || 'Inconnu',
+                log.type,
+                log.description
+            ];
+        });
+
+        autoTable(doc, {
+            startY: 35,
+            head: [['Date', 'Agent', 'Prospect', 'Catégorie', 'Détails de l\'action']],
+            body: tableData,
+            theme: 'striped',
+            headStyles: { fillColor: [43, 46, 131], fontSize: 9 },
+            bodyStyles: { fontSize: 8 },
+            columnStyles: {
+                4: { cellWidth: 90 }
+            },
+            didDrawPage: (data) => {
+                doc.setFontSize(8);
+                doc.text(`Page ${doc.internal.getNumberOfPages()}`, data.settings.margin.left, doc.internal.pageSize.height - 10);
+            }
+        });
+        
+        doc.save(`Rapport_Activite_Complet_${commercialFilter}_${startDate}.pdf`);
+    };
+
     return (
         <div className="suivi-commercial-page">
             <div className="page-header">
@@ -366,7 +450,8 @@ const SuiviCommercial = () => {
                 </div>
                 <div className="header-actions">
                     <button className="btn-outline btn-sm" onClick={exportExcel}><Download size={16} /> Excel</button>
-                    <button className="btn-primary btn-sm" onClick={exportPDF}><FileText size={16} /> PDF</button>
+                    <button className="btn-outline btn-sm" onClick={exportActivityPDF} style={{ color: 'var(--primary)', borderColor: 'var(--primary)' }}><FileText size={16} /> Rapport Activité</button>
+                    <button className="btn-primary btn-sm" onClick={exportPDF}><FileText size={16} /> PDF Pipeline</button>
                 </div>
             </div>
 
@@ -638,27 +723,27 @@ const SuiviCommercial = () => {
             <style>{`
                 .filter-grid-advanced {
                     display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-                    gap: 1.5rem;
+                    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                    gap: 1rem;
                     align-items: flex-end;
                 }
                 .filter-item label {
                     display: block;
-                    font-size: 0.75rem;
+                    font-size: 0.65rem;
                     font-weight: 700;
-                    color: #0f172a;
-                    margin-bottom: 0.5rem;
+                    color: #475569;
+                    margin-bottom: 0.4rem;
                     text-transform: uppercase;
-                    letter-spacing: 0.025em;
+                    letter-spacing: 0.05em;
                 }
                 .input-with-icon {
                     display: flex;
                     align-items: center;
-                    gap: 0.6rem;
+                    gap: 0.5rem;
                     background: #f8fafc;
-                    padding: 0.6rem 0.8rem;
+                    padding: 0.45rem 0.75rem;
                     border-radius: 8px;
-                    border: 1px solid #94a3b8;
+                    border: 1px solid #cbd5e1;
                     transition: all 0.2s;
                 }
                 .input-with-icon:focus-within {
@@ -666,12 +751,12 @@ const SuiviCommercial = () => {
                     background: white;
                     box-shadow: 0 0 0 3px rgba(43, 46, 131, 0.05);
                 }
-                .input-with-icon svg { color: #0f172a !important; stroke-width: 2.5; }
+                .input-with-icon svg { color: #64748b !important; stroke-width: 2; }
                 .input-with-icon input, .input-with-icon select {
                     border: none;
                     background: transparent;
                     width: 100%;
-                    font-size: 0.9rem;
+                    font-size: 0.75rem;
                     font-weight: 600;
                     color: #0f172a;
                     outline: none;
@@ -679,21 +764,22 @@ const SuiviCommercial = () => {
                 
                 .tab-switcher {
                     display: flex;
-                    gap: 1rem;
+                    gap: 0.75rem;
                     border-bottom: 1px solid #e2e8f0;
                     padding-bottom: 2px;
+                    flex-wrap: wrap;
                 }
                 .tab-btn {
-                    padding: 0.75rem 1.5rem;
+                    padding: 0.6rem 1.25rem;
                     border: none;
                     background: transparent;
-                    font-size: 0.9rem;
+                    font-size: 0.85rem;
                     font-weight: 600;
                     color: #64748b;
                     cursor: pointer;
                     display: flex;
                     align-items: center;
-                    gap: 0.6rem;
+                    gap: 0.5rem;
                     position: relative;
                     transition: all 0.2s;
                 }

@@ -304,7 +304,7 @@ const Dashboard = () => {
             { label: 'Ventes Globales', value: statsData.salesCount, change: salesChange, positive: current.ventes >= prev.ventes, icon: <LayoutDashboard size={22} />, gradient: 'grad-blue', path: '/prospects?filter=ventes-globales' },
         ];
 
-        if (user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') {
+        if (['admin', 'dir_commercial', 'resp_commercial', 'manager', 'superviseur'].includes(user?.role || '')) {
             return [
                 ...base,
                 { label: 'Dossiers Chauds', value: statsData.hotDealsCount, change: 'En cours', positive: true, icon: <Star size={22} />, gradient: 'grad-purple', path: '/prospects?filter=dossiers-chauds' },
@@ -741,22 +741,31 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                {/* ─── Widget Agenda à Venir (Commercial uniquement) ─── */}
-                {user?.role === 'commercial' && (() => {
+                {/* ─── Widget Agenda (Commercial: Personnel | Management: Équipe/Filtré) ─── */}
+                {(() => {
+                    const isManager = ['admin', 'dir_commercial', 'resp_commercial', 'manager', 'superviseur'].includes(user?.role || '');
+                    // Pour les managers, on n'affiche l'agenda que s'ils ont filtré sur un agent spécifique ou s'ils veulent voir le leur
+                    if (!isManager && user?.role !== 'commercial') return null;
+                    
                     const now = new Date();
                     const todayStr = now.toISOString().split('T')[0];
                     const next30days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-                    const myName = (user?.name || '').trim().toLowerCase();
+                    
+                    // Si manager et "Tous les agents", on ne montre pas l'agenda global (trop chargé)
+                    if (isManager && agentFilter === 'all') return null;
+
+                    const targetAgent = agentFilter === 'all' ? (user?.name || '') : agentFilter;
+                    const targetNameNorm = targetAgent.trim().toLowerCase();
 
                     const upcomingItems = [
                         ...(visits || []).filter(v =>
                             v.statut !== 'completed' && v.statut !== 'cancelled' &&
-                            (v.agent || '').trim().toLowerCase() === myName &&
+                            (v.agent || '').trim().toLowerCase() === targetNameNorm &&
                             v.date >= todayStr && v.date <= next30days
                         ).map(v => ({ id: `v-${v.id}`, date: v.date, heure: v.heure, label: v.title || v.type, type: v.type === 'bureau' ? 'rdv' : 'visite', contactId: v.contactId })),
                         ...(followUps || []).filter(f =>
                             f.statut !== 'done' &&
-                            (f.agent || '').trim().toLowerCase() === myName &&
+                            (f.agent || '').trim().toLowerCase() === targetNameNorm &&
                             f.dateRelance >= todayStr && f.dateRelance <= next30days
                         ).map(f => ({ id: `f-${f.id}`, date: f.dateRelance, heure: '', label: f.note, type: 'relance', contactId: f.contactId }))
                     ].sort((a, b) => a.date.localeCompare(b.date) || (a.heure || '').localeCompare(b.heure || ''));
@@ -765,11 +774,11 @@ const Dashboard = () => {
                         <div className="chart-card card-premium" style={{ minWidth: 0 }}>
                             <div className="chart-header">
                                 <div>
-                                    <h3>Mon Agenda</h3>
+                                    <h3>{agentFilter === 'all' ? 'Mon Agenda' : `Agenda: ${agentFilter}`}</h3>
                                     <p className="chart-subtitle">RDV &amp; visites à venir (30j)</p>
                                 </div>
-                                <button className="btn-secondary btn-sm" onClick={() => navigate('/relances')} style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
-                                    Toutes mes tâches
+                                <button className="btn-secondary btn-sm" onClick={() => navigate(isManager && agentFilter !== 'all' ? `/relances?search=${encodeURIComponent(agentFilter)}` : '/relances')} style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+                                    {isManager && agentFilter !== 'all' ? 'Voir ses tâches' : 'Mes tâches'}
                                 </button>
                             </div>
                             {upcomingItems.length === 0 ? (

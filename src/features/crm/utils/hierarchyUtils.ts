@@ -44,8 +44,10 @@ export const getSupervisedAgentNames = (
 
     // 2. Responsable Commercial (RC) / Manager
     if (role === 'resp_commercial' || role === 'manager') {
-        const descendantNames = getAllDescendantNames(currentUser.id);
-        return [currentUser.name || 'Utilisateur', ...descendantNames];
+        const directChildrenNames = allAgents
+            .filter(a => a.parent_id === currentUser.id)
+            .map(a => a.name || 'Utilisateur inconnu');
+        return [currentUser.name || 'Utilisateur', ...directChildrenNames];
     }
 
     // 3. Default / Commercial / Assistante

@@ -101,13 +101,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
 
         // Strategy 3: Absolute fallback — if both getSession AND onAuthStateChange
-        // fail (e.g. Brave blocks all Supabase network calls), force unlock after 3s.
+        // fail (e.g. Brave blocks all Supabase network calls), force unlock after 8s.
+        // Increased from 3s to 8s to handle slow cold starts/networks.
         const hardTimeout = window.setTimeout(() => {
             if (!settled) {
-                console.warn('[AuthProvider] Hard timeout — unlocking app');
+                console.warn('[AuthProvider] Hard timeout reached — unlocking app to avoid blank page');
                 unlock();
             }
-        }, 3000);
+        }, 8000);
 
         return () => {
             isMounted = false;
@@ -118,7 +119,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const fetchProfile = async (supabaseUser: User) => {
         try {
-            // Add a 5s timeout to profile fetching to prevent permanent hang
+            // Increased timeout to 10s for profile fetching to prevent premature failure
             const profilePromise = supabase
                 .from('profiles')
                 .select('*')
@@ -126,33 +127,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 .single();
 
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
+                setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
             );
 
             const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
 
-            if (error) throw error;
+            if (error) {
+                console.warn('[AuthProvider] Profile fetch error:', error);
+                // If we already have a user, don't clear it on a transient refresh error
+                if (!user) {
+                    setUser(null);
+                }
+                return;
+            }
 
-            setUser({
-                id: supabaseUser.id,
-                email: supabaseUser.email!,
-                name: data.name || supabaseUser.email!.split('@')[0],
-                role: data.role as UserRole,
-                service: data.service as UserService | null,
-                avatar: data.avatar_url || data.name?.charAt(0) || 'U',
-                parent_id: data.parent_id || null,
-            });
+            if (data) {
+                setUser({
+                    id: supabaseUser.id,
+                    email: supabaseUser.email!,
+                    name: data.name || supabaseUser.email!.split('@')[0],
+                    role: data.role as UserRole,
+                    service: data.service as UserService | null,
+                    avatar: data.avatar_url || data.name?.charAt(0) || 'U',
+                    parent_id: data.parent_id || null,
+                });
+            }
         } catch (error) {
-            console.error('[AuthProvider] Error fetching profile:', error);
-            setUser({
-                id: supabaseUser.id,
-                email: supabaseUser.email!,
-                name: supabaseUser.email!.split('@')[0],
-                role: 'commercial',
-                service: null,
-                avatar: 'U',
-                parent_id: null,
-            });
+            console.error('[AuthProvider] Exception in fetchProfile:', error);
+            if (!user) {
+                setUser(null);
+            }
         }
     };
 

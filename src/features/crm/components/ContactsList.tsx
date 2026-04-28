@@ -129,7 +129,6 @@ const ContactsList = () => {
                     const noteParts = values.slice(noteIdx, noteIdx + extraCount + 1);
                     const afterNote = values.slice(noteIdx + extraCount + 1);
                     values = [...beforeNote, noteParts.join(', '), ...afterNote];
-                    console.log(`[CSV] Row ${rowIdx+1} merged: ${extraCount} extra columns found.`);
                 }
 
                 const obj: any = {};
@@ -159,9 +158,6 @@ const ContactsList = () => {
                         cAt = `${year}-${month}-${day}`;
                     }
                 }
-                
-                // Debug log for mapping
-                console.log('[CSV Map] Item:', item.nom, '-> Statut:', item.statut, '-> Agent:', item.commercial);
 
                 // Robust status mapping
                 let stat = item.statut || item.status || item.stat || item.situation || 'Prospect';
@@ -264,7 +260,15 @@ const ContactsList = () => {
             setCommercials(data);
         };
         loadCommercials();
-    }, [user]);
+
+        // Handle URL actions (from Pipeline or other pages)
+        const action = searchParams.get('action');
+        if (action === 'new') {
+            openAdd();
+        } else if (action === 'import') {
+            setShowImportModal(true);
+        }
+    }, [user, searchParams]);
 
     // Filtrer les commerciaux selon le service sélectionné dans le formulaire
     const availableAgents = commercials.filter(c => {
@@ -274,11 +278,9 @@ const ContactsList = () => {
         // Pour les admins, dir_com et superviseurs, on montre TOUS les agents
         if (user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'superviseur') return true;
         
-        // Pour un Responsable Commercial (RC), on montre ses managers et les agents de ses managers
+        // Pour un Responsable Commercial (RC), on montre ses commerciaux directs
         if (user?.role === 'resp_commercial') {
-            const supervisedManagers = commercials.filter(comm => comm.parent_id === user.id);
-            const supervisedManagerIds = supervisedManagers.map(m => m.id);
-            return c.parent_id === user.id || (c.parent_id && supervisedManagerIds.includes(c.parent_id));
+            return c.parent_id === user.id;
         }
 
         // Pour un manager, on montre les commerciaux de son groupe
@@ -384,12 +386,24 @@ const ContactsList = () => {
                 if (supervisedNames === null) return true; // Accès total
 
                 if (user?.role === 'assistante') {
-                    return c.createdBy === user.name || !c.assignedAgent;
+                    return !!(c.createdBy === user.name || !c.assignedAgent);
+                }
+                
+                const lowerSupervised = supervisedNames.map(n => (n || '').trim().toLowerCase()).filter(Boolean);
+                const assignedLower = (c.assignedAgent || '').trim().toLowerCase();
+
+                if (user?.role === 'resp_commercial') {
+                    // Un responsable ne voit QUE ses agents supervisés (pas les non assignés)
+                    return !!(c.assignedAgent && lowerSupervised.includes(assignedLower));
+                }
+                
+                if (user?.role === 'commercial') {
+                    // Un commercial ne voit QUE ses propres prospects
+                    return assignedLower === (user?.name || '').trim().toLowerCase();
                 }
 
-                // RC / Manager / Commercial : uniquement les contacts supervisés
-                const lowerSupervised = supervisedNames.map(n => (n || '').trim().toLowerCase()).filter(Boolean);
-                return lowerSupervised.includes((c.assignedAgent || '').trim().toLowerCase());
+                // Pour les autres (Admin, DirCom, Manager) : supervisés + non assignés
+                return !!(!c.assignedAgent || lowerSupervised.includes(assignedLower));
             });
         } catch (err) {
             console.error('[ContactsList] Error in filter logic:', err);
@@ -527,12 +541,16 @@ const ContactsList = () => {
                     <p className="subtitle">Gérez votre base de contacts et suivez leurs dossiers</p>
                 </div>
                 <div className="d-flex gap-2">
-                    <button className="btn-secondary" onClick={() => setShowImportModal(true)}>
-                        <Upload size={18} /> Importer
-                    </button>
-                    <button className="btn-primary" onClick={openAdd}>
-                        <Plus size={18} /> Nouveau Contact
-                    </button>
+                    {['admin', 'dir_commercial', 'assistante', 'marketing'].includes(user?.role || '') && (
+                        <>
+                            <button className="btn-secondary" onClick={() => setShowImportModal(true)}>
+                                <Upload size={18} /> Importer
+                            </button>
+                            <button className="btn-primary" onClick={openAdd}>
+                                <Plus size={18} /> Nouveau Contact
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -570,7 +588,9 @@ const ContactsList = () => {
                                     style={{ minWidth: 160 }}
                                 >
                                     <option value="all">Tous les commerciaux</option>
-                                    <option value="UNASSIGNED">À dispatcher</option>
+                                    {['admin', 'dir_commercial'].includes(user?.role || '') && (
+                                        <option value="UNASSIGNED">À dispatcher</option>
+                                    )}
                                     {supervisedForFilter.map(name => (
                                         <option key={name} value={name}>{name}</option>
                                     ))}
@@ -777,7 +797,7 @@ const ContactsList = () => {
                             Prospect Réactif (+10 pts)
                         </label>
                     </div>
-                    {(user?.role === 'admin' || user?.role === 'dir_commercial') && (
+                    {(user?.role === 'admin' || user?.role === 'dir_commercial' || user?.role === 'resp_commercial') && (
                         <div className="form-group">
                             <label className="form-label">Commercial affecté</label>
                             <select 

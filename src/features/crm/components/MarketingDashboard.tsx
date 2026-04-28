@@ -1,17 +1,26 @@
 import { useState, useMemo } from 'react';
 import { useContactStore } from '@/stores/contactStore';
+import { useAuth } from '@/app/providers/AuthProvider';
+import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
 import { Users, TrendingUp, BarChart3, Calendar } from 'lucide-react';
 
 const COLORS = ['#2B2E83', '#E96C2E', '#10B981', '#6366F1', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4'];
 
-
-
-
 const MarketingDashboard = () => {
-    const { contacts } = useContactStore();
+    const { contacts, commercials } = useContactStore();
+    const { user } = useAuth();
 
     // Stats & Filters
     const [period, setPeriod] = useState<'tout' | 'ce-mois' | 'cette-semaine' | 'trimestre' | 'annee'>('ce-mois');
+
+    // --- HIERARCHY FILTERING ---
+    const supervisedNames = useMemo(() => getSupervisedAgentNames(user, commercials), [user, commercials]);
+    const lowerSupervised = useMemo(() => supervisedNames ? supervisedNames.map(n => (n || '').trim().toLowerCase()) : null, [supervisedNames]);
+
+    const isMine = (agentName: string) => {
+        if (lowerSupervised === null) return true; // Admin/DirCom voit tout
+        return lowerSupervised.includes((agentName || '').trim().toLowerCase());
+    };
 
     // --- DATA CALCULATION ---
     const filteredContacts = useMemo(() => {
@@ -31,15 +40,40 @@ const MarketingDashboard = () => {
         else if (period === 'annee') startDate = new Date(now.getFullYear(), 0, 1);
 
         return contacts.filter(c => {
+            // Filtre par période (Création)
             if (startDate && c.createdAt && new Date(c.createdAt) < startDate) return false;
+            // Filtre hiérarchique
+            if (!isMine(c.assignedAgent || '')) return false;
             return true;
         });
-    }, [contacts, period]);
+    }, [contacts, period, lowerSupervised]);
 
     const stats = useMemo(() => {
         const sourcesCount: Record<string, number> = {};
         const agentCount: Record<string, number> = {};
-        let totalSales = 0;
+        
+        const now = new Date();
+        let startDate: Date | null = null;
+        if (period === 'ce-mois') startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        else if (period === 'cette-semaine') {
+            const day = now.getDay() || 7;
+            startDate = new Date(now);
+            startDate.setDate(now.getDate() - day + 1);
+            startDate.setHours(0, 0, 0, 0);
+        }
+        else if (period === 'trimestre') {
+            const quarter = Math.floor(now.getMonth() / 3);
+            startDate = new Date(now.getFullYear(), quarter * 3, 1);
+        }
+        else if (period === 'annee') startDate = new Date(now.getFullYear(), 0, 1);
+
+        // Les ventes sont calculées sur TOUTE la base (si convertedAt est dans la période et appartient au groupe)
+        const totalSales = contacts.filter(c => {
+            if (!isMine(c.assignedAgent || '')) return false;
+            if (!c.convertedAt) return false;
+            if (startDate && new Date(c.convertedAt) < startDate) return false;
+            return true;
+        }).length;
 
         filteredContacts.forEach(c => {
             const source = c.source || 'Non renseignée';
@@ -47,10 +81,6 @@ const MarketingDashboard = () => {
 
             const agent = c.assignedAgent || 'À dispatcher';
             agentCount[agent] = (agentCount[agent] || 0) + 1;
-
-            if (['Contrat', 'Paiement', 'Client', 'Projet Livré', 'Livraison Client'].includes(c.status)) {
-                totalSales++;
-            }
         });
 
         const sourceData = Object.entries(sourcesCount).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
@@ -63,7 +93,7 @@ const MarketingDashboard = () => {
             sourceData,
             dispatchData
         };
-    }, [filteredContacts]);
+    }, [filteredContacts, contacts, period, lowerSupervised]);
 
 
 
@@ -123,7 +153,7 @@ const MarketingDashboard = () => {
                                 <div key={item.name} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', alignItems: 'center' }}>
                                         <span style={{ fontWeight: 600 }}>
-                                            {item.name} <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: '4px' }}>({item.value})</span>
+                                            {item.name} <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: '4px' }}>: {item.value} prospect(s)</span>
                                         </span>
                                         <span style={{ fontWeight: 700, color }}>{percent}%</span>
                                     </div>

@@ -25,7 +25,7 @@ const FieldAgenda = () => {
     });
 
     useEffect(() => {
-        console.log('[FieldAgenda] Component mounted with viewDate:', viewDate);
+
     }, []);
 
     const loadSlots = async () => {

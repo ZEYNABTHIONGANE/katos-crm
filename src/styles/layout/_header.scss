@@ -7,7 +7,7 @@
     justify-content: space-between;
     padding: 0 2rem;
     box-shadow: var(--shadow-sm);
-    z-index: 10;
+    z-index: 100; // Increased to be above sticky pipeline headers (z-index: 20)
 }
 
 .header-left {

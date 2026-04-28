@@ -50,7 +50,7 @@ function App() {
                       <Route index element={<Dashboard />} />
                       <Route path="prospects" element={<ContactsList />} />
                       <Route path="prospects/:id" element={<ContactDetail />} />
-                      <Route path="marketing-prospects" element={<RoleGuard allowedRoles={['admin', 'marketing']}><MarketingProspects /></RoleGuard>} />
+                      <Route path="marketing-prospects" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial', 'marketing']}><MarketingProspects /></RoleGuard>} />
                       <Route path="pipeline" element={<Pipeline />} />
                       <Route path="relances" element={<RoleGuard allowedRoles={['commercial']}><Relances /></RoleGuard>} />
                       <Route path="agents" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial']}><Agents /></RoleGuard>} />

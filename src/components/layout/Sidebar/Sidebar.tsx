@@ -47,7 +47,7 @@ const Sidebar = ({ isCollapsed }: { isCollapsed: boolean }) => {
                     path: '/marketing-prospects',
                     name: 'Registre Prospects',
                     icon: <Users size={18} />,
-                    allowedRoles: ['admin', 'marketing']
+                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'marketing']
                 },
                 {
                     path: '/relances',
