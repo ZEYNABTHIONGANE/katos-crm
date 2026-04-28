@@ -24,6 +24,7 @@ import DocumentsPage from '@/features/crm/components/DocumentsPage';
 import FieldAgenda from '@/features/crm/components/FieldAgenda';
 import FAQ from '@/features/crm/components/FAQ';
 import Messages from '@/features/crm/components/Messages';
+import MarketingProspects from '@/features/crm/components/MarketingProspects';
 import ComplianceDashboard from '@/features/crm/components/ComplianceDashboard';
 import SuiviCommercial from '@/features/crm/components/SuiviCommercial';
 
@@ -49,6 +50,7 @@ function App() {
                       <Route index element={<Dashboard />} />
                       <Route path="prospects" element={<ContactsList />} />
                       <Route path="prospects/:id" element={<ContactDetail />} />
+                      <Route path="marketing-prospects" element={<RoleGuard allowedRoles={['admin', 'marketing']}><MarketingProspects /></RoleGuard>} />
                       <Route path="pipeline" element={<Pipeline />} />
                       <Route path="relances" element={<RoleGuard allowedRoles={['commercial']}><Relances /></RoleGuard>} />
                       <Route path="agents" element={<RoleGuard allowedRoles={['admin', 'dir_commercial', 'resp_commercial']}><Agents /></RoleGuard>} />

@@ -270,6 +270,7 @@ const ContactDetail = () => {
             case 'Qualification': 
             case 'En Qualification': return <span className="badge badge-info">Qualification</span>;
             case 'RDV': return <span className="badge badge-primary">RDV</span>;
+            case 'Visite Terrain': return <span className="badge badge-primary" style={{ backgroundColor: '#c026d3' }}>Visite Terrain</span>;
             case 'Proposition Commerciale': return <span className="badge badge-primary">Proposition</span>;
             case 'Négociation': return <span className="badge badge-info">Négociation</span>;
             case 'Réservation': return <span className="badge badge-secondary">Réservation</span>;
@@ -495,7 +496,6 @@ const ContactDetail = () => {
 
             <div className="detail-header card-premium">
                 <div className="header-info">
-                    <div className="avatar-large">{(contact.name || '?').charAt(0)}</div>
                     <div className="title-section">
                         <div className="d-flex align-center gap-sm">
                             <h1>{contact.name || 'Sans Nom'}</h1>

@@ -23,6 +23,7 @@ export const PIPELINE_STATUSES = [
     'En Qualification',
     'RDV',
     'RDV / Visite Terrain',
+    'Visite Terrain',
     'Proposition Commerciale',
     'Négociation',
     'Réservation',
@@ -53,3 +54,12 @@ export const countAgentSales = (
 ) => {
     return countAgentContacts(contacts, agentName).filter(c => SALE_STATUSES.includes(c.status));
 };
+/** Motifs de refus standards */
+export const REFUSAL_REASONS = [
+    "Prospect n'a pas de budget",
+    "Prospect n'a pas confiance",
+    "Prospect a peur des litiges",
+    "Prospect veut voir avec sa banque",
+    "La localisation est un peu loin pour le prospect",
+    "Autre (Précisez ci-dessous)"
+];

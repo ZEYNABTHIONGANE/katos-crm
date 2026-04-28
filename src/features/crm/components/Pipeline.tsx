@@ -1,65 +1,94 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { 
+    Search, User, Filter, Layout, Phone, 
+    Calendar, ArrowRight, MoreVertical, Trash2, 
+    Circle, Folder, GripVertical, FileText, Megaphone, MapPin,
+    CreditCard, FileCheck, Truck, Heart, XCircle, Settings, ClipboardList
+} from 'lucide-react';
+import { useContactStore } from '@/stores/contactStore';
+import type { CrmContact } from '@/stores/contactStore';
+import Modal from '@/components/ui/Modal';
+import { useToast } from '@/app/providers/ToastProvider';
+import { REFUSAL_REASONS } from '../utils/crmConstants';
+import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { useNavigate } from 'react-router-dom';
-import {
-    MoreVertical, FileText, MessageSquare, Bookmark, FileSignature, CreditCard, Folder, Wrench,
-    Circle, Clock, CheckCircle2, Star, Link as LinkIcon, Megaphone, User,
-    Search, Trash2, Calendar, GripVertical
-} from 'lucide-react';
-import { useContactStore, STATUS_TO_COLUMN, type CrmContact } from '@/stores/contactStore';
-import { useToast } from '@/app/providers/ToastProvider';
-import { fetchCommercials } from '../api/contactApi';
-import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
-import Modal from '@/components/ui/Modal';
-import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 
-// ---------- Types ----------
-const COLUMN_META: Record<string, { title: string; color: string; icon: React.ReactNode }> = {
-    prospect: { title: 'Prospect', color: '#64748b', icon: <Circle size={16} /> },
-    qualification: { title: 'Qualification', color: '#E96C2E', icon: <Clock size={16} /> },
-    rdv: { title: 'RDV', color: '#F59E0B', icon: <Calendar size={16} /> },
-    proposition: { title: 'Proposition Commerciale', color: '#3B82F6', icon: <FileText size={16} /> },
-    negociation: { title: 'Négociation', color: '#8B5CF6', icon: <MessageSquare size={16} /> },
-    reservation: { title: 'Réservation', color: '#EC4899', icon: <Bookmark size={16} /> },
-    contrat: { title: 'Contrat', color: '#6366F1', icon: <FileSignature size={16} /> },
-    paiement: { title: 'Paiement', color: '#14B8A6', icon: <CreditCard size={16} /> },
-    transfert_technique: { title: 'Transfert Technique', color: '#F97316', icon: <Folder size={16} /> },
-    suivi_chantier: { title: 'Suivi Chantier', color: '#FBBF24', icon: <Wrench size={16} /> },
-    livraison: { title: 'Livraison Client', color: '#10B981', icon: <CheckCircle2 size={16} /> },
-    fidelisation: { title: 'Fidélisation', color: '#2B2E83', icon: <Star size={16} /> },
-    pas_interesse: { title: 'Pas intéressé', color: '#ef4444', icon: <Trash2 size={16} /> },
+const COLUMN_META: Record<string, { title: string; color: string; icon: any }> = {
+    'prospect': { title: 'Prospect', color: '#E96C2E', icon: <User size={18} /> },
+    'qualification': { title: 'Qualification', color: '#F59E0B', icon: <Filter size={18} /> },
+    'rdv': { title: 'RDV', color: '#8b5cf6', icon: <Calendar size={18} /> },
+    'visite_terrain': { title: 'Visite Terrain', color: '#c026d3', icon: <MapPin size={18} /> },
+    'proposition': { title: 'Proposition', color: '#2B2E83', icon: <ClipboardList size={18} /> },
+    'negociation': { title: 'Négociation', color: '#6366f1', icon: <Layout size={18} /> },
+    'reservation': { title: 'Réservation', color: '#ec4899', icon: <FileCheck size={18} /> },
+    'contrat': { title: 'Contrat', color: '#10B981', icon: <ArrowRight size={18} /> },
+    'paiement': { title: 'Paiement', color: '#059669', icon: <CreditCard size={18} /> },
+    'transfert_technique': { title: 'Transfert Tech', color: '#0ea5e9', icon: <Settings size={18} /> },
+    'suivi_chantier': { title: 'Suivi Chantier', color: '#f97316', icon: <Truck size={18} /> },
+    'livraison': { title: 'Livraison', color: '#10b981', icon: <Truck size={18} /> },
+    'fidelisation': { title: 'Fidélisation', color: '#ef4444', icon: <Heart size={18} /> },
+    'pas_interesse': { title: 'Pas intéressé', color: '#64748b', icon: <XCircle size={18} /> }
 };
 
 const columnOrder = [
-    'prospect', 'qualification', 'rdv', 'proposition', 'negociation',
-    'reservation', 'contrat', 'paiement', 'transfert_technique',
+    'prospect', 'qualification', 'rdv', 'visite_terrain', 'proposition', 'negociation', 
+    'reservation', 'contrat', 'paiement', 'transfert_technique', 
     'suivi_chantier', 'livraison', 'fidelisation', 'pas_interesse'
-];
+] as const;
 
-const COLUMN_TO_STATUS: Record<string, string> = {
-    prospect: 'Prospect',
-    qualification: 'Qualification',
-    rdv: 'RDV',
-    proposition: 'Proposition Commerciale',
-    negociation: 'Négociation',
-    reservation: 'Réservation',
-    contrat: 'Contrat',
-    paiement: 'Paiement',
-    transfert_technique: 'Transfert de dossier technique',
-    suivi_chantier: 'Suivi Chantier',
-    livraison: 'Livraison Client',
-    fidelisation: 'Fidélisation',
-    pas_interesse: 'Pas intéressé',
+const STATUS_TO_COLUMN: Record<string, string> = {
+    'Prospect': 'prospect',
+    'Qualification': 'qualification',
+    'En Qualification': 'qualification',
+    'RDV': 'rdv',
+    'RDV / Visite Terrain': 'visite_terrain',
+    'Visite Terrain': 'visite_terrain',
+    'Proposition Commerciale': 'proposition',
+    'Négociation': 'negociation',
+    'Réservation': 'reservation',
+    'Contrat': 'contrat',
+    'Paiement': 'contrat', // Some maps say Paiement -> contrat, others say Paiement -> paiement. Let's align with store.
+    'Transfert de dossier technique': 'transfert_technique',
+    'Suivi Chantier': 'suivi_chantier',
+    'Livraison Client': 'livraison',
+    'Fidélisation': 'fidelisation',
+    'Pas intéressé': 'pas_interesse'
 };
 
-const REFUSAL_REASONS = [
-    "Prospect n'a pas de budget",
-    "Prospect n'a pas confiance",
-    "Prospect a peur des litiges",
-    "Prospect veut voir avec sa banque",
-    "La localisation est un peu loin pour le prospect",
-    "Autre (Précisez ci-dessous)"
-];
+// Aligning with Store's STATUS_TO_COLUMN more strictly
+const FINAL_STATUS_MAP: Record<string, string> = {
+    'prospect': 'Prospect',
+    'qualification': 'En Qualification',
+    'rdv': 'RDV',
+    'visite_terrain': 'Visite Terrain',
+    'proposition': 'Proposition Commerciale',
+    'negociation': 'Négociation',
+    'reservation': 'Réservation',
+    'contrat': 'Contrat',
+    'paiement': 'Paiement',
+    'transfert_technique': 'Transfert dossier tech',
+    'suivi_chantier': 'Suivi Chantier',
+    'livraison': 'Livraison Client',
+    'fidelisation': 'Fidélisation',
+    'pas_interesse': 'Pas intéressé'
+};
+
+const getAgentColor = (name: string) => {
+    if (!name) return { bg: 'rgba(100, 116, 139, 0.1)', text: '#64748b' };
+    const colors = [
+        { bg: 'rgba(43, 46, 131, 0.1)', text: '#2B2E83' }, 
+        { bg: 'rgba(233, 108, 46, 0.1)', text: '#E96C2E' }, 
+        { bg: 'rgba(16, 185, 129, 0.1)', text: '#10B981' }, 
+        { bg: 'rgba(99, 102, 241, 0.1)', text: '#6366F1' }, 
+        { bg: 'rgba(245, 158, 11, 0.1)', text: '#F59E0B' },
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    return colors[Math.abs(hash) % colors.length];
+};
 
 const SERVICE_LABELS: Record<string, { label: string; color: string }> = {
     foncier: { label: 'Foncier', color: '#E96C2E' },
@@ -72,7 +101,7 @@ const KanbanCard = ({
     contact, colId, colColor, onMove, onDelete, userRole, provided, isDragging
 }: {
     contact: CrmContact; colId: string; colColor: string;
-    onMove: (id: number, toColId: string) => void;
+    onMove: (contact: CrmContact) => void;
     onDelete: (id: number) => void;
     userRole?: string;
     provided: any;
@@ -88,6 +117,7 @@ const KanbanCard = ({
             ref={provided.innerRef}
             {...provided.draggableProps}
             {...provided.dragHandleProps}
+            data-col-id={colId}
             style={{ 
                 ...provided.draggableProps.style,
                 cursor: 'grab', 
@@ -103,29 +133,21 @@ const KanbanCard = ({
                 <div className="drag-handle" style={{ color: 'var(--text-muted)', display: 'flex', opacity: 0.5 }}>
                     <GripVertical size={14} />
                 </div>
-                <div className="kcard-avatar" style={{ width: '32px', height: '32px', fontSize: '0.85rem', backgroundColor: colColor + '22', color: colColor }}>
-                    {contact.name.charAt(0)}
-                </div>
                 <div className="kcard-info" style={{ flex: 1 }}>
-                    <span className="kcard-name" style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)' }}>{contact.name}</span>
-                    {contact.company && <span className="kcard-company" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{contact.company}</span>}
+                    <span className="kcard-name" style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)', display: 'block' }}>{contact.name}</span>
+                    {contact.company && <span className="kcard-company" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block' }}>{contact.company}</span>}
                 </div>
-                <div className="kcard-menu-wrap" onClick={e => e.stopPropagation()}>
+                <div className="kcard-menu-wrap" onClick={e => e.stopPropagation()} style={{ position: 'relative' }}>
                     <button className="btn-icon-sm" onClick={() => setMenuOpen(!menuOpen)}>
                         <MoreVertical size={14} />
                     </button>
                     {menuOpen && (
-                        <div className="kcard-dropdown">
-                            <button onClick={() => { navigate(`/prospects/${contact.id}`); setMenuOpen(false); }}>
+                        <div className="kcard-dropdown" style={{ position: 'absolute', right: 0, top: '100%', zIndex: 100, backgroundColor: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', boxShadow: 'var(--shadow-md)', minWidth: '150px' }}>
+                            <button onClick={() => { navigate(`/prospects/${contact.id}`); setMenuOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', width: '100%', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '0.8rem' }}>
                                 <FileText size={13} /> Voir la fiche
                             </button>
-                            {colId !== 'pas_interesse' && (
-                                <button className="danger" onClick={() => { onMove(contact.id, 'pas_interesse'); setMenuOpen(false); }}>
-                                    <Trash2 size={13} /> Pas intéressé
-                                </button>
-                            )}
                             {['admin', 'dir_commercial'].includes(userRole || '') && (
-                                <button className="danger" onClick={() => { onDelete(contact.id); setMenuOpen(false); }}>
+                                <button className="danger" onClick={() => { if(window.confirm('Supprimer ce prospect ?')) onDelete(contact.id); setMenuOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', width: '100%', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--danger)' }}>
                                     <Trash2 size={13} /> Supprimer
                                 </button>
                             )}
@@ -139,7 +161,7 @@ const KanbanCard = ({
                     <span className="kcard-tag" style={{
                         fontSize: '0.7rem', padding: '2px 8px', color: svc.color,
                         borderColor: svc.color + '33', background: svc.color + '11',
-                        borderRadius: '4px', fontWeight: 600
+                        borderRadius: '4px', fontWeight: 600, border: '1px solid'
                     }}>
                         {svc.label}
                     </span>
@@ -156,228 +178,219 @@ const KanbanCard = ({
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {contact.propertyTitle && (
+                {contact.phone && (
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <LinkIcon size={12} /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.propertyTitle}</span>
+                        <Phone size={12} /> <span>{contact.phone}</span>
                     </div>
                 )}
-                <div style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <User size={12} /> {contact.assignedAgent || 'Non assigné'}
-                </div>
+                {contact.assignedAgent ? (() => {
+                    const theme = getAgentColor(contact.assignedAgent);
+                    return (
+                        <div style={{ 
+                            fontSize: '0.7rem', 
+                            padding: '3px 8px', 
+                            borderRadius: '12px', 
+                            background: theme.bg, 
+                            color: theme.text, 
+                            display: 'inline-flex', 
+                            alignItems: 'center', 
+                            gap: '4px',
+                            fontWeight: 600,
+                            marginTop: '2px'
+                        }}>
+                            <User size={10} /> {contact.assignedAgent}
+                        </div>
+                    );
+                })() : (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--danger)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <User size={12} /> À dispatcher
+                    </div>
+                )}
             </div>
 
             <div className="kcard-footer" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
                 <span className="kcard-since" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                    #{contact.id} · {contact.phone}
+                    #{contact.id}
                 </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
-                    <Clock size={10} /> {contact.lastAction || 'Récemment'}
-                </div>
+                <button 
+                    className="kcard-advance-btn" 
+                    style={{ color: colColor, border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                    onClick={() => onMove(contact)}
+                >
+                    Avancer <ArrowRight size={12} />
+                </button>
             </div>
         </div>
     );
 };
 
-// ---------- Page Pipeline ----------
 const Pipeline = () => {
-    const { contacts, moveContactStatus, deleteContact } = useContactStore();
+    const { contacts, commercials, moveContactStatus, deleteContact } = useContactStore();
     const { user } = useAuth();
     const { showToast } = useToast();
 
     const [search, setSearch] = useState('');
     const [agentFilter, setAgentFilter] = useState('');
     const [serviceFilter, setServiceFilter] = useState('');
-    const [commercials, setCommercials] = useState<any[]>([]);
-
-    const [moveModal, setMoveModal] = useState<{ contactId: number; targetStatus: string; contactName: string } | null>(null);
+    const [moveModal, setMoveModal] = useState<any>(null);
     const [transitionNote, setTransitionNote] = useState('');
     const [selectedRefusal, setSelectedRefusal] = useState('');
     const [isMoving, setIsMoving] = useState(false);
 
-    useEffect(() => {
-        const load = async () => {
-            const data = await fetchCommercials();
-            setCommercials(data);
-        };
-        load();
-    }, []);
-
     const agentOptions = useMemo(() => {
         try {
-            const supervised = getSupervisedAgentNames(user, commercials);
-            if (supervised === null) return commercials.map(c => c.name).sort();
-            return supervised.sort();
+            const supervisedNames = getSupervisedAgentNames(user, commercials);
+            if (supervisedNames === null) {
+                const set = new Set<string>();
+                contacts.forEach(c => { if (c.assignedAgent) set.add(c.assignedAgent); });
+                return Array.from(set).sort();
+            }
+            return supervisedNames.sort();
         } catch (err) {
             console.error("Error calculating agentOptions:", err);
             return [];
         }
-    }, [commercials, user]);
+    }, [commercials, user, contacts]);
 
-    const columns = useMemo(() => {
+    const filteredColumns = useMemo(() => {
         try {
             const supervisedNames = getSupervisedAgentNames(user, commercials);
             const lowerSupervised = supervisedNames ? supervisedNames.map(n => n?.trim().toLowerCase()) : null;
 
-            return columnOrder.reduce((acc, colId) => {
-                const statusForCol = COLUMN_TO_STATUS[colId];
-                let list = (contacts || []).filter(c => STATUS_TO_COLUMN[c.status] === colId || c.status === statusForCol);
+            const baseList = (contacts || []).filter(c => {
+                const matchesSearch = !search || 
+                    c.name.toLowerCase().includes(search.toLowerCase()) ||
+                    (c.company || '').toLowerCase().includes(search.toLowerCase()) ||
+                    (c.phone || '').includes(search) ||
+                    (c.assignedAgent || '').toLowerCase().includes(search.toLowerCase());
+                
+                const matchesAgent = !agentFilter 
+                    || (agentFilter === 'UNASSIGNED' && !c.assignedAgent) 
+                    || (c.assignedAgent || '').trim().toLowerCase() === agentFilter.toLowerCase();
+                    
+                const matchesService = !serviceFilter || c.service === serviceFilter;
 
+                let isAllowed = true;
                 if (lowerSupervised !== null) {
                     if (user?.role === 'assistante') {
-                        list = list.filter(c => c.createdBy === user?.name || !c.assignedAgent);
+                        isAllowed = c.createdBy === user?.name || !c.assignedAgent;
                     } else {
-                        list = list.filter(c => lowerSupervised.includes((c.assignedAgent || '').trim().toLowerCase()));
+                        // Un responsable/directeur peut voir ses agents supervisés ET les prospects non assignés
+                        isAllowed = !c.assignedAgent || lowerSupervised.includes((c.assignedAgent || '').trim().toLowerCase());
                     }
                 }
 
-                if (user?.role === 'manager') {
-                    const userService = user.service === 'gestion' ? 'gestion_immobiliere' : user.service;
-                    list = list.filter(c => !c.service || c.service === userService);
-                }
+                return matchesSearch && matchesAgent && matchesService && isAllowed;
+            });
 
-                if (agentFilter) list = list.filter(c => (c.assignedAgent || '').trim().toLowerCase() === agentFilter.toLowerCase());
-                if (serviceFilter) list = list.filter(c => c.service === serviceFilter);
-
-                acc[colId] = list;
-                return acc;
-            }, {} as Record<string, CrmContact[]>);
-        } catch (err) {
-            console.error("Error calculating columns:", err);
-            return columnOrder.reduce((acc, colId) => { acc[colId] = []; return acc; }, {} as Record<string, CrmContact[]>);
-        }
-    }, [contacts, user, commercials, agentFilter, serviceFilter]);
-
-    const filteredColumns = useMemo(() => {
-        try {
-            if (!search.trim()) return columns;
-            const q = search.toLowerCase();
             return columnOrder.reduce((acc, colId) => {
-                acc[colId] = (columns[colId] || []).filter(c =>
-                    (c.name || '').toLowerCase().includes(q) ||
-                    (c.company || '').toLowerCase().includes(q) ||
-                    (c.phone || '').toLowerCase().includes(q) ||
-                    (c.email && c.email.toLowerCase().includes(q)) ||
-                    (c.notes && c.notes.toLowerCase().includes(q)) ||
-                    (c.assignedAgent && c.assignedAgent.toLowerCase().includes(q)) ||
-                    (c.service && c.service.toLowerCase().includes(q)) ||
-                    (c.propertyTitle && c.propertyTitle.toLowerCase().includes(q))
-                );
+                acc[colId] = baseList.filter(c => {
+                    const colForStatus = STATUS_TO_COLUMN[c.status];
+                    return colForStatus === colId;
+                });
                 return acc;
-            }, {} as Record<string, CrmContact[]>);
+            }, {} as Record<string, any[]>);
         } catch (err) {
             console.error("Error calculating filteredColumns:", err);
-            return columns;
+            return {};
         }
-    }, [columns, search]);
+    }, [contacts, search, agentFilter, serviceFilter, user, commercials]);
 
-    const filteredTotal = Object.values(filteredColumns).reduce((s, arr) => s + arr.length, 0);
+    const filteredTotal = useMemo(() => {
+        return Object.values(filteredColumns).reduce((sum, col) => sum + col.length, 0);
+    }, [filteredColumns]);
 
-    const moveCard = (id: number, toColId: string) => {
-        const newStatus = COLUMN_TO_STATUS[toColId];
-        const contact = contacts.find(c => c.id === id);
-        if (newStatus && contact) {
-            setMoveModal({ contactId: id, targetStatus: newStatus, contactName: contact.name });
-            setTransitionNote('');
-            setSelectedRefusal('');
-        }
-    };
-
-    const onDragEnd = (result: DropResult) => {
+    const onDragEnd = (result: any) => {
         const { destination, source, draggableId } = result;
-
         if (!destination) return;
         if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
-        const contactId = parseInt(draggableId);
-        const targetStatusId = destination.droppableId;
-        const newStatus = COLUMN_TO_STATUS[targetStatusId];
-        const contact = contacts.find(c => c.id === contactId);
+        const contact = contacts.find(c => c.id.toString() === draggableId);
+        if (!contact) return;
 
-        if (newStatus && contact) {
-            setMoveModal({ contactId, targetStatus: newStatus, contactName: contact.name });
-            setTransitionNote('');
-            setSelectedRefusal('');
-        }
+        const targetStatus = FINAL_STATUS_MAP[destination.droppableId];
+        handleMoveAttempt(contact, targetStatus);
     };
 
-    const confirmMove = async () => {
-        if (!moveModal) return;
-        setIsMoving(true);
-        
-        // Build the final note
-        let finalNote = transitionNote.trim();
-        if (moveModal.targetStatus === 'Pas intéressé') {
-            if (selectedRefusal && !selectedRefusal.includes('Autre')) {
-                finalNote = selectedRefusal + (transitionNote ? ` - ${transitionNote}` : '');
-            }
-        }
+    const handleMoveAttempt = (contact: any, targetStatus: string) => {
+        setMoveModal({ contactId: contact.id, contactName: contact.name, targetStatus });
+    };
 
+    const confirmMove = async (id?: number, status?: string, refusalReason?: string) => {
+        const contactId = id || moveModal?.contactId;
+        const targetStatus = status || moveModal?.targetStatus;
+        if (!contactId || !targetStatus) return;
+
+        setIsMoving(true);
         try {
-            const success = await moveContactStatus(
-                moveModal.contactId, 
-                moveModal.targetStatus, 
-                finalNote || undefined,
-                user?.name,
-                selectedRefusal || undefined
-            );
-            if (success) {
-                showToast(`Mise à jour : ${moveModal.targetStatus}`);
-                setMoveModal(null);
-            } else {
-                showToast(`Erreur lors de la mise à jour`, 'error');
-            }
+            await moveContactStatus(contactId, targetStatus, transitionNote, user?.name, refusalReason);
+            showToast(`Statut mis à jour : ${targetStatus}`);
+            setMoveModal(null);
+            setTransitionNote('');
+            setSelectedRefusal('');
+        } catch (err) {
+            showToast('Erreur lors de la mise à jour', 'error');
         } finally {
             setIsMoving(false);
         }
     };
 
+    const moveCard = (contact: any) => {
+        const currentIndex = columnOrder.indexOf(STATUS_TO_COLUMN[contact.status] as any);
+        if (currentIndex < columnOrder.length - 1) {
+            const nextColId = columnOrder[currentIndex + 1];
+            confirmMove(contact.id, FINAL_STATUS_MAP[nextColId]);
+        }
+    };
+
     return (
-        <div className="pipeline-page">
-            <div className="page-header d-flex-between" style={{ marginBottom: '1rem' }}>
-                <div>
-                    <h1>Pipeline Commercial</h1>
-                    <p className="subtitle">Gérez vos prospects ({filteredTotal} au total)</p>
+        <DragDropContext onDragEnd={onDragEnd}>
+            <div className="pipeline-page">
+                <div className="page-header d-flex-between" style={{ marginBottom: '1rem' }}>
+                    <div>
+                        <h1>Pipeline Commercial</h1>
+                        <p className="subtitle">Gérez vos prospects ({filteredTotal} au total)</p>
+                    </div>
                 </div>
-            </div>
 
-            <div className="pipeline-toolbar card-premium mb-3" style={{ display: 'flex', gap: '0.75rem', padding: '0.75rem 1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div className="search-box" style={{ flex: 1, minWidth: '250px' }}>
-                    <Search size={18} className="text-muted" />
-                    <input type="text" placeholder="Rechercher (nom, commercial, tel...)" value={search} onChange={(e) => setSearch(e.target.value)} />
+                <div className="pipeline-toolbar card-premium mb-3" style={{ display: 'flex', gap: '0.75rem', padding: '0.75rem 1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div className="search-box" style={{ flex: 1, minWidth: '250px' }}>
+                        <Search size={18} className="text-muted" />
+                        <input type="text" placeholder="Rechercher (nom, commercial, tel...)" value={search} onChange={(e) => setSearch(e.target.value)} />
+                    </div>
+                    <div className="filter-group d-flex align-items-center gap-2">
+                        <User size={16} className="text-muted" />
+                        <select className="form-select-sm" value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)} style={{ minWidth: '180px' }}>
+                            <option value="">Tous les commerciaux</option>
+                            <option value="UNASSIGNED">À dispatcher</option>
+                            {agentOptions.map(name => <option key={name} value={name}>{name}</option>)}
+                        </select>
+                    </div>
+                    <div className="filter-group d-flex align-items-center gap-2">
+                        <Folder size={16} className="text-muted" />
+                        <select className="form-select-sm" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} style={{ minWidth: '150px' }}>
+                            <option value="">Tous les services</option>
+                            <option value="foncier">Vente Terrains</option>
+                            <option value="construction">Construction</option>
+                            <option value="gestion_immobiliere">Gestion Immo</option>
+                        </select>
+                    </div>
+                    {(search || agentFilter || serviceFilter) && (
+                        <button className="btn-text-sm text-primary" onClick={() => { setSearch(''); setAgentFilter(''); setServiceFilter(''); }}>Réinitialiser</button>
+                    )}
                 </div>
-                <div className="filter-group d-flex align-items-center gap-2">
-                    <User size={16} className="text-muted" />
-                    <select className="form-select-sm" value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)} style={{ minWidth: '180px' }}>
-                        <option value="">Tous les commerciaux</option>
-                        {agentOptions.map(name => <option key={name} value={name}>{name}</option>)}
-                    </select>
-                </div>
-                <div className="filter-group d-flex align-items-center gap-2">
-                    <Folder size={16} className="text-muted" />
-                    <select className="form-select-sm" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} style={{ minWidth: '150px' }}>
-                        <option value="">Tous les services</option>
-                        <option value="foncier">Vente Terrains</option>
-                        <option value="construction">Construction</option>
-                        <option value="gestion_immobiliere">Gestion Immo</option>
-                    </select>
-                </div>
-                {(search || agentFilter || serviceFilter) && (
-                    <button className="btn-text-sm text-primary" onClick={() => { setSearch(''); setAgentFilter(''); setServiceFilter(''); }}>Réinitialiser</button>
-                )}
-            </div>
 
-            <DragDropContext onDragEnd={onDragEnd}>
-                <div className="kanban-board" style={{ paddingBottom: '1rem' }}>
+                <div className="kanban-board">
                     {columnOrder.map(colId => {
                         const meta = COLUMN_META[colId];
                         const cards = filteredColumns[colId] ?? [];
                         return (
-                            <div key={colId} className="kanban-column" style={{ background: 'var(--bg-app)', border: 'none' }}>
-                                <div className="column-header" style={{ borderTopColor: meta.color, borderRadius: '12px 12px 0 0', background: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                            <div key={colId} className="kanban-column">
+                                <div className="column-header" style={{ borderTopColor: meta.color }}>
                                     <div className="column-title">
                                         <span style={{ color: meta.color }}>{meta.icon}</span>
-                                        <h3 style={{ fontSize: '0.9rem', fontWeight: 700 }}>{meta.title}</h3>
-                                        <span className="column-count" style={{ backgroundColor: meta.color + '22', color: meta.color, fontSize: '0.75rem' }}>{cards.length}</span>
+                                        <h3>{meta.title}</h3>
+                                        <span className="column-count" style={{ backgroundColor: meta.color + '22', color: meta.color }}>{cards.length}</span>
                                     </div>
                                 </div>
                                 <Droppable droppableId={colId}>
@@ -395,18 +408,24 @@ const Pipeline = () => {
                                         >
                                             {cards.length > 0 ? cards.map((contact, index) => (
                                                 <Draggable key={contact.id} draggableId={contact.id.toString()} index={index}>
-                                                    {(provided, snapshot) => (
-                                                        <KanbanCard 
-                                                            contact={contact} 
-                                                            colId={colId} 
-                                                            colColor={meta.color} 
-                                                            onMove={moveCard}
-                                                            onDelete={deleteContact} 
-                                                            userRole={user?.role} 
-                                                            provided={provided}
-                                                            isDragging={snapshot.isDragging}
-                                                        />
-                                                    )}
+                                                    {(provided, snapshot) => {
+                                                        const child = (
+                                                            <KanbanCard 
+                                                                contact={contact} 
+                                                                colId={colId}
+                                                                colColor={meta.color} 
+                                                                onMove={moveCard}
+                                                                onDelete={deleteContact} 
+                                                                userRole={user?.role} 
+                                                                provided={provided}
+                                                                isDragging={snapshot.isDragging}
+                                                            />
+                                                        );
+                                                        if (snapshot.isDragging) {
+                                                            return createPortal(child, document.body);
+                                                        }
+                                                        return child;
+                                                    }}
                                                 </Draggable>
                                             )) : (
                                                 <div className="empty-column" style={{ border: '2px dashed var(--border-color)', borderRadius: '12px', margin: '0.5rem 0' }}>
@@ -422,7 +441,7 @@ const Pipeline = () => {
                         );
                     })}
                 </div>
-            </DragDropContext>
+            </div>
 
             <Modal isOpen={!!moveModal} onClose={() => setMoveModal(null)} title={`Changement d'étape : ${moveModal?.contactName}`} size="md">
                 <div style={{ marginBottom: '1.5rem' }}>
@@ -451,24 +470,24 @@ const Pipeline = () => {
                                     }}>
                                         <input 
                                             type="radio" 
-                                            name="refusal_reason" 
+                                            name="refusalReason" 
                                             value={reason} 
                                             checked={selectedRefusal === reason}
-                                            onChange={e => setSelectedRefusal(e.target.value)}
+                                            onChange={() => setSelectedRefusal(reason)}
                                         />
-                                        <span style={{ fontWeight: selectedRefusal === reason ? 600 : 400 }}>{reason}</span>
+                                        {reason}
                                     </label>
                                 ))}
                             </div>
                             {(selectedRefusal.includes('Autre') || selectedRefusal === '') && (
-                                <div className="mt-15">
-                                    <label className="form-label">Note complémentaire / Précisions</label>
+                                <div style={{ marginTop: '1rem' }}>
+                                    <label className="form-label">Note complémentaire</label>
                                     <textarea 
-                                        className="form-textarea" rows={3} 
-                                        placeholder="Détaillez la raison du refus..." 
+                                        className="form-textarea" 
+                                        placeholder="Précisez la raison..." 
                                         value={transitionNote} 
-                                        onChange={e => setTransitionNote(e.target.value)} 
-                                        style={{ borderRadius: '8px' }}
+                                        onChange={e => setTransitionNote(e.target.value)}
+                                        rows={3}
                                     />
                                 </div>
                             )}
@@ -477,30 +496,29 @@ const Pipeline = () => {
                         <div className="form-group">
                             <label className="form-label">Note de suivi (facultatif)</label>
                             <textarea 
-                                className="form-textarea" rows={4} 
-                                placeholder="Ajoutez un commentaire sur ce changement d'étape..." 
+                                className="form-textarea" 
+                                placeholder="Ajoutez un commentaire sur ce changement..." 
                                 value={transitionNote} 
-                                onChange={e => setTransitionNote(e.target.value)} 
-                                style={{ borderRadius: '8px' }}
+                                onChange={e => setTransitionNote(e.target.value)}
+                                rows={4}
                             />
                         </div>
                     )}
-                </div>
-                <div className="form-actions" style={{ gap: '12px' }}>
-                    <button className="btn-secondary" onClick={() => setMoveModal(null)} disabled={isMoving} style={{ borderRadius: '8px', flex: 1 }}>Annuler</button>
-                    <button 
-                        className="btn-primary" 
-                        onClick={confirmMove} 
-                        disabled={isMoving || (moveModal?.targetStatus === 'Pas intéressé' && !selectedRefusal)}
-                        style={{ borderRadius: '8px', flex: 2 }}
-                    >
-                        {isMoving ? 'Mise à jour...' : 'Confirmer le déplacement'}
-                    </button>
+
+                    <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '2rem' }}>
+                        <button className="btn-secondary" onClick={() => setMoveModal(null)}>Annuler</button>
+                        <button 
+                            className="btn-primary" 
+                            disabled={isMoving || (moveModal?.targetStatus === 'Pas intéressé' && !selectedRefusal)}
+                            onClick={() => confirmMove(moveModal.contactId, moveModal.targetStatus, selectedRefusal)}
+                        >
+                            {isMoving ? 'Traitement...' : 'Confirmer le déplacement'}
+                        </button>
+                    </div>
                 </div>
             </Modal>
-        </div>
+        </DragDropContext>
     );
 };
 
 export default Pipeline;
-

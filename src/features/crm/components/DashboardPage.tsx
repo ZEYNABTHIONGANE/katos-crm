@@ -10,6 +10,7 @@ import {
 import { Users, User, ArrowUpRight, ArrowDownRight, Star, LayoutDashboard, TrendingUp, Plus, Phone, Mail, Home, Calendar } from 'lucide-react';
 import { getSupervisedAgentNames } from '../utils/hierarchyUtils';
 import { SALE_STATUSES, PIPELINE_STATUSES } from '../utils/crmConstants';
+import MarketingDashboard from './MarketingDashboard';
 
 const SERVICE_LABELS: Record<string, string> = {
     foncier: 'Foncier',
@@ -24,6 +25,7 @@ const getStatusBadge = (status: string) => {
         case 'Qualification': 
         case 'En Qualification': return <span className="badge badge-info">Qualification</span>;
         case 'RDV': return <span className="badge badge-primary">RDV</span>;
+        case 'Visite Terrain': return <span className="badge badge-primary" style={{ backgroundColor: '#c026d3' }}>Visite Terrain</span>;
         case 'Négociation': return <span className="badge badge-info">Négociation</span>;
         case 'Contrat': return <span className="badge badge-success">Contrat</span>;
         case 'Paiement': return <span className="badge badge-success">Paiement</span>;
@@ -94,7 +96,7 @@ const Dashboard = () => {
             const distribution = [
                 { name: 'Prospects', value: filteredContacts.filter(c => ['Prospect', 'Qualification', 'En Qualification'].includes(c.status)).length, fill: '#E96C2E' },
                 { name: 'Négo/Résa', value: filteredContacts.filter(c => ['Proposition Commerciale', 'Négociation', 'Réservation'].includes(c.status)).length, fill: '#F59E0B' },
-                { name: 'RDV/Visites', value: filteredContacts.filter(c => ['RDV', 'RDV / Visite Terrain'].includes(c.status)).length, fill: '#8b5cf6' },
+                { name: 'RDV/Visites', value: filteredContacts.filter(c => ['RDV', 'RDV / Visite Terrain', 'Visite Terrain'].includes(c.status)).length, fill: '#8b5cf6' },
                 { name: 'Contrats/Paie', value: filteredContacts.filter(c => ['Contrat', 'Paiement'].includes(c.status)).length, fill: '#2B2E83' },
                 { name: 'Clients & Liv.', value: filteredContacts.filter(c => ['Suivi Chantier', 'Livraison Client', 'Projet Livré', 'Fidélisation', 'Transfert de dossier technique', 'Transfert dossier tech'].includes(c.status)).length, fill: '#10B981' },
             ];
@@ -344,6 +346,10 @@ const Dashboard = () => {
             },
         ];
     };
+
+    if (user?.role === 'marketing') {
+        return <MarketingDashboard />;
+    }
 
     if (user?.role === 'assistante') {
         return (

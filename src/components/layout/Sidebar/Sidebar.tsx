@@ -29,7 +29,7 @@ const Sidebar = ({ isCollapsed }: { isCollapsed: boolean }) => {
                     path: '/',
                     name: 'Tableau de bord',
                     icon: <LayoutDashboard size={18} />,
-                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'assistante', 'conformite']
+                    allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'assistante', 'conformite', 'marketing']
                 },
                 {
                     path: '/pipeline',
@@ -42,6 +42,12 @@ const Sidebar = ({ isCollapsed }: { isCollapsed: boolean }) => {
                     name: 'Prospects & Clients',
                     icon: <Users size={18} />,
                     allowedRoles: ['admin', 'dir_commercial', 'resp_commercial', 'commercial', 'conformite']
+                },
+                {
+                    path: '/marketing-prospects',
+                    name: 'Registre Prospects',
+                    icon: <Users size={18} />,
+                    allowedRoles: ['admin', 'marketing']
                 },
                 {
                     path: '/relances',
@@ -204,7 +210,17 @@ const Sidebar = ({ isCollapsed }: { isCollapsed: boolean }) => {
                     <div className="avatar">{user?.avatar || 'U'}</div>
                     <div className="user-info">
                         <span className="user-name">{user?.name || 'Utilisateur'}</span>
-                        <span className="user-role">{user?.role || 'Agent'}</span>
+                        <span className="user-role">
+                            {user?.role === 'admin' ? 'Administrateur' :
+                             user?.role === 'dir_commercial' ? 'Directeur Commercial' :
+                             user?.role === 'resp_commercial' ? 'Responsable Commercial' :
+                             user?.role === 'superviseur' ? 'Superviseur' :
+                             user?.role === 'commercial' ? 'Commercial' :
+                             user?.role === 'assistante' ? 'Assistante de Direction' :
+                             user?.role === 'marketing' ? 'Marketing' :
+                             user?.role === 'conformite' ? 'Conformité' :
+                             user?.role || 'Agent'}
+                        </span>
                     </div>
                 </div>
                 <button className="logout-btn" onClick={handleLogout} title="Se déconnecter">

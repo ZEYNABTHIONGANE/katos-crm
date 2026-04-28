@@ -176,6 +176,24 @@ const ContactsList = () => {
                 else if (normStat.includes('paie')) stat = 'Paiement';
                 else if (normStat.includes('client')) stat = 'Client';
 
+                // Détection de la présence explicite d'une colonne commercial dans le fichier
+                const rowAgent = (item.commercial || item.agent || item.commercial_attribue || '').trim();
+                let assignedAgent = '';
+
+                // DEBUG: Détecter pourquoi l'admin est auto-assigné
+                // console.log('[Import] rowAgent:', rowAgent, 'User Role:', user?.role, 'User Name:', user?.name);
+
+                if (rowAgent) {
+                    // Si une colonne commercial existe et est remplie dans le fichier, on l'utilise
+                    assignedAgent = rowAgent;
+                } else if (user?.role === 'commercial' || user?.role === 'conformite') {
+                    // Si aucune colonne n'existe ET que c'est un commercial/conformité qui importe, on lui attribue
+                    assignedAgent = user.name || '';
+                } else {
+                    // Sinon (admin, assistant, dir_com, etc.) et pas de colonne : à dispatcher (vide)
+                    assignedAgent = '';
+                }
+
                 return {
                     name: item.nom || item.name || item.full_name || '',
                     company: item.entreprise || item.societe || item.company || '',
@@ -186,7 +204,7 @@ const ContactsList = () => {
                     country: item.pays || item.country || '',
                     source: item.origine || item.source || item.canal || item.provenance || 'Importation',
                     service: srv as any,
-                    assignedAgent: item.commercial || item.agent || item.commercial_attribue || (user?.role === 'commercial' ? user.name : ''),
+                    assignedAgent: assignedAgent,
                     createdBy: user?.name || '',
                     createdAt: cAt
                 };
@@ -342,7 +360,11 @@ const ContactsList = () => {
 
                 // 3. Filtre par commercial (dropdown)
                 if (agentFilter !== 'all') {
-                    if ((c.assignedAgent || '').trim().toLowerCase() !== agentFilter.trim().toLowerCase()) return false;
+                    if (agentFilter === 'UNASSIGNED') {
+                        if (c.assignedAgent) return false;
+                    } else if ((c.assignedAgent || '').trim().toLowerCase() !== agentFilter.trim().toLowerCase()) {
+                        return false;
+                    }
                 }
 
                 // 4. Filtrage par date (Robuste : gère les dates partielles)
@@ -382,6 +404,7 @@ const ContactsList = () => {
             case 'Qualification': 
             case 'En Qualification': return <span className="badge badge-info text-uppercase">Qualification</span>;
             case 'RDV': return <span className="badge badge-primary text-uppercase">RDV</span>;
+            case 'Visite Terrain': return <span className="badge badge-primary text-uppercase" style={{ backgroundColor: '#c026d3' }}>Visite Terrain</span>;
             case 'Proposition Commerciale': return <span className="badge badge-primary text-uppercase">Proposition</span>;
             case 'Négociation': return <span className="badge badge-info text-uppercase">Négociation</span>;
             case 'Réservation': return <span className="badge badge-secondary text-uppercase">Réservation</span>;
@@ -547,6 +570,7 @@ const ContactsList = () => {
                                     style={{ minWidth: 160 }}
                                 >
                                     <option value="all">Tous les commerciaux</option>
+                                    <option value="UNASSIGNED">À dispatcher</option>
                                     {supervisedForFilter.map(name => (
                                         <option key={name} value={name}>{name}</option>
                                     ))}
@@ -610,7 +634,6 @@ const ContactsList = () => {
                             <tr key={contact.id} className="contact-row clickable" onClick={() => navigate(`/prospects/${contact.id}`)}>
                                 <td>
                                     <div className="user-profile-cell">
-                                        <div className="avatar-initial">{contact.name.charAt(0)}</div>
                                         <div>
                                             <div className="font-medium text-main">{contact.name}</div>
                                             <div className="text-xs text-muted">

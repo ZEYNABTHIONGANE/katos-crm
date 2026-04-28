@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
 
-export type UserRole = 'admin' | 'dir_commercial' | 'superviseur' | 'resp_commercial' | 'manager' | 'commercial' | 'assistante' | 'conformite' | 'technicien_terrain' | 'technicien_chantier';
+export type UserRole = 'admin' | 'dir_commercial' | 'superviseur' | 'resp_commercial' | 'manager' | 'commercial' | 'assistante' | 'conformite' | 'technicien_terrain' | 'technicien_chantier' | 'marketing';
 
 export type UserService = 'foncier' | 'construction' | 'gestion';
 

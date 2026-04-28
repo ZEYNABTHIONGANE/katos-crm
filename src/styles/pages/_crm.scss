@@ -1917,8 +1917,9 @@
     flex-direction: column;
     gap: 0.75rem;
     animation: fadeIn 0.4s ease-out;
-    flex: 1;
+    height: calc(100vh - 140px);
     min-height: 0;
+    overflow: hidden; /* Empêche le scroll externe */
 }
 
 /* ---- Menu contextuel de carte ---- */
@@ -2025,10 +2026,15 @@
 .kanban-board {
     display: flex;
     gap: 1.25rem;
-    overflow-x: auto;
+    align-items: stretch;
+    min-height: 0;
+    width: 100%; /* Important pour la détection du scroll par dnd */
+    overflow-x: auto; /* Le scroll se fait ici */
+    overflow-y: hidden;
+    position: relative;
     padding-bottom: 1rem;
-    flex: 1;
-    align-items: flex-start;
+    padding-right: 2rem;
+    -webkit-overflow-scrolling: touch;
 }
 
 .kanban-board::-webkit-scrollbar {
@@ -2061,8 +2067,8 @@
     border: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
-    max-height: 100%;
-    overflow: hidden;
+    height: 100%;
+    overflow: visible;
 }
 
 .column-header {
@@ -2073,6 +2079,10 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
 .column-title {
@@ -2191,6 +2201,7 @@
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12) !important;
     border-color: var(--primary) !important;
     z-index: 100;
+    transition: none !important; /* Prevent lag during drag */
 }
 
 .kcard-header {

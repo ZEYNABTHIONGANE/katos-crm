@@ -18,16 +18,18 @@ const Header = ({ onToggleSidebar }: { onToggleSidebar: () => void }) => {
             </div>
 
             <div className="header-right">
-                <button
-                    className={`icon-btn notification-btn ${unreadCount > 0 ? 'has-unread' : ''}`}
-                    aria-label="Notifications"
-                    onClick={() => setShowNotifs(!showNotifs)}
-                >
-                    <Bell size={26} />
-                    {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
-                </button>
+                {user?.role !== 'marketing' && (
+                    <button
+                        className={`icon-btn notification-btn ${unreadCount > 0 ? 'has-unread' : ''}`}
+                        aria-label="Notifications"
+                        onClick={() => setShowNotifs(!showNotifs)}
+                    >
+                        <Bell size={26} />
+                        {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
+                    </button>
+                )}
 
-                {showNotifs && <NotifPanel onClose={() => setShowNotifs(false)} />}
+                {showNotifs && user?.role !== 'marketing' && <NotifPanel onClose={() => setShowNotifs(false)} />}
 
                 <div className="user-profile">
                     <div className="avatar">{user?.avatar || 'U'}</div>

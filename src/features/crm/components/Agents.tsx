@@ -10,13 +10,13 @@ import { Edit2, Plus, Shield, Briefcase, Lock, User, Trash2 } from 'lucide-react
 import { SALE_STATUSES } from '../utils/crmConstants';
 
 const getAgentColor = (name: string) => {
-    if (!name) return { bg: '#64748b', text: '#fff' };
+    if (!name) return { bg: 'rgba(100, 116, 139, 0.1)', text: '#64748b' };
     const colors = [
-        { bg: '#2B2E83', text: '#fff' }, 
-        { bg: '#E96C2E', text: '#fff' }, 
-        { bg: '#10B981', text: '#fff' }, 
-        { bg: '#6366F1', text: '#fff' }, 
-        { bg: '#F59E0B', text: '#fff' },
+        { bg: 'rgba(43, 46, 131, 0.1)', text: '#2B2E83' }, 
+        { bg: 'rgba(233, 108, 46, 0.1)', text: '#E96C2E' }, 
+        { bg: 'rgba(16, 185, 129, 0.1)', text: '#10B981' }, 
+        { bg: 'rgba(99, 102, 241, 0.1)', text: '#6366F1' }, 
+        { bg: 'rgba(245, 158, 11, 0.1)', text: '#F59E0B' },
     ];
     let hash = 0;
     for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -437,6 +437,7 @@ const Agents = () => {
                             { k: 'all', l: 'Tous les collaborateurs' },
                             { k: 'resp_commercial', l: 'Responsables Com.' },
                             { k: 'conformite', l: 'Conformité' },
+                            { k: 'marketing', l: 'Marketing' },
                             { k: 'technicien_terrain', l: 'Tech. Terrain' },
                             { k: 'technicien_chantier', l: 'Tech. Chantier' },
                             { k: 'commercial', l: 'Commerciaux' },
@@ -515,6 +516,7 @@ const Agents = () => {
                                         <p className="agent-role-tag">
                                             {agent.role === 'resp_commercial' ? 'Responsable Commercial' : 
                                              agent.role === 'conformite' ? 'Agent Conformité' :
+                                             agent.role === 'marketing' ? 'Agent Marketing' :
                                              agent.role === 'assistante' ? 'Assistante' : 
                                              agent.role === 'dir_commercial' ? 'Directeur Commercial' : 
                                              agent.role === 'technicien_terrain' ? 'Technicien Terrain' :
@@ -691,6 +693,7 @@ const Agents = () => {
                                     <option value="resp_commercial">Responsable Commercial</option>
                                     <option value="superviseur">Superviseur</option>
                                     <option value="conformite">Agent Conformité</option>
+                                    <option value="marketing">Marketing</option>
                                     <option value="dir_commercial">Directeur Commercial</option>
                                     <option value="assistante">Assistante</option>
                                     <option value="technicien_terrain">Technicien Terrain</option>
