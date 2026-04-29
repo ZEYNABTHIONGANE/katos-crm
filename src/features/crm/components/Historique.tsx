@@ -165,7 +165,7 @@ const Historique = () => {
             <div className="historique-timeline">
                 {filtered.map((item, index) => {
                     const typeKey = (item.type as InteractionType) || 'note';
-                    const type = INTERACTION_CONFIG[typeKey] || INTERACTION_CONFIG.note;
+                    const type = INTERACTION_CONFIG[typeKey as InteractionType] || INTERACTION_CONFIG.note;
                     const contact = contacts.find(c => c.id === item.contactId);
                     const showDate = index === 0 || filtered[index - 1].date !== item.date;
                     const dateStr = new Date(item.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });

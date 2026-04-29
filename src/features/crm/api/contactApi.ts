@@ -515,11 +515,13 @@ export const createVisitApi = async (visit: Omit<Visit, 'id'>): Promise<Visit | 
         console.log('[API] createVisitApi SUCCESS:', saved);
         
         // 1. Notification à l'agent lui-même (existant)
+        /*
         const { data: profile } = await supabase
             .from('profiles')
             .select('id')
             .eq('name', saved.agent)
             .single();
+        */
 
         let typeLabel = 'Visite';
         if (saved.type === 'terrain') typeLabel = 'Visite de terrain';
