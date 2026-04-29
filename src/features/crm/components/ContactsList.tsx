@@ -49,7 +49,7 @@ const emptyForm: FormData = {
 
 const ContactsList = () => {
     const { user } = useAuth();
-    const { contacts, addContact, addContactsBulk, addInteractionsBulk, updateContact, deleteContact } = useContactStore();
+    const { contacts, interactions, addContact, addContactsBulk, addInteractionsBulk, updateContact, deleteContact } = useContactStore();
     const { showToast } = useToast();
     const { addNotif } = useNotifications();
     const [searchTerm, setSearchTerm] = useState('');
@@ -339,7 +339,7 @@ const ContactsList = () => {
                     (c.company || '').toLowerCase().includes(searchTerm.toLowerCase());
 
                 // 2. Filtre statut / température
-                const score = calculateLeadScore(c);
+                const score = calculateLeadScore(c, interactions);
                 let matchesFilter = false;
                 if (filter === 'Tous') {
                     matchesFilter = true;
@@ -467,7 +467,7 @@ const ContactsList = () => {
         try {
             if (editContact && editContact.id) {
                 const isNewAssignment = contactData.assignedAgent && contactData.assignedAgent !== editContact.assignedAgent;
-                const success = await updateContact(editContact.id, contactData) as any;
+                const success = await updateContact(editContact.id, { ...contactData, lastModifiedBy: user?.name }) as any;
                 
                 if (success) {
                     showToast('Contact mis à jour avec succès');
@@ -708,7 +708,7 @@ const ContactsList = () => {
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
                                         {getStatusBadge(contact.status)}
                                         {(() => {
-                                            const score = calculateLeadScore(contact);
+                                            const score = calculateLeadScore(contact, interactions);
                                             const scoreClass = score >= 35 ? 'score-hot' : score >= 16 ? 'score-warm' : 'score-cold';
                                             return (
                                                 <span className={`lead-score-badge ${scoreClass}`}>

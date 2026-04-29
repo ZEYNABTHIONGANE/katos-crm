@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
     ArrowLeft, Phone, Mail, MapPin, Calendar, Clock, Edit2, CheckCircle2, Plus,
     Megaphone, User, Folder, MessageSquare, ClipboardList, HardHat,
-    ArrowRight, Trash2, Download
+    ArrowRight, Trash2, Download, FileText
 } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import DocumentManager from './DocumentManager';
@@ -201,11 +201,12 @@ const ContactDetail = () => {
         heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
         lieu: '',
         technician: '',
-        scheduleFollowUp: false,
+        scheduleFollowUp: false, // Default to false to avoid unwanted tasks
         followUpDate: '',
         followUpTime: '09:00',
         followUpNote: '',
-        followUpPriority: 'normale' as 'haute' | 'normale' | 'basse'
+        followUpPriority: 'normale' as 'haute' | 'normale' | 'basse',
+        followUpType: 'note' as 'appel' | 'visite' | 'rdv' | 'note'
     });
 
     // Fetch available slots when date or type changes
@@ -373,9 +374,10 @@ const ContactDetail = () => {
             return;
         }
 
-        // Validation disponibilité techniciens
-        if (['visite_terrain', 'visite_chantier'].includes(interactionForm.type) && !selectedSlotId && !editingInteraction && !editingVisit) {
-            showToast('Veuillez sélectionner un créneau de disponibilité technicien', 'error');
+        // On ne valide les créneaux techniciens que si on crée une tâche future de visite, 
+        // pas pour une simple note d'historique (interaction).
+        if (interactionForm.scheduleFollowUp && ['visite_terrain', 'visite_chantier'].includes(interactionForm.type) && !selectedSlotId) {
+            showToast('Veuillez sélectionner un créneau de disponibilité technicien pour la planification', 'error');
             setIsSubmittingInteraction(false);
             return;
         }
@@ -400,7 +402,6 @@ const ContactDetail = () => {
             console.log('[UI] saveInteraction - Construction interactionData:', interactionData);
 
             if (editingVisit) {
-                console.log('[UI] saveInteraction - Calling updateVisit', editingVisit);
                 await updateVisit(editingVisit, {
                     title: interactionForm.title,
                     date: interactionForm.date,
@@ -411,34 +412,38 @@ const ContactDetail = () => {
                 });
                 setEditingVisit(null);
             } else if (editingInteraction) {
-                console.log('[UI] saveInteraction - Calling updateInteraction', editingInteraction);
                 await updateInteraction(editingInteraction, interactionData);
+                setEditingInteraction(null);
             } else {
-                console.log('[UI] saveInteraction - Calling addInteraction');
-                // We need the ID if we want to link a follow-up, but addInteraction doesn't return it easily from store
-                // However, addInteraction in store calls api.createInteractionApi
-                // I'll update the store to return the saved object or at least handle the follow-up internally if passed
+                // NOUVELLE INTERACTION (Historique)
                 await addInteraction(interactionData);
-                console.log('[UI] saveInteraction - addInteraction COMPLETED');
+                
+                // Auto-update contact status if it's a RDV/Visit and current status is lower
+                if (interactionForm.type === 'rdv' && contact.status === 'Prospect') {
+                    await updateContact(contact.id, { status: 'RDV', lastModifiedBy: user?.name });
+                } else if (interactionForm.type === 'visite_terrain' && !['Visite Terrain', 'Contrat', 'Paiement'].includes(contact.status)) {
+                    await updateContact(contact.id, { status: 'Visite Terrain', lastModifiedBy: user?.name });
+                }
             }
 
             // Create follow-up if manually scheduled (simplification per user request)
-            if (interactionForm.scheduleFollowUp && interactionForm.followUpDate) {
-                console.log('[UI] saveInteraction - Creating follow-up');
+            // Créer une tâche de rappel si planifiée (sauf si c'est une visite, gérée plus bas)
+            if (interactionForm.scheduleFollowUp && interactionForm.followUpDate && interactionForm.followUpType !== 'visite') {
                 await addFollowUp({
                     contactId: contact.id,
-                    agent: (contact.assignedAgent || 'Katos Admin').trim(),
+                    agent: (contact.assignedAgent || user?.name || 'Katos Admin').trim(),
                     dateRelance: interactionForm.followUpDate,
                     heure: interactionForm.followUpTime,
-                    note: interactionForm.followUpNote || `Relance suite à: ${interactionForm.title}`,
+                    note: interactionForm.followUpNote || `[${interactionForm.followUpType.toUpperCase()}] ${interactionForm.title}`,
                     statut: 'upcoming',
-                    priorite: interactionForm.followUpPriority
-                });
+                    priorite: interactionForm.followUpPriority,
+                    type: interactionForm.followUpType
+                } as any);
             }
 
-            // If it's a NEW visit or RDV, also add to visits for tracking
-            if (!editingInteraction && !editingVisit && ['rdv', 'visite_terrain', 'visite_chantier'].includes(interactionForm.type)) {
-                console.log('[UI] saveInteraction - Creating associated visit (always upcoming as requested)');
+            // Si on a programmé une VISITE future
+            if (!editingInteraction && !editingVisit && interactionForm.scheduleFollowUp && interactionForm.followUpType === 'visite') {
+                console.log('[UI] saveInteraction - Creating associated visit because followUpType is visite');
                 
                 await addVisit({
                     title: interactionForm.title,
@@ -475,7 +480,8 @@ const ContactDetail = () => {
                 followUpDate: '',
                 followUpTime: '09:00',
                 followUpNote: '',
-                followUpPriority: 'normale'
+                followUpPriority: 'normale',
+                followUpType: 'note'
             });
             console.log('[saveInteraction] Success, modal closed');
         } catch (err) {
@@ -513,7 +519,8 @@ const ContactDetail = () => {
             followUpDate: '',
             followUpTime: '09:00',
             followUpNote: '',
-            followUpPriority: 'normale'
+            followUpPriority: 'normale',
+            followUpType: 'note'
         });
         setShowInteractionModal(true);
     };
@@ -542,7 +549,7 @@ const ContactDetail = () => {
                             <h1>{contact.name || 'Sans Nom'}</h1>
                             {getStatusBadge(contact.status)}
                             {(() => {
-                                const score = calculateLeadScore(contact);
+                                const score = calculateLeadScore(contact, interactions);
                                 const scoreClass = score >= 35 ? 'score-hot' : score >= 16 ? 'score-warm' : 'score-cold';
                                 return (
                                     <span className={`lead-score-badge ${scoreClass}`} style={{ marginLeft: '8px' }}>
@@ -915,44 +922,17 @@ const ContactDetail = () => {
 
                     {['rdv', 'visite_terrain', 'visite_chantier'].includes(interactionForm.type) && (
                         <>
+                            {['visite_terrain', 'visite_chantier'].includes(interactionForm.type) && (
+                                <div className="form-group col-2">
+                                    <label className="form-label">Collaborateur terrain</label>
+                                    <input className="form-input" value={interactionForm.technician} onChange={e => setInteractionForm({ ...interactionForm, technician: e.target.value })} placeholder="Ex: Jean Dupont" />
+                                </div>
+                            )}
+
                             <div className="form-group col-2">
                                 <label className="form-label">Lieu</label>
                                 <input className="form-input" value={interactionForm.lieu} onChange={e => setInteractionForm({ ...interactionForm, lieu: e.target.value })} placeholder="Adresse ou lieu précis" />
                             </div>
-                            
-                            {['visite_terrain', 'visite_chantier'].includes(interactionForm.type) && !editingInteraction && !editingVisit && (
-                                <div className="form-group col-2">
-                                    <label className="form-label" style={{ color: 'var(--katos-orange)', fontWeight: 800 }}>
-                                        Disponibilité Techniciens Terrain *
-                                    </label>
-                                    <select 
-                                        className="form-select bg-orange-50 border-orange-200"
-                                        value={selectedSlotId}
-                                        onChange={e => setSelectedSlotId(e.target.value)}
-                                        disabled={isLoadingSlots}
-                                    >
-                                        <option value="">— Sélectionner un créneau —</option>
-                                        {availableSlots.map(slot => (
-                                            <option key={slot.id} value={slot.id}>
-                                                {slot.agentName} : {slot.startTime.substring(0, 5)} - {slot.endTime.substring(0, 5)}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    {availableSlots.length === 0 && !isLoadingSlots && (
-                                        <p className="text-[10px] text-red-500 font-bold mt-1">
-                                            ⚠️ Aucun technicien disponible pour cette date ({interactionForm.date}).
-                                        </p>
-                                    )}
-                                    {isLoadingSlots && <p className="text-[10px] text-muted italic mt-1">Recherche des disponibilités...</p>}
-                                </div>
-                            )}
-
-                            {interactionForm.type === 'rdv' && (
-                                <div className="form-group col-2">
-                                    <label className="form-label">Technicien / Expert accompagnateur (Optionnel)</label>
-                                    <input className="form-input" value={interactionForm.technician} onChange={e => setInteractionForm({ ...interactionForm, technician: e.target.value })} placeholder="Ex: Samba Tall (Technicien)" />
-                                </div>
-                            )}
                         </>
                     )}
 
@@ -962,60 +942,132 @@ const ContactDetail = () => {
                     </div>
 
                     {/* Section Programmation Relance (Toujours visible même en édition) */}
-                    <div className="form-group col-2 mt-10" style={{ borderTop: '1px solid #eee', paddingTop: '15px' }}>
-                        <label className="d-flex align-center gap-sm" style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--primary)' }}>
+                    <div className="form-group col-2 mt-15" style={{ borderTop: '2px dashed var(--border-color)', paddingTop: '20px' }}>
+                        <label className="followup-toggle-label">
                             <input 
                                 type="checkbox" 
                                 checked={interactionForm.scheduleFollowUp} 
                                 onChange={e => setInteractionForm({ ...interactionForm, scheduleFollowUp: e.target.checked })}
-                                style={{ width: '18px', height: '18px' }}
                             />
-                            Programmer une action de rappel (Relance) ?
+                            <div className="toggle-content">
+                                <Calendar size={20} className="text-primary" />
+                                <div>
+                                    <span className="toggle-title">Programmer un rappel (Relance) ?</span>
+                                    <span className="toggle-subtitle">Planifiez la prochaine action pour ne pas perdre ce prospect</span>
+                                </div>
+                            </div>
                         </label>
                     </div>
 
                     {interactionForm.scheduleFollowUp && (
-                        <div className="form-grid col-2" style={{ background: '#f8f9fa', padding: '15px', borderRadius: '8px', marginTop: '5px' }}>
-                            <div className="form-group">
-                                <label className="form-label">Date du rappel *</label>
-                                <input 
-                                    className="form-input" 
-                                    type="date" 
-                                    value={interactionForm.followUpDate} 
-                                    onChange={e => setInteractionForm({ ...interactionForm, followUpDate: e.target.value })}
-                                    min={new Date().toISOString().split('T')[0]}
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Priorité</label>
-                                <select 
-                                    className="form-select" 
-                                    value={interactionForm.followUpPriority} 
-                                    onChange={e => setInteractionForm({ ...interactionForm, followUpPriority: e.target.value as any })}
-                                >
-                                    <option value="basse">Basse</option>
-                                    <option value="normale">Normale</option>
-                                    <option value="haute">Haute</option>
-                                </select>
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Heure du rappel *</label>
-                                <input 
-                                    className="form-input" 
-                                    type="time" 
-                                    value={interactionForm.followUpTime} 
-                                    onChange={e => setInteractionForm({ ...interactionForm, followUpTime: e.target.value })}
-                                />
-                            </div>
-                            <div className="form-group col-2">
-                                <label className="form-label">Note pour le rappel</label>
-                                <input 
-                                    className="form-input" 
-                                    type="text" 
-                                    placeholder="Ex: Rappeler pour confirmer le budget..." 
-                                    value={interactionForm.followUpNote}
-                                    onChange={e => setInteractionForm({ ...interactionForm, followUpNote: e.target.value })}
-                                />
+                        <div className="followup-setup-card">
+                            <div className="form-grid col-3">
+                                <div className="form-group">
+                                    <label className="form-label">Date du rappel *</label>
+                                    <div className="input-with-icon">
+                                        <Calendar size={16} />
+                                        <input 
+                                            className="form-input" 
+                                            type="date" 
+                                            value={interactionForm.followUpDate} 
+                                            onChange={e => setInteractionForm({ ...interactionForm, followUpDate: e.target.value })}
+                                            min={new Date().toISOString().split('T')[0]}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Heure du rappel *</label>
+                                    <div className="input-with-icon">
+                                        <Clock size={16} />
+                                        <input 
+                                            className="form-input" 
+                                            type="time" 
+                                            value={interactionForm.followUpTime} 
+                                            onChange={e => setInteractionForm({ ...interactionForm, followUpTime: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Priorité</label>
+                                    <div className="input-with-icon">
+                                        <AlertTriangle size={16} />
+                                        <select 
+                                            className="form-select" 
+                                            value={interactionForm.followUpPriority} 
+                                            onChange={e => setInteractionForm({ ...interactionForm, followUpPriority: e.target.value as any })}
+                                        >
+                                            <option value="basse">🟢 Basse</option>
+                                            <option value="normale">🟡 Normale</option>
+                                            <option value="haute">🔴 Haute</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="form-group col-3">
+                                    <label className="form-label">Type d'action à programmer</label>
+                                    <div className="followup-type-grid">
+                                        {[
+                                            { k: 'appel', l: 'Appel', icon: <Phone size={14} /> },
+                                            { k: 'visite', l: 'Visite Terrain', icon: <MapPin size={14} /> },
+                                            { k: 'rdv', l: 'RDV Bureau', icon: <Calendar size={14} /> },
+                                            { k: 'note', l: 'Note/Rappel', icon: <FileText size={14} /> }
+                                        ].map(t => (
+                                            <button
+                                                key={t.k}
+                                                type="button"
+                                                className={`type-chip ${interactionForm.followUpType === t.k ? 'active' : ''}`}
+                                                onClick={() => setInteractionForm({ ...interactionForm, followUpType: t.k as any })}
+                                            >
+                                                {t.icon}
+                                                {t.l}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="form-group col-3">
+                                    <label className="form-label">Note pour le rappel</label>
+                                    <div className="input-with-icon">
+                                        <MessageSquare size={16} />
+                                        <input 
+                                            className="form-input" 
+                                            type="text" 
+                                            placeholder="Ex: Rappeler pour confirmer le budget..." 
+                                            value={interactionForm.followUpNote}
+                                            onChange={e => setInteractionForm({ ...interactionForm, followUpNote: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Bloc Disponibilité Technicien pour la planification future */}
+                                {interactionForm.followUpType === 'visite' && !editingInteraction && !editingVisit && (
+                                    <div className="form-group col-3 tech-booking-box">
+                                        <div className="d-flex align-center gap-sm mb-10">
+                                            <HardHat size={18} className="text-secondary" />
+                                            <label className="form-label mb-0" style={{ color: 'var(--katos-orange)', fontWeight: 800 }}>
+                                                Planification Collaborateur Terrain *
+                                            </label>
+                                        </div>
+                                        <select 
+                                            className="form-select" 
+                                            value={selectedSlotId}
+                                            onChange={e => setSelectedSlotId(e.target.value)}
+                                            disabled={isLoadingSlots}
+                                        >
+                                            <option value="">— Sélectionner un créneau libre —</option>
+                                            {availableSlots.map(slot => (
+                                                <option key={slot.id} value={slot.id}>
+                                                    {slot.agentName} : {slot.startTime.substring(0, 5)} - {slot.endTime.substring(0, 5)}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {availableSlots.length === 0 && !isLoadingSlots && (
+                                            <div className="error-tip">
+                                                <AlertTriangle size={12} />
+                                                Aucun technicien disponible pour cette date.
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -1102,3 +1154,210 @@ const ContactDetail = () => {
 };
 
 export default ContactDetail;
+
+// --- Styles pour la relance ---
+const followupStyles = `
+.form-grid.col-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+@media (max-width: 900px) {
+    .form-grid.col-3 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .form-grid.col-3 {
+        grid-template-columns: 1fr;
+    }
+}
+
+.form-group.col-3 {
+    grid-column: span 3;
+}
+
+@media (max-width: 900px) {
+    .form-group.col-3 {
+        grid-column: span 2;
+    }
+}
+
+@media (max-width: 600px) {
+    .form-group.col-3 {
+        grid-column: span 1;
+    }
+}
+
+.followup-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    cursor: pointer;
+    background: rgba(43, 46, 131, 0.04);
+    padding: 20px;
+    border-radius: 14px;
+    border: 1px solid rgba(43, 46, 131, 0.12);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    margin-bottom: 5px;
+}
+
+.followup-toggle-label:hover {
+    background: rgba(43, 46, 131, 0.07);
+    border-color: rgba(43, 46, 131, 0.25);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(43, 46, 131, 0.05);
+}
+
+.followup-toggle-label input[type="checkbox"] {
+    width: 24px;
+    height: 24px;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+.toggle-content {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.toggle-title {
+    display: block;
+    font-weight: 800;
+    color: var(--primary);
+    font-size: 1.05rem;
+    letter-spacing: -0.01em;
+}
+
+.toggle-subtitle {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.followup-setup-card {
+    background: #ffffff;
+    padding: 25px;
+    border-radius: 16px;
+    margin-top: 20px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+    animation: premiumSlideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.followup-setup-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--primary);
+}
+
+@keyframes premiumSlideDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.input-with-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-with-icon svg {
+    position: absolute;
+    left: 14px;
+    color: var(--primary);
+    opacity: 0.6;
+    pointer-events: none;
+    transition: opacity 0.2s;
+}
+
+.input-with-icon:focus-within svg {
+    opacity: 1;
+}
+
+.input-with-icon .form-input,
+.input-with-icon .form-select {
+    padding-left: 42px !important;
+    height: 48px;
+    border-radius: 10px;
+    border: 1.5px solid var(--border-color);
+}
+
+.followup-type-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.type-chip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 10px;
+    border-radius: 12px;
+    border: 1.5px solid var(--border-color);
+    background: var(--bg-app);
+    color: var(--text-main);
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.type-chip:hover {
+    border-color: var(--primary);
+    background: #fff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+}
+
+.type-chip.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    box-shadow: 0 8px 20px rgba(43, 46, 131, 0.25);
+}
+
+.tech-booking-box {
+    margin-top: 20px;
+    padding: 20px;
+    background: rgba(233, 108, 46, 0.06);
+    border: 1px solid rgba(233, 108, 46, 0.25);
+    border-radius: 14px;
+}
+
+.error-tip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #dc2626;
+    font-size: 0.8rem;
+    font-weight: 700;
+    margin-top: 10px;
+    background: #fee2e2;
+    padding: 8px 12px;
+    border-radius: 6px;
+}
+`;
+
+if (typeof document !== 'undefined') {
+    const styleId = 'followup-programming-styles';
+    if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.innerHTML = followupStyles;
+        document.head.appendChild(style);
+    }
+}

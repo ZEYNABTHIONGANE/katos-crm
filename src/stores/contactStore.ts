@@ -64,6 +64,7 @@ export interface CrmContact {
     budgetConfirmed?: boolean;
     isReactive?: boolean;
     convertedAt?: string; // Date of conversion to client
+    lastModifiedBy?: string; // User who last modified the contact (for notification filtering)
     refusalReason?: string; // Motif si "Pas intéressé"
 }
 
@@ -493,11 +494,31 @@ export const useContactStore = create<ContactStore>()((set, get) => ({
     },
 }));
 
-export const calculateLeadScore = (c: CrmContact) => {
+export const calculateLeadScore = (c: CrmContact, interactions: any[] = []) => {
     let score = 0;
-    if (c.budgetConfirmed) score += 20;
+    
+    // 1. Points par Statut (Potentiel)
     const rdvStatuses = ['RDV', 'Proposition Commerciale', 'Négociation', 'Réservation', 'Contrat', 'Paiement', 'Transfert de dossier technique', 'Suivi Chantier', 'Livraison Client'];
     if (rdvStatuses.includes(c.status)) score += 15;
+    
+    // 2. Points par Actions Réelles (Interactions)
+    const myInteractions = interactions.filter(i => i.contactId === c.id || i.contact_id === c.id);
+    
+    // RDV effectués (+15 pts par RDV)
+    const rdvCount = myInteractions.filter(i => i.type === 'rdv').length;
+    score += (rdvCount * 15);
+    
+    // Visites effectuées (+15 pts par visite)
+    const visitCount = myInteractions.filter(i => ['visite_terrain', 'visite_chantier'].includes(i.type)).length;
+    score += (visitCount * 15);
+    
+    // Appels / Relances (+5 pts par action, max 20 pts)
+    const callCount = myInteractions.filter(i => i.type === 'appel' || i.type === 'relance').length;
+    score += Math.min(callCount * 5, 20);
+
+    // 3. Critères Profil
+    if (c.budgetConfirmed) score += 20;
     if (c.isReactive) score += 10;
+    
     return score;
 };

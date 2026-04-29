@@ -247,7 +247,7 @@ export const updateContactApi = async (id: number, updates: Partial<CrmContact>)
             .eq('name', finalDbUpdates.assignedagent)
             .single();
 
-        if (profile) {
+        if (profile && finalDbUpdates.assignedagent !== updates.lastModifiedBy) {
             await supabase.from('notifications').insert([{
                 type: 'prospect',
                 title: 'Nouveau prospect assigné',
@@ -526,6 +526,9 @@ export const createVisitApi = async (visit: Omit<Visit, 'id'>): Promise<Visit | 
         else if (saved.type === 'chantier') typeLabel = 'Visite de chantier';
         else if (saved.type === 'bureau') typeLabel = 'RDV Bureau';
 
+        // 1. Notification à l'agent lui-même : UNIQUEMENT SI ce n'est pas lui qui a créé l'action
+        // (Pour l'instant on désactive l'auto-notification car l'agent sait ce qu'il vient de créer)
+        /*
         await supabase.from('notifications').insert([{
             type: 'rdv',
             title: `Nouveau RDV : ${typeLabel}`,
@@ -533,6 +536,7 @@ export const createVisitApi = async (visit: Omit<Visit, 'id'>): Promise<Visit | 
             assigned_to: profile?.id,
             service: 'immobilier'
         }]);
+        */
 
         // 2. Notification hiérarchie
         const { data: contact } = await supabase

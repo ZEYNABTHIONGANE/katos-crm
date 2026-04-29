@@ -235,8 +235,18 @@ export const NotifProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
-    const removeNotif = (id: string) => {
+    const removeNotif = async (id: string) => {
         setNotifications(prev => prev.filter(n => n.id !== id));
+        
+        // Supprimer réellement de la base de données
+        const { error } = await supabase
+            .from('notifications')
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            console.error('[NotifProvider] Error deleting notification:', error);
+        }
     };
 
     const addNotif = async (notif: { type: NotificationType, title: string, message: string, service?: string, assigned_to?: string, created_by_name?: string }) => {

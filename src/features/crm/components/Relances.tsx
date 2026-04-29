@@ -621,58 +621,60 @@ const Relances = () => {
             </Modal>
 
             {/* ---- Modale Nouvelle Tâche ---- */}
-            <Modal isOpen={showNewTaskModal} onClose={() => { setShowNewTaskModal(false); setContactSearch(''); }} title="Nouvelle tâche" size="md">
+            <Modal isOpen={showNewTaskModal} onClose={() => { setShowNewTaskModal(false); setContactSearch(''); }} title="Programmer une nouvelle action" size="md">
                 <div className="form-grid">
                     <div className="form-group col-2" style={{ position: 'relative' }}>
                         <label className="form-label">Prospect concerné * <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.8rem' }}>({allContactsSorted.length} disponibles)</span></label>
-                        <input
-                            className="form-input"
-                            placeholder="Taper pour rechercher, ou cliquer pour voir la liste..."
-                            value={contactSearch}
-                            onFocus={() => setShowContactDropdown(true)}
-                            onBlur={() => setTimeout(() => setShowContactDropdown(false), 180)}
-                            onChange={e => {
-                                setContactSearch(e.target.value);
-                                setNewTaskForm(f => ({ ...f, contactId: '' }));
-                                setShowContactDropdown(true);
-                            }}
-                            autoComplete="off"
-                        />
+                        <div className="input-with-icon">
+                            <Search size={16} />
+                            <input
+                                className="form-input"
+                                placeholder="Rechercher un prospect..."
+                                value={contactSearch}
+                                onFocus={() => setShowContactDropdown(true)}
+                                onBlur={() => setTimeout(() => setShowContactDropdown(false), 180)}
+                                onChange={e => {
+                                    setContactSearch(e.target.value);
+                                    setNewTaskForm(f => ({ ...f, contactId: '' }));
+                                    setShowContactDropdown(true);
+                                }}
+                                autoComplete="off"
+                            />
+                        </div>
                         {/* Dropdown toujours visible au focus, filtré si recherche */}
                         {showContactDropdown && !newTaskForm.contactId && (
-                            <div style={{ border: '1px solid var(--border-soft)', borderRadius: '8px', background: 'white', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', maxHeight: 220, overflowY: 'auto', position: 'absolute', zIndex: 200, width: '100%', top: '100%', left: 0, marginTop: 2 }}>
+                            <div className="contact-select-dropdown">
                                 {filteredContactOptions.length === 0 ? (
-                                    <div style={{ padding: '0.8rem 1rem', color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>Aucun prospect trouvé</div>
+                                    <div className="dropdown-empty">Aucun prospect trouvé</div>
                                 ) : (
                                     filteredContactOptions.map(c => (
                                         <div
                                             key={c.id}
+                                            className="dropdown-item"
                                             onMouseDown={() => {
                                                 setNewTaskForm(f => ({ ...f, contactId: c.id }));
                                                 setContactSearch(c.name + (c.company ? ` — ${c.company}` : ''));
                                                 setShowContactDropdown(false);
                                             }}
-                                            style={{ padding: '0.55rem 1rem', cursor: 'pointer', borderBottom: '1px solid var(--border-soft)', fontSize: '0.88rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                                            onMouseEnter={e => (e.currentTarget.style.background = '#f0f4ff')}
-                                            onMouseLeave={e => (e.currentTarget.style.background = 'white')}
                                         >
-                                            <span>
-                                                <span style={{ fontWeight: 600 }}>{c.name}</span>
-                                                {c.company && <span style={{ color: 'var(--text-muted)', marginLeft: 6, fontSize: '0.78rem' }}>{c.company}</span>}
-                                            </span>
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0, marginLeft: 8 }}>{c.assignedAgent || '—'}</span>
+                                            <div className="item-info">
+                                                <span className="item-name">{c.name}</span>
+                                                {c.company && <span className="item-company">{c.company}</span>}
+                                            </div>
+                                            <span className="item-agent">{c.assignedAgent || '—'}</span>
                                         </div>
                                     ))
                                 )}
                             </div>
                         )}
                         {newTaskForm.contactId && (
-                            <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ fontSize: '0.78rem', color: '#059669', fontWeight: 700 }}>✓ Prospect sélectionné</span>
+                            <div className="selected-contact-indicator">
+                                <CheckCircle2 size={14} />
+                                <span>Prospect sélectionné</span>
                                 <button
                                     type="button"
                                     onClick={() => { setNewTaskForm(f => ({ ...f, contactId: '' })); setContactSearch(''); setShowContactDropdown(true); }}
-                                    style={{ background: 'none', border: 'none', color: '#E96C2E', cursor: 'pointer', fontSize: '0.75rem', padding: 0 }}
+                                    className="btn-change"
                                 >
                                     Changer
                                 </button>
@@ -710,36 +712,42 @@ const Relances = () => {
 
                     <div className="form-group">
                         <label className="form-label">Date d'échéance *</label>
-                        <input
-                            className="form-input"
-                            type="date"
-                            value={newTaskForm.dateRelance}
-                            onChange={e => setNewTaskForm(f => ({ ...f, dateRelance: e.target.value }))}
-                            min={new Date().toISOString().split('T')[0]}
-                        />
+                        <div className="input-with-icon">
+                            <Calendar size={16} />
+                            <input
+                                className="form-input"
+                                type="date"
+                                value={newTaskForm.dateRelance}
+                                onChange={e => setNewTaskForm(f => ({ ...f, dateRelance: e.target.value }))}
+                                min={new Date().toISOString().split('T')[0]}
+                            />
+                        </div>
                     </div>
                     <div className="form-group">
                         <label className="form-label">Heure *</label>
-                        <input
-                            className="form-input"
-                            type="time"
-                            value={newTaskForm.heure}
-                            onChange={e => setNewTaskForm(f => ({ ...f, heure: e.target.value }))}
-                        />
+                        <div className="input-with-icon">
+                            <Clock size={16} />
+                            <input
+                                className="form-input"
+                                type="time"
+                                value={newTaskForm.heure}
+                                onChange={e => setNewTaskForm(f => ({ ...f, heure: e.target.value }))}
+                            />
+                        </div>
                     </div>
 
                     <div className="form-group col-2">
                         <label className="form-label">Description / Note *</label>
                         <textarea
                             className="form-textarea"
-                            style={{ minHeight: 80 }}
+                            style={{ minHeight: 100 }}
                             placeholder="Que faut-il faire ? (ex: Rappeler pour confirmer le RDV, Envoyer la proposition...)"
                             value={newTaskForm.note}
                             onChange={e => setNewTaskForm(f => ({ ...f, note: e.target.value }))}
                         />
                     </div>
                 </div>
-                <div className="form-actions">
+                <div className="form-actions mt-10">
                     <button className="btn-secondary" onClick={() => { setShowNewTaskModal(false); setContactSearch(''); }}>Annuler</button>
                     <button className="btn-primary" onClick={handleCreateTask} disabled={isCreating}>
                         {isCreating ? 'Création...' : 'Créer la tâche'}
@@ -822,10 +830,114 @@ const relancesStyles = `
     font-size: 0.75rem;
     font-weight: 700;
 }
+
+/* Styles pour la modale Nouvelle Tâche */
+.input-with-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.input-with-icon svg {
+    position: absolute;
+    left: 12px;
+    color: var(--text-muted);
+    pointer-events: none;
+}
+.input-with-icon .form-input {
+    padding-left: 38px !important;
+}
+
+.contact-select-dropdown {
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    background: white;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    max-height: 250px;
+    overflow-y: auto;
+    position: absolute;
+    z-index: 200;
+    width: 100%;
+    top: 100%;
+    left: 0;
+    margin-top: 5px;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.dropdown-empty {
+    padding: 1rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+.dropdown-item {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-soft);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.2s;
+}
+
+.dropdown-item:hover {
+    background: #f0f4ff;
+}
+
+.item-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.item-name {
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.item-company {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.item-agent {
+    font-size: 0.75rem;
+    background: #f3f4f6;
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: #6b7280;
+}
+
+.selected-contact-indicator {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #ecfdf5;
+    color: #059669;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.selected-contact-indicator .btn-change {
+    background: none;
+    border: none;
+    color: #E96C2E;
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 0;
+    margin-left: auto;
+    text-decoration: underline;
+}
 `;
 
 if (typeof document !== 'undefined') {
-    const style = document.createElement('style');
-    style.innerHTML = relancesStyles;
-    document.head.appendChild(style);
+    const styleId = 'relances-premium-styles';
+    if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.innerHTML = relancesStyles;
+        document.head.appendChild(style);
+    }
 }
